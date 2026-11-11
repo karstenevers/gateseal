@@ -188,10 +188,18 @@ def test_unmanaged_config_is_preserved(installed, consumer):
     assert (consumer / ".pre-commit-config.yaml").read_bytes() == b"unmanaged\n"
 
 
-def test_real_commit_manual_run_and_minimal_path(installed, prepared):
+def test_real_commit_manual_run_and_minimal_path(installed, prepared, tmp_path):
+    """PATH holds the system folders and a folder with only the recorded Git.
+
+    The system Git can be older than gateseal accepts, and the recorded Git's
+    own folder, such as /opt/homebrew/bin, can hold uv and mise.
+    """
+    git = tmp_path / "git only" / "git"
+    git.parent.mkdir()
+    git.symlink_to(shutil.which("git", path=installed.environment["PATH"]))
     minimal = dict(
         installed.environment,
-        PATH="/usr/bin:/bin",
+        PATH=os.pathsep.join([str(git.parent), "/usr/bin", "/bin"]),
         PYTHONPATH="/nonexistent",
         UV_PYTHON="/nonexistent",
         UV_PROJECT="/nonexistent",
@@ -204,13 +212,11 @@ def test_real_commit_manual_run_and_minimal_path(installed, prepared):
     bad = prepared / "hygiene.txt"
     bad.write_bytes(b"trailing space  \n")
     success(["git", "add", "hygiene.txt"], prepared)
-    failure = process(
-        ["/usr/bin/git", "commit", "-m", "Bad hygiene"], prepared, minimal
-    )
+    failure = process([git, "commit", "-m", "Bad hygiene"], prepared, minimal)
     assert failure.returncode != 0
     assert bad.read_bytes() == b"trailing space\n"
     success(["git", "add", "hygiene.txt"], prepared)
-    success(["/usr/bin/git", "commit", "-m", "Good hygiene"], prepared, minimal)
+    success([git, "commit", "-m", "Good hygiene"], prepared, minimal)
     assert installed.cli(prepared, "status")["code"] == "recorded"
 
 
