@@ -37,40 +37,32 @@ wheel details.
 
 ### Pin the wheel on PyPI
 
-Open the **Download files** page of your release on PyPI, such as
-`https://pypi.org/project/gateseal/0.1.0/#files`. Copy the link of the `.whl`
-file, and copy its SHA-256 from the file details. Set both in your shell,
-replacing the example values:
-
-```sh
-GATESEAL_WHEEL_URL='https://files.pythonhosted.org/packages/.../gateseal-0.1.0-py3-none-any.whl'
-GATESEAL_WHEEL_SHA256='paste the wheel SHA-256 here'
-```
-
-From the root of the repository you want to configure, select the bundled
-`hygiene` checks. You can add `--capability python`, `--capability secrets`,
-or `--ci github` to this command:
+On the **Download files** page of your release on PyPI, such as
+`https://pypi.org/project/gateseal/0.1.0/#files`, copy the link of the `.whl`
+file, and copy its SHA-256 from the file details. From the root of the
+repository, run this command with the two values in place of `PYPI_WHEEL_URL`
+and `WHEEL_SHA256`:
 
 ```sh
 gateseal configure --capability hygiene \
-  --compiler-source "$GATESEAL_WHEEL_URL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
 ```
 
-PyPI never changes a file after upload, and anyone can download it. So every
-clone and every GitHub Actions run gets the same wheel, and activation checks
-its SHA-256 before it installs it.
-[Configure and commit](configure-a-repository.md#configure-and-commit) to
-prepare the checks.
+You can add `--capability python`, `--capability secrets`, or `--ci github`.
+PyPI never changes a file after upload, so every clone and every GitHub
+Actions run gets the same wheel. Activation checks its SHA-256 before it
+installs it. [Configure and commit](configure-a-repository.md#configure-and-commit)
+to prepare the checks.
 
 ### Pin a copy on GitHub
 
 If your team hosts its own copy of the wheel, commit it with its filename to a
 GitHub repository that your contributors can read. GitHub Actions needs a
-publicly readable copy. Set `GATESEAL_WHEEL_URL` to the wheel's raw GitHub URL
-at the full 40-character commit ID, then run the same `configure` command:
+publicly readable copy. In the same command, use the wheel's raw GitHub URL at
+the full 40-character commit ID in place of `PYPI_WHEEL_URL`:
 
-```sh
-GATESEAL_WHEEL_URL='https://raw.githubusercontent.com/OWNER/REPO/FULL_COMMIT/path/gateseal-0.1.0-py3-none-any.whl'
+```text
+https://raw.githubusercontent.com/OWNER/REPO/FULL_COMMIT/path/gateseal-0.1.0-py3-none-any.whl
 ```
 
 The Lock accepts only these two kinds of URL. Other hosts, and links to GitHub
@@ -79,25 +71,19 @@ branches or tags, are unsupported.
 ### Pin a wheel file on this machine
 
 Download the wheel for your gateseal version from PyPI's **Download files**
-page. Keep it outside your repository. Copy the SHA-256 from that wheel's
-file details. Set the absolute path and the digest in your shell, replacing
-both example values:
-
-```sh
-GATESEAL_WHEEL='/absolute/path/gateseal-0.1.0-py3-none-any.whl'
-GATESEAL_WHEEL_SHA256='paste the wheel SHA-256 here'
-```
-
-In the repository, run:
+page, and copy its SHA-256 from the file details. Keep the wheel outside your
+repository. In the repository, run this command with the wheel's absolute path
+and its SHA-256 in place of the example path and `WHEEL_SHA256`:
 
 ```sh
 gateseal configure --capability hygiene \
-  --compiler-wheel "$GATESEAL_WHEEL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+  --compiler-wheel '/absolute/path/gateseal-0.1.0-py3-none-any.whl' \
+  --compiler-sha256 WHEEL_SHA256
 ```
 
-The Lock records the local path. On another machine, you can activate with
-`gateseal activate --compiler-wheel "$GATESEAL_WHEEL"` using a local copy
-with the same filename and digest.
+The Lock records the local path. On another machine, run
+`gateseal activate --compiler-wheel` with the absolute path of a copy that has
+the same filename and digest.
 
 ## Install a reviewed wheel
 

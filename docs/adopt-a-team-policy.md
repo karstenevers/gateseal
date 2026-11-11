@@ -29,7 +29,7 @@ capabilities as the bundled policy.
 gateseal configure --capability hygiene --capability python --capability secrets \
   --policy https://github.com/team/gateseal-policy.git \
   --policy-path policy --policy-tag team-2026.11 \
-  --compiler-source "$GATESEAL_WHEEL_URL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
 ```
 
 gateseal records the commit in `gateseal.toml` and reports that the tag
