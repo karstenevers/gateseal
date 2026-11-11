@@ -7,6 +7,7 @@ build:
   jobs:
     pre_create_environment:
       - python -m pip install uv==0.13.6
+      - asdf reshim python
     create_environment:
       - uv venv --python 3.14.10 "${READTHEDOCS_VIRTUALENV_PATH}"
     install:
