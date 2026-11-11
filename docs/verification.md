@@ -8,8 +8,8 @@ run its test layers and its model check, and which CI jobs run them.
 - [What the tests prove](what-the-tests-prove.md) and
   [What the policy and tool tests prove](what-the-tool-tests-prove.md) say
   what the suite shows.
-- [Tested platforms](tested-platforms.md) records the systems, prerequisite
-  versions, and end-to-end runs of the README and its guides.
+- [Tested platforms](tested-platforms.md) records the systems and prerequisite
+  versions that the tests ran on.
 
 ## Build and test
 
@@ -43,13 +43,12 @@ The Git policy test fetches the fixture repository's copy of the bundled
 policy with the token in `GATESEAL_POLICY_TOKEN`, and pytest skips it when
 that variable is unset.
 
-### Build a wheel for review
+### Build a wheel
 
-Replace `/absolute/path/reviewed-dist` with an empty directory outside the
-checkout:
+Replace `/absolute/path/dist` with an empty directory outside the checkout:
 
 ```sh
-uv build --no-config --wheel --out-dir /absolute/path/reviewed-dist .
+uv build --no-config --wheel --out-dir /absolute/path/dist .
 ```
 
 ### Test layers

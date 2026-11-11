@@ -119,8 +119,6 @@ See [JSON results](commands-and-results.md#json-results).
 
 ## Limits
 
-The generated workflow supports GitHub Actions on Linux. Tests on hosted
-runners covered new-branch and fast-forward pushes, passing and failing
-pull requests, an edit to a generated file, and read access to a Git policy.
-The package tests also cover merge groups, manual runs, schedules, and fork
-pull requests. See [tested platforms](tested-platforms.md).
+The workflow runs only on GitHub's `ubuntu-24.04` runner, and you cannot
+choose another runner yet. [Tested platforms](tested-platforms.md) lists the
+events that the tests covered.

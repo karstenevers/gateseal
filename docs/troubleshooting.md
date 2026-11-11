@@ -38,7 +38,7 @@ Git version, run `gateseal activate` after updating Git.
 | --- | --- |
 | `missing_prerequisite` | The named executable is on `PATH`. |
 | `git_version_mismatch` | `git --version` reports 2.54.0 or later. |
-| `uv_version_mismatch` | `uv --version` meets the runtime minimum of 0.13.5. Version 0.13.6 was tested. |
+| `uv_version_mismatch` | `uv --version` reports 0.13.5 or later. Version 0.13.6 is tested. |
 | `mise_version_mismatch` | `mise --version` reports 2026.10.19 or later. |
 
 Activation needs mise for release binaries such as Betterleaks. See
@@ -120,19 +120,10 @@ their only copy.
 
 Run `git rev-parse --git-path gateseal` to find the preparation directory.
 Check the `patches` directory there. If the attempt that ran the commit
-still exists, also check its `pre-commit-home`.
-
-### Which patches activation keeps
-
-When activation cleans up an old attempt, it moves patches to `patches`
-if it cannot confirm the edits were restored. Subsequent activations show a
-`git apply` command for each saved patch until you delete it. A later edit
-to a file can also cause its patch to be saved.
-
-Activation keeps the current attempt and its predecessor. It defers cleanup
-while checks are running and keeps a restored patch for at least one hour
-after pre-commit wrote it. Once that time has passed, cleanup can discard a
-patch whose contents match the worktree.
+still exists, also check its `pre-commit-home`. Activation shows a
+`git apply` command for each patch in `patches` until you delete it.
+[Patches of unstaged edits](local-preparation.md#patches-of-unstaged-edits)
+says when cleanup keeps or deletes a patch.
 
 ## Activation reports a hash mismatch for a Python archive
 
