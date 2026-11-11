@@ -1,11 +1,12 @@
 [build-system]
-requires = ["hatchling==1.33.0"]
+requires = ["hatchling==1.33.0", "hatch-fancy-pypi-readme==25.1.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "gateseal"
 version = "0.1.0"
 description = "Compile reviewed repository policy into native checks"
+dynamic = ["readme"]
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "Karsten Evers" }]
@@ -50,6 +51,20 @@ docs = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gateseal"]
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(src="|srcset="|!\[[^\]]*\]\()/?(?![a-zA-Z][a-zA-Z0-9+.-]*:|[#/<\s])'
+replacement = '\1https://raw.githubusercontent.com/karstenevers/gateseal/main/'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '(?m)(href="|\]\(|^ {0,3}\[(?!\^)[^\]]+\]:[ \t]*<?)/?(?![a-zA-Z][a-zA-Z0-9+.-]*:|[#/<\s])'
+replacement = '\1https://github.com/karstenevers/gateseal/blob/main/'
 
 [tool.pyright]
 include = ["src", "ci"]

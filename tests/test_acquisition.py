@@ -1,7 +1,15 @@
+import base64
+import hashlib
+import io
 import json
+import netrc
 import os
 import platform
 import sys
+import urllib.request
+import zipfile
+from email.parser import Parser
+from urllib.parse import urlsplit
 
 import pytest
 from conftest import TRACKED
@@ -185,10 +193,37 @@ def test_private_uv_artifact_source(tmp_path, case):
         )
 
 
+def fetched(url):
+    """Download url with the NETRC credentials that uv reads too."""
+    login, _, password = netrc.netrc(os.environ["NETRC"]).authenticators(
+        urlsplit(url).hostname
+    )
+    token = base64.b64encode(f"{login}:{password}".encode()).decode()
+    request = urllib.request.Request(url, headers={"Authorization": f"Basic {token}"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read()
+
+
+def without_readme(wheel):
+    """Return the wheel's files with RECORD and the README text left out."""
+    with zipfile.ZipFile(io.BytesIO(wheel)) as archive:
+        files = {name: archive.read(name) for name in archive.namelist()}
+    for name, data in files.items():
+        if name.endswith(".dist-info/RECORD"):
+            files[name] = None
+        elif name.endswith(".dist-info/METADATA"):
+            headers = Parser().parsestr(data.decode()).items()
+            files[name] = [h for h in headers if h[0] != "Description-Content-Type"]
+    return files
+
+
 @pytest.mark.network
 def test_private_fixture_is_the_built_wheel(installed):
+    """A README edit changes the wheel's metadata, but needs no new fixture."""
     artifact = json.loads((PACKAGE / "tests/artifact-source.json").read_bytes())
-    assert artifact["sha256"] == installed.checksum
+    fixture = fetched(artifact["url"])
+    assert hashlib.sha256(fixture).hexdigest() == artifact["sha256"]
+    assert without_readme(fixture) == without_readme(installed.wheel.read_bytes())
 
 
 @pytest.mark.network

@@ -195,6 +195,7 @@ def versioned_package(destination, version, package=PACKAGE):
         destination / "src",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
+    shutil.copy(package / "README.md", destination / "README.md")
     for name, key in (
         ("pyproject.toml", "version"),
         ("src/gateseal/__init__.py", "__version__"),
