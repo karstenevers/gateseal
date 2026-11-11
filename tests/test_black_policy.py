@@ -10,8 +10,10 @@ installs Black from PyPI.
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from black_policy import FORMATTED, LAZY, PYTHON, REVISION, add_black
@@ -157,6 +159,24 @@ def test_black_on_the_runtime_refuses_the_newer_syntax(installed, on_runtime):
     assert (consumer / "lazy.py").read_text() == LAZY
 
 
+LIVE_BUILD_FIELDS = {"build", "sha256", "url"}
+
+
+def assert_live_build_of_python(component: dict[str, Any]) -> None:
+    """Accept whichever build upstream publishes newest, with its own digests."""
+    assert list(component) == ["versions"]
+    records = component["versions"]["3.15.2"]
+    assert records.keys() == PYTHON.keys()
+    for key, record in records.items():
+        expected = {k: v for k, v in PYTHON[key].items() if k not in LIVE_BUILD_FIELDS}
+        assert {
+            k: v for k, v in record.items() if k not in LIVE_BUILD_FIELDS
+        } == expected
+        assert re.fullmatch("[0-9a-f]{64}", record["sha256"])
+        assert re.fullmatch("[0-9]{8}", record["build"])
+        assert f"%2B{record['build']}-" in record["url"]
+
+
 @pytest.mark.network
 def test_policy_add_reviews_the_hook_python_from_python_build_standalone(
     installed, tmp_path
@@ -172,7 +192,7 @@ def test_policy_add_reviews_the_hook_python_from_python_build_standalone(
     assert lock["components"]["black"] == {
         "versions": {"26.10.1": {"revision": REVISION}}
     }
-    assert lock["components"]["python"] == {"versions": {"3.15.2": PYTHON}}
+    assert_live_build_of_python(lock["components"]["python"])
     assert installed.cli(tmp_path, "policy", "check", str(policy))["code"] == (
         "consistent"
     )
