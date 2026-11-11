@@ -8,7 +8,7 @@ Use [Install gateseal](install.md) to set up a supported machine.
 | Tool | Version | When you need it |
 | --- | --- | --- |
 | Git | 2.54.0 or later | Repository commands and commits. gateseal uses `git hook list` to detect other configured hooks. |
-| uv | 0.13.6 or later is tested. The runtime accepts 0.13.5. | Install and prepare gateseal. A prepared commit can run after you remove uv. |
+| uv | 0.13.6 or later is tested. Activation accepts 0.13.5. | Install and prepare gateseal. A prepared commit can run after you remove uv. |
 | mise | 2026.10.19 or later | Prepare release binaries such as Betterleaks. The bundled policy requires mise when you select `secrets`. |
 
 Activation prepares CPython and pre-commit. You do not need to install either
@@ -29,11 +29,11 @@ build 20261026 and pre-commit 4.7.0. Tests used the bundled pre-commit-hooks
 6.0.0, Ruff 0.17.1, and Betterleaks 1.9.0. A version exception also exercised
 Betterleaks 1.8.0. See [What the tests prove](what-the-tests-prove.md).
 
-The macOS end-to-end guide runs used a local wheel and scratch repositories.
-The Linux guide run on 2026-10-28 used the earlier CPython 3.13.17 runtime
-and predates the CI and upgrade guides. Separate generated-workflow tests on
-GitHub's Linux runner prepared and checked two consumer repositories, one
-with the bundled policy and one with a Git policy.
+Tests of the generated workflow on GitHub's Linux runner prepared and checked
+two repositories, one with the bundled policy and one with a Git policy. They
+covered new-branch and fast-forward pushes, passing and failing pull requests,
+and an edit to a generated file. The package tests also cover merge groups,
+manual runs, schedules, and pull requests from forks.
 
 ## Platform limits
 

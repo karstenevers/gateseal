@@ -6,11 +6,16 @@ maintainer has already selected the checks. Prepare your clone once, then use
 
 ## Install the pinned release
 
-Find `compiler.version` in `gateseal.lock`. [Install that
-release](install.md#install-from-pypi). If a command reports
-`selected_compiler_required`, check `gateseal --version` against the Lock.
-For a team build, get the exact wheel that the Lock names from the
-repository maintainer.
+Install the gateseal version in the `compiler.version` field of
+`gateseal.lock`. For version `0.1.0`, run:
+
+```sh
+uv tool install --python 3.14.10 gateseal==0.1.0
+```
+
+[Install gateseal](install.md) lists the tools you need first, and how to
+install a team's own wheel. If a command reports `selected_compiler_required`,
+the installed gateseal is not the release or build that the Lock pins.
 
 ## Prepare the clone
 
@@ -22,11 +27,10 @@ gateseal activate
 
 Activation prepares the checks in this worktree and installs the Git hook.
 It uses the versions in `gateseal.lock`, not the tools installed on your
-machine.
-The first activation needs network access to download the tools. If the
-locked wheel is at a path or URL you cannot reach, use
-`gateseal activate --compiler-wheel /path/to/wheel`. Supply a copy with the
-filename and SHA-256 recorded in the Lock.
+machine. The first activation needs network access to download the tools.
+If the Lock names a wheel that you cannot reach, such as a file on another
+machine, get a copy with the same filename. Then run
+`gateseal activate --compiler-wheel /path/to/wheel`.
 
 After activation, commits from your terminal or Git client check the files
 you stage. Run `gateseal activate` again after you pull a changed Lock. If
