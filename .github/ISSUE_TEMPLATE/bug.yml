@@ -1,0 +1,42 @@
+name: Bug report
+description: A gateseal command or a generated file does something wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command you ran, what it printed, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The shortest steps from a fresh clone, such as a scratch repository from the demo.
+      placeholder: |
+        1. gateseal configure --capability hygiene ...
+        2. gateseal activate
+        3. git commit ...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of gateseal doctor --verbose
+      description: Remove any credentials or private URLs before you paste.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: gateseal version
+      placeholder: gateseal --version
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: macOS 26 arm64, Ubuntu 24.04 x86-64
+    validations:
+      required: true

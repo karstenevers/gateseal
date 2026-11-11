@@ -1,0 +1,33 @@
+title = "gateseal reference secret rules"
+betterleaksMinVersion = "v1.7.2"
+
+prefilter = '''
+filter.matchesAny(get(attributes, "path", ""), [
+  `(?:^|/)__pycache__(?:/.*)?$`,
+  `(?i)\.pyc$`
+])
+'''
+
+[[rules]]
+id = "aws-access-token"
+description = "AWS access key identifier"
+regex = '''\b(?:AKIA|ASIA)[A-Z0-9]{16}\b'''
+keywords = ["akia", "asia"]
+
+[[rules]]
+id = "github-pat"
+description = "GitHub personal access token"
+regex = '''\bgh[pousr]_[A-Za-z0-9._-]{36,}'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]
+
+[[rules]]
+id = "github-fine-grained-pat"
+description = "GitHub fine-grained personal access token"
+regex = '''\bgithub_pat_[A-Za-z0-9_]{82}\b'''
+keywords = ["github_pat_"]
+
+[[rules]]
+id = "generic-api-key"
+description = "Generic API key assignment"
+regex = '''(?i)(?:api[_-]?key|secret[_-]?key|access[_-]?token)["']?[\t ]{0,8}[:=][\t ]{0,8}["']?([A-Za-z0-9_./+=-]{20,})'''
+keywords = ["api", "key", "secret", "token"]

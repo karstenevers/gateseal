@@ -1,0 +1,109 @@
+[build-system]
+requires = ["hatchling==1.33.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gateseal"
+version = "0.1.0"
+description = "Compile reviewed repository policy into native checks"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Karsten Evers" }]
+keywords = ["pre-commit", "ruff", "secret-scanning", "ci", "policy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Quality Assurance",
+]
+requires-python = ">=3.14.10,<3.15"
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/karstenevers/gateseal"
+Documentation = "https://gateseal.readthedocs.io/"
+Changelog = "https://github.com/karstenevers/gateseal/blob/main/CHANGELOG.md"
+Issues = "https://github.com/karstenevers/gateseal/issues"
+
+[project.scripts]
+gateseal = "gateseal.cli:main"
+
+[dependency-groups]
+dev = [
+    "coverage==7.17.2",
+    "pytest==9.2.0",
+    "pytest-xdist==3.8.0",
+    "pytestmut==0.1.0",
+    "ruff==0.17.1",
+    "pyright==1.1.414",
+    "pre-commit==4.7.0",
+]
+docs = [
+    "markdown-callouts==0.4.0",
+    "mkdocs==1.6.1",
+    "mkdocs-material==9.8.0",
+    "pymdown-extensions==12.3",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gateseal"]
+
+[tool.pyright]
+include = ["src", "ci"]
+typeCheckingMode = "strict"
+pythonVersion = "3.14"
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["gateseal"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: real installed wheel, uv, Git and pre-commit; set for every test that uses the installed fixture",
+    "network: actual private network artifact acquisition",
+]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+patch = ["subprocess"]
+relative_files = true
+source_pkgs = ["gateseal"]
+
+[tool.coverage.paths]
+gateseal = ["src/gateseal", "*/site-packages/gateseal"]
+
+[tool.pytestmut]
+paths = ["src/gateseal"]
+
+[tool.pytestmut.pytest]
+args = ["tests", "-m", "not integration and not network"]
+
+[tool.pytestmut.thresholds]
+min_score = 90.0
+max_survivors = 0
+
+[tool.pytestmut.suppress]
+symbols = [
+    # Downloads CPython and the PyPI packages that build an attempt.
+    "src/gateseal/runtime.py::_prepare",
+    # Installs a downloaded or locally built candidate wheel with uv.
+    "src/gateseal/candidate.py::installed",
+]
+require_reason = true
+report_unused = "error"
+
+[tool.pytestmut.diff]
+max_mutants = 100000
+budget_seconds = 1200
+on_budget_exceeded = "fail"

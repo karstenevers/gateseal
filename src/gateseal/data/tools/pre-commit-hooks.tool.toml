@@ -1,0 +1,25 @@
+# Its hooks are the repository's own code at the locked revision, so the
+# revision proves them and the definition names no executable to check.
+kind = "pre-commit-repository"
+stages = ["commit", "run", "ci"]
+scope = "files"
+removed_prefixes = []
+
+[source]
+repository = "https://github.com/pre-commit/pre-commit-hooks"
+tag = "v{version}"
+
+[hooks.trailing-whitespace]
+name = "trim trailing whitespace"
+probe = ["trailing-whitespace-fixer"]
+output = "plain"
+
+[hooks.end-of-file-fixer]
+name = "fix end of files"
+probe = ["end-of-file-fixer"]
+output = "plain"
+
+[hooks.check-yaml]
+name = "check yaml"
+probe = ["check-yaml"]
+output = "plain"

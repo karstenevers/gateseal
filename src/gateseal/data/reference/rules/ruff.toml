@@ -1,0 +1,6 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# Run Ruff natively with `ruff check --config .gateseal/ruff.toml`.
+line-length = 88
+
+[lint]
+select = ["E4", "E7", "E9", "F", "I"]

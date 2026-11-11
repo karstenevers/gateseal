@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a capability, a tool or a change to how gateseal works.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to do, and what stops you today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: |
+        What gateseal should do instead. A new tool needs a tool kind that
+        gateseal implements, and gateseal leaves installing tools and running
+        hooks to mise, uv and pre-commit.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered, such as a team policy or a native tool setting.

@@ -1,0 +1,71 @@
+kind = "release-binary"
+stages = ["commit", "run", "ci"]
+scope = "files"
+removed_prefixes = ["BETTERLEAKS_", "GITLEAKS_"]
+
+[source]
+repository = "https://github.com/betterleaks/betterleaks"
+tag = "v{version}"
+archive = "betterleaks_{version}_{platform}.tar.gz"
+checksums = "checksums.txt"
+
+[source.platforms]
+linux-x64 = "linux_x64"
+macos-arm64 = "darwin_arm64"
+
+[configuration]
+format = "toml"
+
+[executable]
+name = "betterleaks"
+version = ["version"]
+version_output = "{version}"
+
+# Betterleaks redacts only a finding's own secret from the source line that
+# --verbose prints, so a second secret on that line would show. The report
+# prints no source text.
+[files.report]
+extension = "tmpl"
+content = '''
+{{- /* gateseal owns this file; gateseal configure writes it. */ -}}
+{{ range . }}{{ .File }}:{{ .StartLine }}:{{ .StartColumn }}: {{ .RuleID }} ({{ .Description }})
+{{ end }}{{ if . }}Next: Remove each secret, stage the fix, and retry. Rotate any secret that was real.
+{{ end -}}
+'''
+
+[files.history-report]
+extension = "tmpl"
+content = '''
+{{- /* gateseal owns this file; gateseal configure writes it. */ -}}
+{{ range . }}{{ .File }}:{{ .StartLine }}:{{ .StartColumn }}: {{ .RuleID }} ({{ .Description }}) in commit {{ .Commit }}
+{{ end }}{{ if . }}Next: Rotate each secret that was real, because the pushed history holds it. Remove it from the commits that add it before merging.
+{{ end -}}
+'''
+
+# --ignore-gitleaks-allow and the empty ignore path keep inline allow comments
+# and a repository's .gitleaksignore from hiding a finding.
+[hooks.betterleaks]
+name = "Detect secrets with Betterleaks"
+args = [
+  "dir", "--config", "{configuration}",
+  "--gitleaks-ignore-path", "/dev/null", "--ignore-gitleaks-allow",
+  "--redact", "--no-banner", "--no-color",
+  "--report-format", "template", "--report-template", "{report}",
+  "--report-path", "-", "--",
+]
+probe = ["betterleaks", "config", "check", "--config", "{configuration}"]
+output = "concise"
+
+# The CI gate puts its revision range at {range}, so the scan reads the
+# commits that range adds, from the worktree's top. git log -p shows no diff
+# for a merge commit by default, and none for a file whose attributes say -diff
+# or that a textconv or external diff driver rewrites, so each of those would
+# hide a secret from the scan.
+[history]
+args = [
+  "git", "--config", "{configuration}",
+  "--gitleaks-ignore-path", "/dev/null", "--ignore-gitleaks-allow",
+  "--redact", "--no-banner", "--no-color",
+  "--report-format", "template", "--report-template", "{history-report}",
+  "--report-path", "-", "--log-opts=--diff-merges=first-parent --text --no-textconv --no-ext-diff --no-color {range}",
+]

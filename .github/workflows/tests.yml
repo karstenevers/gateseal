@@ -1,0 +1,112 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Runner for the unit tests
+        type: choice
+        # The integration workflow covers macOS, so no one starts it by hand.
+        options: [ubuntu-latest, windows-latest]
+        default: ubuntu-latest
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tests:
+    name: tests
+    # A copy of this repository runs its workflows only when started by hand.
+    if: github.repository == 'karstenevers/gateseal' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ inputs.os || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        run: uv sync --locked --python 3.14.10
+      - name: Report prerequisite versions
+        run: |
+          git --version
+          uv --version
+          uv run python --version
+      - name: Check style and strict types
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pyright
+      - name: Test the unit layer
+        run: uv run pytest tests -m 'not integration and not network' -q
+
+  tlc:
+    name: tlc
+    if: github.repository == 'karstenevers/gateseal' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select the model check
+        id: select
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: python3 ci/select_tlc.py
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        if: steps.select.outputs.required == 'true'
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        if: steps.select.outputs.required == 'true'
+        run: uv sync --locked --python 3.14.10
+      - name: Model-check prepared attempts with TLC
+        if: steps.select.outputs.required == 'true'
+        run: |
+          jar="$RUNNER_TEMP/tla2tools.jar"
+          curl --fail --silent --show-error --location --output "$jar" \
+            https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar
+          echo "936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88  $jar" | sha256sum --check
+          java -version
+          TLA2TOOLS="$jar" JAVA="$(command -v java)" uv run python formal/check.py
+
+  docs:
+    name: docs
+    if: github.repository == 'karstenevers/gateseal' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Build the documentation site strictly
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+        run: uv run --locked --only-group docs mkdocs build --strict

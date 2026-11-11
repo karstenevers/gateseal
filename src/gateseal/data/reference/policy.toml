@@ -1,0 +1,47 @@
+schema = 4
+release = "2026.11-team-tools"
+minimum_compiler = "0.1.0"
+
+[capabilities.hygiene]
+tools = ["pre-commit-hooks"]
+
+[capabilities.python]
+tools = ["ruff"]
+
+[capabilities.secrets]
+tools = ["betterleaks"]
+
+[tools.pre-commit-hooks]
+hook_ids = ["trailing-whitespace", "end-of-file-fixer", "check-yaml"]
+
+[tools.ruff]
+hook_ids = ["ruff-check", "ruff-format"]
+configuration = "rules/ruff.toml"
+
+[tools.betterleaks]
+configuration = "rules/betterleaks.toml"
+
+[choices.hygiene.exclude]
+default = []
+
+[choices.python.target_version]
+default = "py311"
+
+[components.pre-commit-hooks]
+pin = "6.0.0"
+
+[components.pre-commit-hooks.versions."6.0.0"]
+
+[components.pre-commit-hooks.versions."5.0.0"]
+
+[components.ruff]
+pin = "0.17.1"
+
+[components.ruff.versions."0.17.1"]
+
+[components.betterleaks]
+pin = "1.9.0"
+
+[components.betterleaks.versions."1.9.0"]
+
+[components.betterleaks.versions."1.8.0"]

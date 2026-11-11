@@ -1,0 +1,101 @@
+name: Integration tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Runner for the integration layer
+        type: choice
+        # macOS runs on pushes, pull requests and the schedule, never by hand, so a
+        # copy of this repository never starts one.
+        options: [ubuntu-latest, windows-latest]
+        default: ubuntu-latest
+  schedule:
+    - cron: "43 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  integration:
+    name: integration (${{ matrix.os }})
+    # A copy of this repository runs its workflows only when started by hand.
+    if: github.repository == 'karstenevers/gateseal' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os && format('["{0}"]', inputs.os) || '["ubuntu-latest", "macos-latest"]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        run: uv sync --locked --python 3.14.10
+      - name: Install the tested mise floor
+        uses: ./.github/actions/install-mise
+      - name: Report prerequisite versions
+        run: |
+          git --version
+          uv --version
+          MISE_OFFLINE=1 mise --version
+          uv run python --version
+      - name: Test built wheels and real hooks
+        run: uv run pytest tests -n auto -m 'not network' -q
+
+  full-suite:
+    name: full-suite
+    # Pull requests from forks get no secrets, so only the base repository's
+    # branches read the private test fixtures.
+    if: >-
+      (github.repository == 'karstenevers/gateseal' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        run: uv sync --locked --python 3.14.10
+      - name: Install the tested mise floor
+        uses: ./.github/actions/install-mise
+      - name: Test every layer under coverage
+        env:
+          # A fine-grained token that reads only karstenevers/gateseal-fixtures.
+          GH_TOKEN: ${{ secrets.FIXTURES_TOKEN }}
+          COVERAGE_FILE: ${{ runner.temp }}/coverage/.coverage
+        run: |
+          mkdir -p "$RUNNER_TEMP/coverage"
+          uv run coverage run tests/run_private_tests.py tests -n auto -q
+      - name: Score every function with its CRAP score
+        env:
+          COVERAGE_FILE: ${{ runner.temp }}/coverage/.coverage
+        run: |
+          report="$RUNNER_TEMP/coverage/coverage.json"
+          uv run coverage combine -q
+          uv run coverage report --format=total
+          uv run coverage json -q -o "$report"
+          uv run python ci/crap.py --coverage "$report" --limit 10

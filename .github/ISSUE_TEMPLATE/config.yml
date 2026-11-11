@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/karstenevers/gateseal/security/advisories/new
+    about: Report it privately, as SECURITY.md describes.
+  - name: Read the documentation
+    url: https://gateseal.readthedocs.io/
+    about: The guide covers install, configuration, CI, team policies and upgrades.

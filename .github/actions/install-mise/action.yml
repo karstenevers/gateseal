@@ -1,0 +1,25 @@
+name: Install the tested mise floor
+description: Download mise 2026.10.19 for the runner, check its SHA-256 and put it on PATH.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64)
+            asset=mise-v2026.10.19-linux-x64
+            sha256=3162760f40b6b5f706c60641e4ef5ee7322bc6c54f72fc26a7111b337aa18d9d ;;
+          macOS-ARM64)
+            asset=mise-v2026.10.19-macos-arm64
+            sha256=7dc61dfa71abbcda1c40d18440bc556b5d58b80e6042bc4f95fd106fa1bb3c66 ;;
+          *)
+            echo "::error::No tested mise build for $RUNNER_OS $RUNNER_ARCH"
+            exit 1 ;;
+        esac
+        bin="$RUNNER_TEMP/mise-bin"
+        mkdir -p "$bin"
+        curl --fail --silent --show-error --location --output "$bin/mise" \
+          "https://github.com/jdx/mise/releases/download/v2026.10.19/$asset"
+        echo "$sha256  $bin/mise" | shasum -a 256 --check
+        chmod +x "$bin/mise"
+        echo "$bin" >> "$GITHUB_PATH"

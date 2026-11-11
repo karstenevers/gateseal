@@ -1,0 +1,67 @@
+/* The seal's blue from the logo, lighter on dark pages. */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #3e6fa8;
+  --md-primary-fg-color--light: #7fa8d6;
+  --md-primary-fg-color--dark: #2f5a8c;
+  --md-accent-fg-color: #2f5a8c;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #2f5a8c;
+  --md-primary-fg-color--light: #7fa8d6;
+  --md-primary-fg-color--dark: #1f3d61;
+  --md-accent-fg-color: #9fc0e4;
+  --md-typeset-a-color: #7fa8d6;
+}
+
+/* Steps: an ordered list inside <div class="steps" markdown>. */
+.md-typeset .steps > ol {
+  counter-reset: step;
+  list-style: none;
+  margin-left: 0;
+  padding-left: 0;
+}
+
+.md-typeset .steps > ol > li {
+  counter-increment: step;
+  position: relative;
+  margin-left: 0;
+  padding: 0 0 0.6rem 2.6rem;
+}
+
+.md-typeset .steps > ol > li::before {
+  content: counter(step);
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 50%;
+  background: var(--md-default-bg-color);
+  color: var(--md-typeset-a-color);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.md-typeset .steps > ol > li::after {
+  content: "";
+  position: absolute;
+  top: 2rem;
+  bottom: 0.3rem;
+  left: calc(0.85rem - 0.5px);
+  width: 1px;
+  background: var(--md-default-fg-color--lightest);
+}
+
+.md-typeset .steps > ol > li:last-child::after {
+  background: linear-gradient(var(--md-default-fg-color--lightest), transparent);
+}
+
+.md-typeset .steps > ol > li > :first-child {
+  margin-top: 0;
+  line-height: 1.7rem;
+  font-size: 1.05em;
+}

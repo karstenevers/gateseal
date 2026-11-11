@@ -1,0 +1,75 @@
+name: Mutation tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  mutation-diff:
+    name: mutation-diff
+    # A copy of this repository runs its workflows only when started by hand.
+    if: github.event_name == 'pull_request' && github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        run: uv sync --locked --python 3.14.10
+      - name: Mutate the lines this pull request changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: uv run pytestmut run --diff "$BASE_SHA" --no-cache --report text --report markdown
+      - name: Write the report to the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f .pytestmut/reports/report.md ]; then
+            cat .pytestmut/reports/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  mutation-full:
+    name: mutation-full
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && github.repository == 'karstenevers/gateseal')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Provision the development environment
+        run: uv sync --locked --python 3.14.10
+      - name: Mutate the whole unit layer
+        run: uv run pytestmut run --no-cache --report text --report markdown
+      - name: Write the report to the job summary
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f .pytestmut/reports/report.md ]; then
+            cat .pytestmut/reports/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi

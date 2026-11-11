@@ -1,0 +1,171 @@
+{
+  "generated_by": "uv run python scripts/lock_runtime.py",
+  "minimum_uv": "0.13.5",
+  "pre_commit": {
+    "packages": [
+      {
+        "artifacts": [
+          {
+            "filename": "cfgv-3.5.0-py2.py3-none-any.whl",
+            "sha256": "a8dc6b26ad22ff227d2634a65cb388215ce6cc96bbcc5cfde7641ae87e8dacc0",
+            "url": "https://files.pythonhosted.org/packages/db/3c/33bac158f8ab7f89b2e59426d5fe2e4f63f7ed25df84c036890172b412b5/cfgv-3.5.0-py2.py3-none-any.whl"
+          }
+        ],
+        "name": "cfgv",
+        "version": "3.5.0"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "distlib-0.4.4-py2.py3-none-any.whl",
+            "sha256": "cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638",
+            "url": "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl"
+          }
+        ],
+        "name": "distlib",
+        "version": "0.4.4"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "filelock-4.2.4-py3-none-any.whl",
+            "sha256": "301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e",
+            "url": "https://files.pythonhosted.org/packages/e0/1b/5e74289a1878e666bb4b65fe5805a04cafcac2aa5f519ef1ead67ef91c56/filelock-4.2.4-py3-none-any.whl"
+          }
+        ],
+        "name": "filelock",
+        "version": "4.2.4"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "identify-2.6.20-py2.py3-none-any.whl",
+            "sha256": "6a16b69b93187244e0548cbfd25b3e4a6f9a7a2ad784625c3bec2b8d27b81aaa",
+            "url": "https://files.pythonhosted.org/packages/fa/70/fffc9613501877c0a10a1ef73a165e6ded3e53f6e7502227fef56d973933/identify-2.6.20-py2.py3-none-any.whl"
+          }
+        ],
+        "name": "identify",
+        "version": "2.6.20"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "nodeenv-1.11.0-py2.py3-none-any.whl",
+            "sha256": "edaa16e6c14d7cf395d75d4bbd5a26390f4dc06501a33b4e76282b02cc688a25",
+            "url": "https://files.pythonhosted.org/packages/54/c8/12811c9b48fde162bb72b6f2e78fada9a247a09d7bb5be2050a5d099c77b/nodeenv-1.11.0-py2.py3-none-any.whl"
+          }
+        ],
+        "name": "nodeenv",
+        "version": "1.11.0"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "packaging-26.3-py3-none-any.whl",
+            "sha256": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c",
+            "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl"
+          }
+        ],
+        "name": "packaging",
+        "version": "26.3"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "platformdirs-4.14.0-py3-none-any.whl",
+            "sha256": "1dadfc59a8a5d7565b3d9270ae8fa71c065595352c4277b41c11ee6c222c4b91",
+            "url": "https://files.pythonhosted.org/packages/69/2b/887969ef4bb53e0cb271dc7c3f4a73d50c5d58bb88aeaae311e3340cd57e/platformdirs-4.14.0-py3-none-any.whl"
+          }
+        ],
+        "name": "platformdirs",
+        "version": "4.14.0"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "pre_commit-4.7.0-py2.py3-none-any.whl",
+            "sha256": "2e229038ad3656081b70c27913157e4b636ef306f643f024a8a8e3f0f7b2f877",
+            "url": "https://files.pythonhosted.org/packages/eb/83/ce0a196e4f7b20b11ce3aa1fc72fb973f64b7628d51c1b8aebad37fb7f81/pre_commit-4.7.0-py2.py3-none-any.whl"
+          }
+        ],
+        "name": "pre-commit",
+        "version": "4.7.0"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "python_discovery-1.6.7-py3-none-any.whl",
+            "sha256": "5422f67e5f533bb02d7b73de1c422ed74037536fd869e05156c07565926ec68e",
+            "url": "https://files.pythonhosted.org/packages/57/e4/1c7c388e874222c28afb92fe3ebfeebe55555276523ba7aab0a82a10b2b5/python_discovery-1.6.7-py3-none-any.whl"
+          }
+        ],
+        "name": "python-discovery",
+        "version": "1.6.7"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "pyyaml-6.0.3-cp314-cp314-macosx_11_0_arm64.whl",
+            "sha256": "34d5fcd24b8445fadc33f9cf348c1047101756fd760b4dacb5c3e99755703310",
+            "url": "https://files.pythonhosted.org/packages/bd/9c/4d95bb87eb2063d20db7b60faa3840c1b18025517ae857371c4dd55a6b3a/pyyaml-6.0.3-cp314-cp314-macosx_11_0_arm64.whl"
+          },
+          {
+            "filename": "pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+            "sha256": "c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5",
+            "url": "https://files.pythonhosted.org/packages/88/f9/16491d7ed2a919954993e48aa941b200f38040928474c9e85ea9e64222c3/pyyaml-6.0.3-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl"
+          }
+        ],
+        "name": "pyyaml",
+        "version": "6.0.3"
+      },
+      {
+        "artifacts": [
+          {
+            "filename": "virtualenv-21.15.1-py3-none-any.whl",
+            "sha256": "0d14a991689c67600316880eadc0a37b7690cb632e3b4ac67e2bc05b2b2e24a4",
+            "url": "https://files.pythonhosted.org/packages/ce/23/cdab19d3a9da42ca0938081e163e25f81e610141800ead743ba1ee881f0e/virtualenv-21.15.1-py3-none-any.whl"
+          }
+        ],
+        "name": "virtualenv",
+        "version": "21.15.1"
+      }
+    ],
+    "version": "4.7.0"
+  },
+  "python": {
+    "cpython-3.14.10-darwin-aarch64-none": {
+      "arch": {
+        "family": "aarch64",
+        "variant": null
+      },
+      "build": "20261026",
+      "libc": "none",
+      "major": 3,
+      "minor": 14,
+      "name": "cpython",
+      "os": "darwin",
+      "patch": 10,
+      "prerelease": "",
+      "sha256": "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "variant": null
+    },
+    "cpython-3.14.10-linux-x86_64-gnu": {
+      "arch": {
+        "family": "x86_64",
+        "variant": null
+      },
+      "build": "20261026",
+      "libc": "gnu",
+      "major": 3,
+      "minor": 14,
+      "name": "cpython",
+      "os": "linux",
+      "patch": 10,
+      "prerelease": "",
+      "sha256": "4d3c16c59ed0802a3d1d34d8bce504b15ceeaff39d62dadecc6a9fa803412aed",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.14.10%2B20261026-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "variant": null
+    }
+  }
+}

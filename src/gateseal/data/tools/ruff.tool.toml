@@ -1,0 +1,57 @@
+kind = "pre-commit-repository"
+stages = ["commit", "run", "ci"]
+scope = "files"
+removed_prefixes = ["RUFF_"]
+
+[source]
+repository = "https://github.com/astral-sh/ruff-pre-commit"
+tag = "v{version}"
+
+[configuration]
+format = "toml"
+
+# since names the oldest Ruff release that accepts each target version; 0.1.0
+# is the oldest release measured.
+[choices.target_version]
+key = "target-version"
+
+[choices.target_version.since]
+py37 = "0.1.0"
+py38 = "0.1.0"
+py39 = "0.1.0"
+py310 = "0.1.0"
+py311 = "0.1.0"
+py312 = "0.1.0"
+py313 = "0.4.5"
+py314 = "0.11.8"
+py315 = "0.14.11"
+
+# ruff-pre-commit installs ruff from an index by version, without a hash, so
+# the prepared ruff must report the pinned version.
+[executable]
+name = "ruff"
+version = ["--version"]
+version_output = "ruff {version}"
+
+# --fix applies only Ruff's safe fixes. The final -- ends the options before
+# pre-commit appends file names, so a file named like an option is checked as
+# a file. Ruff's own hooks also match Markdown, which types_or leaves out.
+[hooks.ruff-check]
+name = "ruff check"
+args = ["--config", "{configuration}", "--fix", "--output-format", "concise", "--"]
+types_or = ["python", "pyi", "jupyter"]
+probe = [
+  "ruff", "check", "--config", "{configuration}", "--no-cache",
+  "--stdin-filename", "gateseal-probe.py", "-",
+]
+output = "concise"
+
+[hooks.ruff-format]
+name = "ruff format"
+args = ["--config", "{configuration}", "--"]
+types_or = ["python", "pyi", "jupyter"]
+probe = [
+  "ruff", "format", "--config", "{configuration}", "--no-cache",
+  "--stdin-filename", "gateseal-probe.py", "-",
+]
+output = "plain"
