@@ -16,6 +16,8 @@ The first release.
 - `gateseal configure` writes the manifest, the lock and native configuration
   for the hygiene, Python and secrets capabilities, and with `--ci github` a
   GitHub Actions workflow.
+- The lock pins the compiler wheel by its file URL on PyPI, a raw GitHub URL at
+  a full commit, or a local path, with its SHA-256.
 - `gateseal activate` prepares the pinned compiler, Python, pre-commit and tools
   for one worktree, and every later `git commit` runs only what it prepared.
 - `gateseal run`, `gateseal gate`, `gateseal check`, `gateseal status` and

@@ -35,21 +35,15 @@ Use the version printed by `gateseal --version`. Once you commit
 `gateseal.lock`, contributors can activate their clones without entering the
 wheel details.
 
-### For a team repository or GitHub Actions
+### Pin the wheel on PyPI
 
-Use a copy of the release wheel in a GitHub repository that your contributors
-can read. GitHub Actions needs a publicly readable copy. If your team needs
-to host the wheel, download it from the release's **Download files** page on
-PyPI, keep its filename, and commit that file to the repository that will
-serve it.
-
-Get the wheel's raw GitHub URL at that full 40-character commit ID. Copy the
-wheel's SHA-256 from its file details on PyPI or from your team's reviewed
-release record. Set these variables in the shell where you will run gateseal.
-Replace both example values:
+Open the **Download files** page of your release on PyPI, such as
+`https://pypi.org/project/gateseal/0.1.0/#files`. Copy the link of the `.whl`
+file, and copy its SHA-256 from the file details. Set both in your shell,
+replacing the example values:
 
 ```sh
-GATESEAL_WHEEL_URL='https://raw.githubusercontent.com/OWNER/REPO/FULL_COMMIT/path/gateseal-0.1.0-py3-none-any.whl'
+GATESEAL_WHEEL_URL='https://files.pythonhosted.org/packages/.../gateseal-0.1.0-py3-none-any.whl'
 GATESEAL_WHEEL_SHA256='paste the wheel SHA-256 here'
 ```
 
@@ -62,12 +56,27 @@ gateseal configure --capability hygiene \
   --compiler-source "$GATESEAL_WHEEL_URL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
 ```
 
-The Lock accepts a raw GitHub URL at a full commit. PyPI download URLs and
-links to GitHub branches or tags are unsupported as compiler sources.
+PyPI never changes a file after upload, and anyone can download it. So every
+clone and every GitHub Actions run gets the same wheel, and activation checks
+its SHA-256 before it installs it.
 [Configure and commit](configure-a-repository.md#configure-and-commit) to
 prepare the checks.
 
-### For a local repository
+### Pin a copy on GitHub
+
+If your team hosts its own copy of the wheel, commit it with its filename to a
+GitHub repository that your contributors can read. GitHub Actions needs a
+publicly readable copy. Set `GATESEAL_WHEEL_URL` to the wheel's raw GitHub URL
+at the full 40-character commit ID, then run the same `configure` command:
+
+```sh
+GATESEAL_WHEEL_URL='https://raw.githubusercontent.com/OWNER/REPO/FULL_COMMIT/path/gateseal-0.1.0-py3-none-any.whl'
+```
+
+The Lock accepts only these two kinds of URL. Other hosts, and links to GitHub
+branches or tags, are unsupported.
+
+### Pin a wheel file on this machine
 
 Download the wheel for your gateseal version from PyPI's **Download files**
 page. Keep it outside your repository. Copy the SHA-256 from that wheel's

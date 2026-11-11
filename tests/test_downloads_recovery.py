@@ -64,6 +64,16 @@ def test_a_compiler_download_names_the_step_for_its_cause(output, named):
     assert all(value in error.next_step for value in named)
 
 
+def test_a_refused_pypi_download_names_the_upgrade_that_moves_the_pin():
+    url = f"https://files.pythonhosted.org/packages/5b/a5/{'c' * 60}/{WHEEL}"
+    pypi = CompilerArtifact("https-wheel", url, WHEEL, "b" * 64, "0.1.0")
+    error = recovered(compiler_download(pypi), REFUSED)
+    named = (url, "gateseal upgrade", "--compiler-source", "--compiler-sha256")
+    assert all(value in error.next_step for value in (*named, *LOCAL))
+    assert "NETRC" not in error.next_step
+    assert f"save {url}" not in error.next_step
+
+
 def test_a_failure_with_no_known_cause_keeps_its_own_step():
     for context in (python_download(PYTHON, "/cache"), compiler_download(artifact())):
         error = recovered(context, "error: No space left on device")

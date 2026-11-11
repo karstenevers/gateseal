@@ -33,9 +33,9 @@ pins Betterleaks 1.9.0, run:
 gateseal upgrade betterleaks
 ```
 
-**Change the gateseal release.** Set the [shared wheel
-variables](install.md#for-a-team-repository-or-github-actions) for the target
-release. Use the currently pinned command to update the repository:
+**Change the gateseal release.** Set the [wheel
+variables](install.md#pin-the-wheel-on-pypi) for the target release. Use
+the currently pinned command to update the repository:
 
 ```sh
 gateseal upgrade --compiler-source "$GATESEAL_WHEEL_URL" \

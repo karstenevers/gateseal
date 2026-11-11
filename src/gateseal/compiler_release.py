@@ -109,33 +109,47 @@ class CompilerArtifact:
         return cls(kind, location, filename, checksum, release)
 
 
-def _check_https_wheel(location: str, filename: str) -> None:
-    """Accept the wheel's raw file at a full commit of any GitHub repository.
+PYPI = "files.pythonhosted.org"
+"""The host that serves the files uploaded to PyPI, which PyPI never replaces."""
 
-    The path is /<owner>/<repository>/<commit>/<folders>/<wheel>, with any
-    number of folders. A dot segment would let the URL leave the commit.
+WHEEL_FOLDERS = {
+    "raw.githubusercontent.com": (
+        r"/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+/[0-9a-f]{40}/"
+        r"(?:[A-Za-z0-9._-]+/)*"
+    ),
+    PYPI: r"/packages/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{60}/",
+}
+"""The path before the wheel's name on each host whose files never change.
+
+raw.githubusercontent.com serves /<owner>/<repository>/<commit>/<folders>/ at a
+full commit. PyPI's folders are the file's BLAKE2b-256 digest split 2/2/60.
+"""
+
+
+def _check_https_wheel(location: str, filename: str) -> None:
+    """Accept the wheel's URL on a host of WHEEL_FOLDERS, under its folders.
+
+    The host is matched exactly, so userinfo or a port refuses the URL. A dot
+    segment would let the URL leave the immutable folders.
     """
     try:
         url = urlsplit(location)
     except ValueError:
         url = None
-    pattern = (
-        r"/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+/[0-9a-f]{40}/"
-        r"(?:[A-Za-z0-9._-]+/)*" + re.escape(filename)
-    )
+    folders = None if url is None else WHEEL_FOLDERS.get(url.netloc)
     if (
         url is None
+        or folders is None
         or url.scheme != "https"
-        or url.netloc != "raw.githubusercontent.com"
         or url.query
         or url.fragment
-        or not re.fullmatch(pattern, url.path)
+        or not re.fullmatch(folders + re.escape(filename), url.path)
         or {".", ".."} & set(url.path.split("/"))
     ):
         raise GatesealError(
             "invalid_field",
-            "Use a credential-free raw.githubusercontent.com wheel URL that names "
-            "a full commit.",
+            f"Use a credential-free wheel URL on {PYPI}, or on "
+            "raw.githubusercontent.com at a full commit.",
         )
 
 
