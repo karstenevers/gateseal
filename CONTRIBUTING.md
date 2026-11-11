@@ -85,6 +85,37 @@ CI runs the same checks on Linux and macOS, mutation testing on the changed
 lines, the model check when its inputs change, and a strict build of the
 documentation.
 
+## Release a version
+
+Release gateseal from `main` in three steps:
+
+1. In one pull request, set `version` in `pyproject.toml` and `__version__` in
+   `src/gateseal/__init__.py` to the new version, and run `uv lock`. In
+   [CHANGELOG.md](CHANGELOG.md), move the Unreleased entries to a new
+   `## [X.Y.Z] - YYYY-MM-DD` section.
+2. Merge the pull request. This starts the Release workflow. The workflow
+   waits until the Tests and Integration tests workflows pass on the merge
+   commit. Then it builds the wheel and the sdist twice and requires the same
+   SHA-256 for each file. It publishes both files to TestPyPI, installs the
+   wheel that TestPyPI serves and runs the [demo](docs/demo.md) with it.
+3. Approve the `pypi` environment. The workflow publishes both files to PyPI
+   with attestations. Then it creates the `v<version>` GitHub release with
+   both files and a `SHA256SUMS` file.
+
+A push that keeps the version publishes nothing. To release the version that
+`main` already has, such as the first release, start the workflow by hand on
+`main`.
+
+If a job fails, re-run the failed jobs of that run. If the job "Wait for the
+tests" stopped on a cancelled run of Tests or Integration tests, re-run that run
+first. Once PyPI holds the files, recover only this way, or run the workflow's
+`gh release create` command by hand with the files of the run's `dist` artifact.
+
+A new commit changes the sdist, and TestPyPI and PyPI refuse a changed file
+under a name they already hold. So if the fix needs a new commit, merge it and
+start the workflow by hand only while TestPyPI has no files for the version.
+Otherwise release the next patch version.
+
 ## Report a security issue
 
 Follow [SECURITY.md](SECURITY.md) instead of opening an issue.
