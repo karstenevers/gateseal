@@ -7,7 +7,7 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+## [0.1.0] - 2026-11-11
 
 The first release.
 
