@@ -129,22 +129,37 @@ HOOK_REPOSITORIES = tuple(
 
 
 def pytest_configure(config):
-    """Keep the interpreter store under pytest's temporary root.
+    """Set up the environment that every test inherits.
 
-    --basetemp or PYTEST_DEBUG_TEMPROOT chooses that root, and xdist workers
-    inherit the variable, so no test reaches the user's real store.
+    The interpreter store stays under pytest's temporary root. --basetemp or
+    PYTEST_DEBUG_TEMPROOT chooses that root, and xdist workers inherit the
+    variable, so no test reaches the user's real store.
+
+    Git runs no background maintenance in the suite's repositories, so a
+    fixture that copies one right after a commit sees only files that stay.
     """
     root = config.option.basetemp or os.environ.get(
         "PYTEST_DEBUG_TEMPROOT", tempfile.gettempdir()
     )
     store = Path(root).resolve() / "gateseal interpreter store"
     os.environ.setdefault("GATESEAL_INTERPRETER_STORE", str(store))
+    if git_settings(os.environ).get("maintenance.auto") != "false":
+        os.environ.update(with_git_config(os.environ, {"maintenance.auto": "false"}))
 
 
 def pytest_collection_modifyitems(items):
     for item in items:
         if "installed" in item.fixturenames:
             item.add_marker(pytest.mark.integration)
+
+
+def git_settings(environment):
+    """Return the settings that environment's GIT_CONFIG_* entries give Git."""
+    count = int(environment.get("GIT_CONFIG_COUNT", "0"))
+    return {
+        environment[f"GIT_CONFIG_KEY_{index}"]: environment[f"GIT_CONFIG_VALUE_{index}"]
+        for index in range(count)
+    }
 
 
 def with_git_config(environment, settings):
