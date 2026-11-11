@@ -110,7 +110,7 @@ def team_commits(team, monkeypatch):
     return commits
 
 
-def configure(root, *capabilities, policy=BUNDLED):
+def configure(root, *capabilities, policy=BUNDLED, ci=None):
     """Configure root as gateseal configure does; return its worktree."""
     worktree = runtime.locate_worktree(root)
     with runtime.operation_lock(runtime.preparation_directory(worktree, create=True)):
@@ -123,7 +123,7 @@ def configure(root, *capabilities, policy=BUNDLED):
             None,
             SOURCE,
             CHECKSUM,
-            None,
+            ci,
         )
     return worktree
 
@@ -179,6 +179,17 @@ def test_an_upgrade_without_targets_writes_nothing(consumer):
         assert lines[-1] == "pre-commit-hooks 6.0.0: unchanged."
         assert {state for _, _, state in moves(result).values()} == {"unchanged"}
     assert tracked(consumer) == before
+
+
+def test_an_upgrade_moves_the_compiler_pin_to_another_url_of_its_wheel(consumer):
+    worktree = configure(consumer, "hygiene", ci="github")
+    pypi = f"https://files.pythonhosted.org/packages/5b/a5/{'c' * 60}/{WHEEL}"
+    flags = (None, pypi, CHECKSUM)
+    result = upgrade.run(worktree, upgrade.Request(None, flags, {}, None, None, False))
+    assert set(result.changed) == {"gateseal.lock", ".github/workflows/gateseal.yml"}
+    document = json.loads((consumer / "gateseal.lock").read_bytes())
+    assert document["compiler"]["source"] == {"kind": "https-wheel", "location": pypi}
+    assert pypi in (consumer / ".github/workflows/gateseal.yml").read_text()
 
 
 def test_a_policy_move_fetches_writes_and_stores_the_new_release(

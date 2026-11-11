@@ -12,10 +12,9 @@ repository](install.md#pin-the-release-in-a-repository) and add `--ci github`
 to the first `configure` command.
 
 For an existing repository, check `compiler.source.kind` in the Lock.
-If it is `local-wheel`, switch to a publicly readable copy **before** you
-edit `gateseal.toml`. Use the same wheel and its recorded digest. Set the
-[shared wheel variables](install.md#for-a-team-repository-or-github-actions),
-then change the location:
+If it is `local-wheel`, switch to the same wheel on PyPI **before** you edit
+`gateseal.toml`. Set the [wheel variables](install.md#pin-the-wheel-on-pypi)
+with the recorded digest, then change the location:
 
 ```sh
 gateseal upgrade --compiler-source "$GATESEAL_WHEEL_URL" \
