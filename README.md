@@ -79,8 +79,9 @@ without a new gateseal release, as [Add a tool](docs/add-a-tool.md) shows.
   - Release binaries on GitHub
 - Planned:
   - Node packages, such as Prettier and ESLint
-  - Release binaries from other hosts, such as Terraform, or as single files
-  - Tools that import the project, such as mypy
+  - Release binaries from other hosts, such as Terraform
+  - Release binaries that ship as one file, such as Biome
+  - Tools that use the project's own dependencies, such as mypy and tsc
   - Tested examples for shell, Dockerfile, GitHub Actions, spelling and YAML tools
 
 ### CI
