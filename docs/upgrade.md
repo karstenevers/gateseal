@@ -33,13 +33,14 @@ pins Betterleaks 1.9.0, run:
 gateseal upgrade betterleaks
 ```
 
-**Change the gateseal release.** Set the [wheel
-variables](install.md#pin-the-wheel-on-pypi) for the target release. Use
-the currently pinned command to update the repository:
+**Change the gateseal release.** Copy the wheel's URL and SHA-256 for the
+target release from PyPI, as
+[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
+currently pinned command to update the repository:
 
 ```sh
-gateseal upgrade --compiler-source "$GATESEAL_WHEEL_URL" \
-  --compiler-sha256 "$GATESEAL_WHEEL_SHA256" --activate
+gateseal upgrade --compiler-source PYPI_WHEEL_URL \
+  --compiler-sha256 WHEEL_SHA256 --activate
 ```
 
 After a compiler upgrade, [install the new pinned

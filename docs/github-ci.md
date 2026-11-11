@@ -13,12 +13,12 @@ to the first `configure` command.
 
 For an existing repository, check `compiler.source.kind` in the Lock.
 If it is `local-wheel`, switch to the same wheel on PyPI **before** you edit
-`gateseal.toml`. Set the [wheel variables](install.md#pin-the-wheel-on-pypi)
-with the recorded digest, then change the location:
+`gateseal.toml`. Copy the wheel's URL from PyPI, as
+[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
+digest that the Lock records in `compiler.sha256`, and change the location:
 
 ```sh
-gateseal upgrade --compiler-source "$GATESEAL_WHEEL_URL" \
-  --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+gateseal upgrade --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
 ```
 
 For an existing repository with a public wheel, add this table to
