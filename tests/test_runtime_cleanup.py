@@ -14,6 +14,7 @@ import uuid
 
 import pytest
 from gateseal import bootstrap, runtime
+from gateseal.worktree import locate_worktree
 from installation import clone, process, success
 
 NOW = 2_000_000_000
@@ -37,7 +38,7 @@ def template(tmp_path_factory):
 def worktree(template, tmp_path):
     root = tmp_path / "consumer"
     shutil.copytree(template, root, symlinks=True)
-    found = runtime.locate_worktree(root)
+    found = locate_worktree(root)
     runtime.preparation_directory(found, create=True)
     return found
 

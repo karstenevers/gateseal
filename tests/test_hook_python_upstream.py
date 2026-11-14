@@ -9,8 +9,8 @@ import json
 import pytest
 from black_policy import BUILD, PYTHON
 from gateseal import hook_python
-from gateseal.compiler_release import TARGETS
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import TARGETS
 
 
 class Upstream:

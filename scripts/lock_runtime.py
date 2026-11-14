@@ -24,12 +24,12 @@ from urllib.parse import unquote, urlsplit
 
 from gateseal.compiler_release import (
     RELEASES,
-    TARGETS,
     interpreter_records,
     parse_runtime,
 )
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import write_atomic
+from gateseal.platforms import TARGETS
 from gateseal.tools import built_in_tools
 from gateseal.tools.model import require_local_hooks
 from gateseal.validation import canonical, version

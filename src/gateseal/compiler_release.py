@@ -18,6 +18,7 @@ from gateseal import __version__
 from gateseal.bootstrap import sha
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import read, relative_name
+from gateseal.platforms import TARGETS, Target
 from gateseal.validation import (
     decode_json,
     digest,
@@ -27,30 +28,6 @@ from gateseal.validation import (
     string,
     version,
 )
-
-
-@dataclass(frozen=True)
-class Target:
-    """One supported machine, named as each tool that acquires for it names it.
-
-    platform is the target triple of python-build-standalone and of uv's
-    --python-platform.
-    """
-
-    python: str
-    mise: str
-    platform: str
-
-
-TARGETS = {
-    ("Darwin", "arm64"): Target(
-        "darwin-aarch64-none", "macos-arm64", "aarch64-apple-darwin"
-    ),
-    ("Linux", "x86_64"): Target(
-        "linux-x86_64-gnu", "linux-x64", "x86_64-unknown-linux-gnu"
-    ),
-}
-"""The machines a compiler release carries a CPython for."""
 
 RELEASES = "https://github.com/astral-sh/python-build-standalone/releases/download/"
 """Where python-build-standalone publishes each build's archives and SHA256SUMS."""
