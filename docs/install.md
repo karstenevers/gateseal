@@ -12,8 +12,9 @@ uv tool install --python 3.14.10 gateseal
 gateseal --version
 ```
 
-uv downloads a compatible Python if needed. gateseal accepts CPython 3.14.10
-and later 3.14 releases. If your shell cannot find `gateseal`, run
+uv downloads a compatible Python if needed. gateseal runs on CPython 3.11 and
+later. Release 0.1.0 needs CPython 3.14.10 or a later 3.14 release, which the
+`--python` flag selects. If your shell cannot find `gateseal`, run
 `uv tool update-shell` and open a new shell.
 
 If the repository already has a `gateseal.lock` file, install the version in

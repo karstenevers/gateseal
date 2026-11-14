@@ -17,7 +17,7 @@ import shlex
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import ClassVar, Literal, Protocol
+from typing import ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
 from gateseal.bootstrap import TOOL_PREFIX
@@ -158,7 +158,10 @@ def changed_upstream(
     )
 
 
-def closed[E: StrEnum](value: object, members: type[E], field: str) -> E:
+E = TypeVar("E", bound=StrEnum)
+
+
+def closed(value: object, members: type[E], field: str) -> E:
     """Return value as a member of a closed set, or fail through unsupported."""
     text = string(value, field)
     try:

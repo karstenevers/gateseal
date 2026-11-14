@@ -15,6 +15,7 @@ from gateseal import (
     upgrade,
 )
 from gateseal.diagnostics import GatesealError, Result
+from gateseal.paths import resolved
 from gateseal.worktree import Worktree, locate_worktree
 
 POLICY = {
@@ -260,7 +261,7 @@ def _operation(arguments: argparse.Namespace) -> Result:
 
 def _policy(arguments: argparse.Namespace) -> Result:
     action = cast(str, arguments.action)
-    directory = Path(cast(str, arguments.directory)).resolve()
+    directory = resolved(cast(str, arguments.directory))
     if action in REVIEW:
         return REVIEW[action](
             directory, cast(str, arguments.tool), cast(str, arguments.version)

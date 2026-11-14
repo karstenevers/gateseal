@@ -164,7 +164,7 @@ def _latest(upstream: Upstream) -> str:
     data = upstream.download(LATEST)
     try:
         build = json.loads(data or b"")["tag"]
-    except ValueError, TypeError, KeyError:
+    except (ValueError, TypeError, KeyError):
         build = None
     if not isinstance(build, str) or not build.isdigit() or len(build) != 8:
         raise GatesealError(

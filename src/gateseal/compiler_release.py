@@ -18,6 +18,7 @@ from gateseal import __version__
 from gateseal.bootstrap import sha
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import read, relative_name
+from gateseal.paths import resolved
 from gateseal.platforms import TARGETS, Target
 from gateseal.validation import (
     decode_json,
@@ -137,7 +138,7 @@ def verify_wheel(path: Path, artifact: CompilerArtifact) -> Path:
     resolved before the strict reader walks it. uv installs the resolved file,
     so its own name must be the locked filename.
     """
-    path = path.resolve()
+    path = resolved(path)
     if path.name != artifact.filename:
         raise GatesealError(
             "invalid_artifact",
@@ -208,7 +209,7 @@ def artifact_from_flags(
             "missing_artifact",
             "Supply one --compiler-wheel or --compiler-source and --compiler-sha256.",
         )
-    location = str(Path(wheel).resolve()) if wheel else str(source)
+    location = str(resolved(wheel)) if wheel else str(source)
     if release is None:
         # pytestmut: off[num.shift] -- only the last part is read
         named = WHEEL.fullmatch(location.rsplit("/", 1)[-1])

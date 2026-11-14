@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-type Definition = ast.FunctionDef | ast.AsyncFunctionDef
+Definition = ast.FunctionDef | ast.AsyncFunctionDef
 
 SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 

@@ -202,11 +202,20 @@ def tree_digest(root: Path, allowed_roots: tuple[Path, ...], *, content: bool) -
     return hasher.hexdigest()
 
 
+def _resolved(path: Path, *, strict: bool = False) -> Path:
+    """Resolve path as Path.resolve does since Python 3.13.
+
+    A copy of gateseal.paths.resolved, because bootstrap imports no gateseal
+    module.
+    """
+    return Path(os.path.realpath(path, strict=strict))
+
+
 def _payload(
     path: Path, info: os.stat_result, allowed_roots: tuple[Path, ...], *, content: bool
 ) -> str:
     if stat.S_ISLNK(info.st_mode):
-        target = path.resolve(strict=True)
+        target = _resolved(path, strict=True)
         if not any(target.is_relative_to(allowed) for allowed in allowed_roots):
             raise BootstrapError("Runtime symlink escapes verified distributions.")
         return "link:" + os.readlink(path)
@@ -532,7 +541,7 @@ def _check_entry_points(record: PreparedRecord) -> None:
             raise BootstrapError(f"Prepared file {tool.executable} is missing.")
         links.append((paths.tools / name, tool.executable))
     for link, target in links:
-        if link.resolve() != target:
+        if _resolved(link) != target:
             raise BootstrapError(f"Prepared entry point {link} changed.")
     _check_tools_directory(paths.tools, tools)
 
@@ -630,7 +639,7 @@ def check_repository(record: PreparedRecord) -> None:
     record names. Every index is accepted here; check_staged reads the one Git
     names.
     """
-    cwd = Path.cwd().resolve()
+    cwd = _resolved(Path.cwd())
     if cwd != record.root:
         raise BootstrapError(
             f"This preparation belongs to {record.root}.",
