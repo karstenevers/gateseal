@@ -17,6 +17,7 @@ from gateseal import __version__, lock, runtime, upgrade
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_bundled_policy
 from gateseal.validation import canonical
+from gateseal.worktree import locate_worktree
 from team_policy import URL, git, publish
 
 WHEEL = f"gateseal-{__version__}-py3-none-any.whl"
@@ -112,7 +113,7 @@ def team_commits(team, monkeypatch):
 
 def configure(root, *capabilities, policy=BUNDLED, ci=None):
     """Configure root as gateseal configure does; return its worktree."""
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     with runtime.operation_lock(runtime.preparation_directory(worktree, create=True)):
         lock.configure(
             worktree.root,
@@ -252,7 +253,7 @@ def test_policy_moves_that_break_the_exceptions_write_nothing(consumer, team_com
 
 def test_only_a_manifest_ahead_of_its_lock_names_the_restore(consumer):
     with pytest.raises(GatesealError) as missing:
-        upgrade.run(runtime.locate_worktree(consumer), request())
+        upgrade.run(locate_worktree(consumer), request())
     assert missing.value.code == "missing_configuration"
     assert missing.value.next_step == ""
 

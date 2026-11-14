@@ -13,6 +13,7 @@ import pytest
 from conftest import TRACKED
 from gateseal import checks, ci, interpreter_store, lock, runtime
 from gateseal.diagnostics import GatesealError
+from gateseal.worktree import locate_worktree
 from installation import success
 from prepared_attempts import configure, prepare
 
@@ -99,7 +100,7 @@ def planned(tmp_path_factory):
     success(["git", "init", "--quiet", "--initial-branch=main", root], directory)
     for key, value in (("user.name", "gateseal test"), ("user.email", "t@x.invalid")):
         success(["git", "config", key, value], root)
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     configure(worktree, ("hygiene", "secrets"))
     success(["git", "add", *TRACKED], root)
     base, head = commit(root, "base.txt"), commit(root, "notes.txt")

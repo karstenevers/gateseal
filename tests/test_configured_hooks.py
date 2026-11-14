@@ -1,7 +1,7 @@
 import pytest
 from gateseal import runtime
 from gateseal.diagnostics import GatesealError
-from gateseal.runtime import locate_worktree
+from gateseal.worktree import locate_worktree
 from installation import success
 
 

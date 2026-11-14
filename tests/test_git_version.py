@@ -5,7 +5,7 @@ import shutil
 import pytest
 from conftest import TRACKED, published
 from gateseal.diagnostics import GatesealError
-from gateseal.runtime import locate_worktree
+from gateseal.worktree import locate_worktree
 from installation import process, success
 
 FLOOR = "and gateseal requires Git 2.54.0 or later."

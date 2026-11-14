@@ -13,6 +13,7 @@ from conftest import TRACKED
 from gateseal import interpreter_store, runtime
 from gateseal.cli import main
 from gateseal.lock import load
+from gateseal.worktree import locate_worktree
 from installation import success
 from prepared_attempts import configure, prepare
 
@@ -25,7 +26,7 @@ def clone(tmp_path_factory):
     directory = tmp_path_factory.mktemp("verbose")
     root = directory / "clone"
     success(["git", "init", "--quiet", "--initial-branch=main", root], directory)
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     configure(worktree, ("hygiene",))
     success(["git", "add", *TRACKED], root)
     (directory / "output").write_text(OUTPUT)

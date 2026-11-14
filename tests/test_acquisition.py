@@ -13,7 +13,8 @@ from urllib.parse import urlsplit
 
 import pytest
 from conftest import TRACKED
-from gateseal.compiler_release import TARGETS, load_runtime
+from gateseal.compiler_release import load_runtime
+from gateseal.platforms import TARGETS
 from gateseal.policy import load_bundled_policy
 from gateseal.tools.release_binary import NativeTool
 from installation import PACKAGE, process, success

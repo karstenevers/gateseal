@@ -15,6 +15,7 @@ import pytest
 from gateseal import __version__, lock, runtime
 from gateseal.compiler_release import load_runtime
 from gateseal.diagnostics import GatesealError
+from gateseal.worktree import locate_worktree
 from installation import clone
 
 SOURCE = (
@@ -25,7 +26,7 @@ MINIMUM = load_runtime().minimum_uv
 
 
 def configure(root, wheel=None):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     local = runtime.preparation_directory(worktree, create=True)
     checksum = hashlib.sha256(wheel.read_bytes()).hexdigest() if wheel else "a" * 64
     lock.configure(
@@ -54,7 +55,7 @@ def configured(template, tmp_path, monkeypatch):
     monkeypatch.setenv("UV_CACHE_DIR", str(tmp_path / "uv cache"))
     monkeypatch.delenv("UV_PYTHON_CACHE_DIR", raising=False)
     shutil.copytree(template, tmp_path / "consumer", symlinks=True)
-    worktree = runtime.locate_worktree(tmp_path / "consumer")
+    worktree = locate_worktree(tmp_path / "consumer")
     return worktree, lock.load(worktree.root, worktree.preparation)
 
 

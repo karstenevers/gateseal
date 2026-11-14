@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 from gateseal.bootstrap import PreparedPaths, PreparedRecord, PreparedTool
-from gateseal.compiler_release import TARGETS, Target
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import TARGETS, Target
 from gateseal.policy import bundled_root, load_bundled_policy
 from gateseal.tools import release_binary
 from gateseal.tools.release_binary import Mise, NativeTool

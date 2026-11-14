@@ -46,6 +46,7 @@ from gateseal.validation import (
     version,
     version_key,
 )
+from gateseal.worktree import Worktree
 
 ACTIVATE = "gateseal activate"
 
@@ -566,7 +567,7 @@ def _activation_failed(
 
 
 def _activate(
-    worktree: runtime.Worktree,
+    worktree: Worktree,
     preparation: Path,
     result: Result,
     compiler: candidate.Candidate | None,
@@ -620,7 +621,7 @@ def _write(
     return changes
 
 
-def run(worktree: runtime.Worktree, request: Request) -> Result:
+def run(worktree: Worktree, request: Request) -> Result:
     """Plan every target, write the tracked files, and activate when asked."""
     root, git = worktree.root, worktree.git
     local = runtime.preparation_directory(worktree, create=True)

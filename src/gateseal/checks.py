@@ -14,6 +14,7 @@ from gateseal.diagnostics import Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.processes import execute, pre_commit_command
 from gateseal.tools.model import RANGE, Stage, ToolDefinition
+from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
 """The suffix the history report template gives a finding's message."""
@@ -26,7 +27,7 @@ SCAN_MESSAGES = {
 """How a history scan ended, by outcome, as its diagnostic says."""
 
 
-def run(worktree: runtime.Worktree, locked: lock.Locked) -> Result:
+def run(worktree: Worktree, locked: lock.Locked) -> Result:
     """Run pre-commit on every file from the published attempt."""
     with runtime.pinned(worktree, locked) as record:
         process = execute(
@@ -71,9 +72,7 @@ def run(worktree: runtime.Worktree, locked: lock.Locked) -> Result:
     )
 
 
-def gate(
-    worktree: runtime.Worktree, locked: lock.Locked, scope: Scope | None
-) -> Result:
+def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result:
     """Run the ci stage's hooks on scope's files, then each history scan.
 
     pre-commit reads the files from the worktree, so a scope that names a head

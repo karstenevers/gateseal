@@ -36,8 +36,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from gateseal.bootstrap import TOOL_PREFIX, PreparedPaths, PreparedRecord, PreparedTool
-from gateseal.compiler_release import TARGETS, Target
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import TARGETS, Target
 from gateseal.processes import execute, find_tool
 from gateseal.tools.model import (
     OWNED,
