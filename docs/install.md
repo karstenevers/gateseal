@@ -28,6 +28,64 @@ Then [activate the worktree](work-in-a-configured-repository.md#prepare-the-clon
 If you work on repositories that use different releases, you can call each
 version separately, for example `uvx --python 3.14.10 gateseal@0.1.0 activate`.
 
+## Set up pre-commit on this machine
+
+Run `gateseal setup` once per machine. Every clone you make afterwards then
+runs pre-commit at `git commit`:
+
+```sh
+gateseal setup
+```
+
+- **pre-commit.** setup installs pre-commit 4.7.0 with uv on Python 3.14, in
+  `~/.local/share/gateseal`, or in `$XDG_DATA_HOME/gateseal` when that
+  variable is set. A pre-commit that you installed yourself stays as it is,
+  and setup adds nothing to your `PATH`.
+- **The launcher.** setup writes pre-commit's commit launcher into the
+  `git-template` folder there and sets Git's global `init.templateDir` to that
+  folder. Every new `git clone` and `git init` on the machine copies the
+  launcher. In a repository without `.pre-commit-config.yaml`, the launcher
+  says that it skips pre-commit, and the commit goes on.
+- **No push launcher.** setup installs only the commit launcher, so
+  `git lfs install` still works.
+
+A second run changes nothing. When `init.templateDir` already names another
+folder, setup changes nothing and names the file that sets it and the command
+that removes the setting. Keep what you need from the folder, run that command,
+then run `gateseal setup` again. setup refuses the same way when the
+`GIT_TEMPLATE_DIR` variable is set to another folder or to an empty value, or
+when Git's `core.hooksPath` is set, because Git would then skip the launcher.
+setup also warns when mise is missing or older than 2026.10.19, because a
+Policy with a release binary, such as Betterleaks, needs it.
+
+### Add the launcher to an existing clone
+
+Git copies the template only into new clones, and it never replaces a hook
+that a clone already has. In each clone that you made before setup, run:
+
+```sh
+gateseal setup --refresh
+```
+
+A hook that the clone already has stays as `.git/hooks/pre-commit.legacy`, and
+the launcher runs it first.
+
+### Undo the setup
+
+```sh
+git config --global --unset init.templateDir
+rm -r ~/.local/share/gateseal/tools \
+  ~/.local/share/gateseal/bin \
+  ~/.local/share/gateseal/git-template
+```
+
+Remove the `tools`, `bin` and `git-template` folders under
+`$XDG_DATA_HOME/gateseal` instead when that variable is set. The clones keep
+the launcher. Without the pre-commit that setup installed, it runs
+a `pre-commit` from your `PATH`, or stops each commit because it finds none.
+In those clones, run `pre-commit uninstall` or delete
+`.git/hooks/pre-commit`.
+
 ## Pin the release in a repository
 
 When you first configure a repository, you record which gateseal wheel each
