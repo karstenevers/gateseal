@@ -11,7 +11,7 @@ import shutil
 
 import pytest
 from conftest import unreachable
-from gateseal.compiler_release import TARGETS
+from gateseal.platforms import TARGETS
 from installation import PACKAGE
 
 pytestmark = pytest.mark.integration

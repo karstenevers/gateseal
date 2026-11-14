@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from gateseal.bootstrap import hook_python_name
 from gateseal.compiler_release import (
     RELEASES,
-    Target,
     cpython_release,
     for_target,
     interpreter_records,
@@ -28,6 +27,7 @@ from gateseal.compiler_release import (
     load_runtime,
 )
 from gateseal.diagnostics import GatesealError, Note
+from gateseal.platforms import Target
 from gateseal.tools.model import Catalog, MissingUpstream, Upstream, changed_upstream
 
 COMPONENT = "python"
@@ -164,7 +164,7 @@ def _latest(upstream: Upstream) -> str:
     data = upstream.download(LATEST)
     try:
         build = json.loads(data or b"")["tag"]
-    except ValueError, TypeError, KeyError:
+    except (ValueError, TypeError, KeyError):
         build = None
     if not isinstance(build, str) or not build.isdigit() or len(build) != 8:
         raise GatesealError(

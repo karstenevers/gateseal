@@ -31,6 +31,7 @@ from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError
 from gateseal.downloads import python_download
 from gateseal.managed_files import open_directory, read, write_atomic
+from gateseal.paths import resolved
 from gateseal.processes import execute, find_python
 from gateseal.validation import canonical
 
@@ -114,7 +115,7 @@ def acquire(
     identity: dict[str, object] = {"key": archive.key}
     with sealed(archive.sha256, identity, attempt, install) as (entry, digests):
         env = {**environment, "UV_PYTHON_INSTALL_DIR": str(entry)}
-        executable = Path(find_python(uv, root, env, archive.key)).resolve()
+        executable = resolved(find_python(uv, root, env, archive.key))
     if not executable.is_relative_to(entry):
         raise GatesealError(
             "invalid_preparation",
@@ -144,7 +145,7 @@ def sealed(
     """
     store = location()
     store.mkdir(mode=0o700, parents=True, exist_ok=True)
-    store = store.resolve()
+    store = resolved(store)
     entry = store / name
     allowed = (entry, *roots)
     with open_directory(store) as directory, _locked(directory, fcntl.LOCK_EX) as lock:
@@ -174,13 +175,13 @@ def collect() -> None:
     A store that another process holds is left for a later activation.
     """
     try:
-        store = location().resolve()
+        store = resolved(location())
         with (
             open_directory(store) as directory,
             _locked(directory, fcntl.LOCK_EX | fcntl.LOCK_NB),
         ):
             _sweep(directory)
-    except OSError, GatesealError:
+    except (OSError, GatesealError):
         return
 
 
@@ -192,8 +193,8 @@ def linked(attempt: Path, paths: Iterable[Path]) -> bool:
     an attempt prepared with another GATESEAL_INTERPRETER_STORE, needs none.
     """
     try:
-        store = location().resolve()
-    except OSError, GatesealError:
+        store = resolved(location())
+    except (OSError, GatesealError):
         return False
     return all(
         os.path.lexists(
@@ -265,7 +266,7 @@ def _verified(
             or bootstrap.tree_digest(entry, allowed, content=True) != digests.content
         ):
             return None
-    except OSError, GatesealError, bootstrap.BootstrapError, bootstrap.JSONError:
+    except (OSError, GatesealError, bootstrap.BootstrapError, bootstrap.JSONError):
         return None
     return digests
 
@@ -382,7 +383,7 @@ def _target_is_directory(directory: int, name: str) -> bool:
     """Return whether link name reaches a directory; keep it when unsure."""
     try:
         return stat.S_ISDIR(os.stat(name, dir_fd=directory).st_mode)
-    except FileNotFoundError, NotADirectoryError:
+    except (FileNotFoundError, NotADirectoryError):
         return False  # pytestmut: skip[return.none] -- the caller tests its truth
     except OSError:
         return True

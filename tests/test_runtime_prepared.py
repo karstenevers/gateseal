@@ -16,8 +16,10 @@ import stat
 import pytest
 from conftest import TRACKED, disguise
 from gateseal import __version__, bootstrap, interpreter_store, lock, runtime
-from gateseal.compiler_release import TARGETS, load_runtime
+from gateseal.compiler_release import load_runtime
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import TARGETS
+from gateseal.worktree import locate_worktree
 from installation import clone
 from prepared_attempts import (
     BETTERLEAKS,
@@ -40,7 +42,7 @@ def templates(tmp_path_factory):
     for capabilities in (("hygiene",), ("hygiene", "secrets")):
         directory = tmp_path_factory.mktemp("template")
         root = clone(directory / "origin", directory / "consumer")
-        worktree = runtime.locate_worktree(root)
+        worktree = locate_worktree(root)
         configure(worktree, capabilities)
         found[capabilities] = root
     return found
@@ -67,7 +69,7 @@ def old_uv(tmp_path, monkeypatch):
 def configured(templates, tmp_path, capabilities=("hygiene",), folder="consumer"):
     root = tmp_path / folder
     shutil.copytree(templates[capabilities], root, symlinks=True)
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     local = runtime.preparation_directory(worktree, create=True)
     worktree.hook.parent.mkdir(exist_ok=True)
     return worktree, lock.load(worktree.root, local)

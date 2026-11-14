@@ -11,7 +11,7 @@ import re
 from collections.abc import Generator, Mapping
 from urllib.parse import urlsplit
 
-from gateseal.compiler_release import CompilerArtifact
+from gateseal.compiler_release import PYPI, CompilerArtifact
 from gateseal.diagnostics import GatesealError
 
 UNREACHABLE = re.compile(r"error sending request for url")
@@ -40,9 +40,11 @@ def compiler_download(
     """Name the recovery when uv cannot download the Lock's compiler wheel.
 
     A copy of the wheel saved on this machine needs no download, so every
-    recovery offers it.
+    recovery offers it. PyPI's files are public, so PyPI refusing one means
+    the Lock names a file PyPI does not have, which no credential fixes.
     """
     url = artifact.location
+    host = urlsplit(url).hostname
     local = (
         f"Or save {url} as {artifact.filename} and run gateseal activate "
         "--compiler-wheel with its absolute path."
@@ -51,9 +53,14 @@ def compiler_download(
         {
             UNREACHABLE: f"Give this machine network access to {url}, then run "
             f"gateseal activate. {local}",
-            REFUSED: "Set NETRC to a mode-0600 file that holds machine "
-            f"{urlsplit(url).hostname} login __token__ password TOKEN, with a "
-            f"TOKEN that can read {url}, then run gateseal activate. {local}",
+            REFUSED: f"PyPI has no file at {url}. Run gateseal upgrade with "
+            "--compiler-source and --compiler-sha256 from the release's files on "
+            "PyPI. Or run gateseal activate --compiler-wheel with the absolute path "
+            f"of a saved {artifact.filename}."
+            if host == PYPI
+            else "Set NETRC to a mode-0600 file that holds machine "
+            f"{host} login __token__ password TOKEN, with a TOKEN that can read "
+            f"{url}, then run gateseal activate. {local}",
         }
     )
 

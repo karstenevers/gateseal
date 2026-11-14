@@ -20,7 +20,7 @@ from gateseal import (
     lock,
 )
 from gateseal.bootstrap import sha
-from gateseal.compiler_release import TARGETS, load_runtime, verify_wheel
+from gateseal.compiler_release import load_runtime, verify_wheel
 from gateseal.diagnostics import GatesealError, Result
 from gateseal.downloads import compiler_download
 from gateseal.environments import (
@@ -30,93 +30,13 @@ from gateseal.environments import (
     uv_environment,
 )
 from gateseal.managed_files import open_directory, read_optional, write_atomic
-from gateseal.processes import execute, find_git, find_tool, pre_commit_command
+from gateseal.paths import resolved
+from gateseal.platforms import TARGETS
+from gateseal.processes import execute, find_tool, pre_commit_command
 from gateseal.tools import pre_commit_repository, release_binary
 from gateseal.tools.model import HOOK_STAGES, Stage, Tool
 from gateseal.validation import canonical, version_key
-
-
-@dataclass(frozen=True)
-class Worktree:
-    """Where Git keeps one worktree's files, its own state and its shared state.
-
-    root is the worktree's top. git_dir is its own Git directory, which holds its
-    index and its preparation: <root>/.git in a clone, <common>/worktrees/<id> in
-    a linked worktree. common_dir holds what every worktree shares, the hooks
-    among them. git is the absolute git that located them. Every path is
-    resolved, as open_directory requires. Only locate_worktree builds one.
-    """
-
-    root: Path
-    git_dir: Path
-    common_dir: Path
-    git: str
-
-    @property
-    def preparation(self) -> Path:
-        return self.git_dir / bootstrap.PREPARATION
-
-    @property
-    def hook(self) -> Path:
-        return self.common_dir / "hooks" / "pre-commit"
-
-    def display(self, path: Path) -> str:
-        """Name path relative to root when it is inside, otherwise absolutely."""
-        return (
-            path.relative_to(self.root).as_posix()
-            if path.is_relative_to(self.root)
-            else str(path)
-        )
-
-
-def locate_worktree(requested: Path) -> Worktree:
-    """Ask Git which worktree contains requested and where its paths are.
-
-    One rev-parse names the top, the Git directory, the common directory and the
-    index, so a clone, a linked worktree of a clone or of a bare repository and
-    a clone with a separate Git directory resolve alike. A bare repository has
-    no top, so Git's refusal is not_a_repository.
-
-    Commands read the worktree's files and its own index. A GIT_INDEX_FILE that
-    names another index is refused rather than ignored, because run would check
-    that index's files and cleanup would build pre-images from it. Commits are
-    where alternate indexes are checked.
-    """
-    env = tool_environment()
-    step = "Run gateseal inside a Git worktree, or pass --repo with its path."
-    if not requested.is_dir():
-        raise GatesealError(
-            "not_a_repository", f"{requested} is not a directory.", next_step=step
-        )
-    git = find_git(requested)
-    response = execute(
-        [git, "-C", str(requested), "rev-parse", "--path-format=absolute"]
-        + ["--show-toplevel", "--absolute-git-dir", "--git-common-dir"]
-        + ["--git-path", "index"],
-        requested,
-        env,
-        allow_failure=True,
-    )
-    if response.returncode:
-        detail = response.stderr.decode(errors="replace").strip()
-        raise GatesealError(
-            "not_a_repository",
-            f"Git cannot use {requested} as a worktree: {detail}",
-            next_step=step,
-        )
-    lines = response.stdout.decode().split("\n")
-    if len(lines) != 5 or lines[4]:
-        raise GatesealError("unsupported_path", "A Git path contains a line break.")
-    root, git_dir, common_dir, index = (Path(line).resolve() for line in lines[:4])
-    if index != git_dir / "index":
-        raise GatesealError(
-            "alternate_index",
-            f"GIT_INDEX_FILE makes Git use {index}, not this worktree's index "
-            f"{git_dir / 'index'}. Commits check the index Git names; gateseal "
-            "commands read the worktree and its own index.",
-            next_step="Unset GIT_INDEX_FILE, then retry.",
-        )
-    return Worktree(root, git_dir, common_dir, git)
+from gateseal.worktree import Worktree
 
 
 def preparation_directory(worktree: Worktree, create: bool = False) -> Path:
@@ -183,7 +103,7 @@ def require_supported_store() -> None:
     their launchers as it writes the Git directory's into the attempt's.
     virtualenv, which builds them, refuses a path with a colon.
     """
-    store = interpreter_store.location().resolve()
+    store = resolved(interpreter_store.location())
     found = sorted(set(str(store)) & set(UNSUPPORTED_PATH))
     if found:
         raise GatesealError(
@@ -372,7 +292,7 @@ def _require_uv(uv: str, root: Path) -> None:
     try:
         found = reported.stdout.decode().split()[1]
         supported = version_key(found) >= version_key(minimum)
-    except IndexError, GatesealError:
+    except (IndexError, GatesealError):
         supported = False
     if not supported:
         raise GatesealError(
@@ -435,7 +355,7 @@ def _prepare(plan: Plan, local: Path) -> Path:
         interpreter=shared.executable,
         compiler_python=Path(compiler),
         pre_commit_python=Path(pre_commit),
-        bootstrap=Path(found.stdout.decode().strip()).resolve(),
+        bootstrap=resolved(found.stdout.decode().strip()),
         pre_commit_home=attempt / "pre-commit-home",
         tools=attempt / "tools",
     )

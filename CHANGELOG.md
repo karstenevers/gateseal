@@ -7,7 +7,12 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
-## [0.1.0] - Unreleased
+### Changed
+
+- gateseal runs on Python 3.11 and later, the floor of the pre-commit version
+  it names. It needed Python 3.14.10 or a later 3.14 release before.
+
+## [0.1.0] - 2026-11-11
 
 The first release.
 
@@ -16,6 +21,8 @@ The first release.
 - `gateseal configure` writes the manifest, the lock and native configuration
   for the hygiene, Python and secrets capabilities, and with `--ci github` a
   GitHub Actions workflow.
+- The lock pins the compiler wheel by its file URL on PyPI, a raw GitHub URL at
+  a full commit, or a local path, with its SHA-256.
 - `gateseal activate` prepares the pinned compiler, Python, pre-commit and tools
   for one worktree, and every later `git commit` runs only what it prepared.
 - `gateseal run`, `gateseal gate`, `gateseal check`, `gateseal status` and

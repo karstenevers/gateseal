@@ -178,6 +178,16 @@ def test_an_entry_that_lost_either_sealed_digest_is_built_again(
     assert (entry / "lib.py").read_bytes() == b"VALUE = 1\n"
 
 
+def test_an_entry_with_a_symlink_loop_is_built_again(store, tmp_path):
+    build = Build()
+    entry, digests = held(build, attempt(tmp_path, "1"))
+    entry.chmod(0o755)
+    (entry / "loop").symlink_to("loop")
+    assert held(build, attempt(tmp_path, "2")) == (entry, digests)
+    assert build.runs == 2
+    assert not (entry / "loop").is_symlink()
+
+
 def test_an_entry_sealed_for_another_identity_is_built_again(store, tmp_path):
     build = Build()
     identity = {**IDENTITY, "build": "20261101"}

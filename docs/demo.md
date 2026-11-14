@@ -9,9 +9,9 @@ will try the bundled hygiene, Python, and secrets checks in a new repository.
 mise, and network access for the first activation. Git must have a name and
 email address to use for the demo commits.
 
-Follow the [local wheel instructions](install.md#for-a-local-repository) to
-download the same release and set `GATESEAL_WHEEL` and
-`GATESEAL_WHEEL_SHA256`. Use the `configure` command below for the demo.
+Copy the wheel's URL and SHA-256 for the same release from PyPI, as
+[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. You put them
+in the `configure` command below.
 
 ## Adopt the policy
 
@@ -27,7 +27,7 @@ Select the three capabilities and activate this worktree:
 
 ```sh
 gateseal configure --capability hygiene --capability python --capability secrets \
-  --compiler-wheel "$GATESEAL_WHEEL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
 gateseal activate
 ```
 

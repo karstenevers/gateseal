@@ -240,6 +240,14 @@ def test_a_local_wheel_serves_configure_but_not_ci(tmp_path):
     assert document["compiler"] == compiler_pin("local-wheel", location, checksum)
 
 
+def test_configure_pins_a_compiler_from_pypi(tmp_path):
+    root = worktree(tmp_path)
+    source = f"https://files.pythonhosted.org/packages/5b/a5/{'c' * 60}/{WHEEL}"
+    configure(root, ["hygiene"], source=source, checksum=CHECKSUM)
+    document = json.loads((root / LOCK).read_bytes())
+    assert document["compiler"] == compiler_pin("https-wheel", source)
+
+
 @pytest.mark.parametrize(
     "options,named,table",
     [

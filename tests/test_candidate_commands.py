@@ -49,7 +49,9 @@ def test_a_scratch_repository_is_private_and_ignores_git_redirects(
 
 
 def test_a_candidate_whose_python_lacks_the_compiler_is_unavailable(tmp_path):
-    python = Path(sys.base_prefix) / "bin" / "python3"
+    # Homebrew installs every Python but its default one without python3.
+    version = "{}.{}".format(*sys.version_info)
+    python = Path(sys.base_prefix) / "bin" / f"python{version}"
     with pytest.raises(GatesealError) as raised:
         candidate.Candidate(str(python), ARTIFACT).run(tmp_path, "configure")
     error = raised.value

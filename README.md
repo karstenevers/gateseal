@@ -8,6 +8,8 @@
 <h3 align="center">Pin your checks like you pin your dependencies.</h3>
 
 <p align="center">
+  <a href="https://github.com/karstenevers/gateseal/actions?query=branch%3Amain"><img alt="Status of every CI check on main" src="https://img.shields.io/github/check-runs/karstenevers/gateseal/main?label=CI&logo=github"></a>
+  <a href="https://gateseal.readthedocs.io/"><img alt="Documentation build status" src="https://img.shields.io/readthedocs/gateseal?logo=readthedocs&logoColor=white&label=docs"></a>
   <a href="docs/tested-platforms.md"><img alt="platforms macOS arm64 and Linux x86-64" src="https://img.shields.io/badge/platforms-macOS%20arm64%20%7C%20Linux%20x86--64-3e6fa8"></a>
   <a href="docs/tested-platforms.md#prerequisite-floors"><img alt="requires Git 2.54 and uv 0.13.6 or later" src="https://img.shields.io/badge/requires-Git%202.54%2B%20%7C%20uv%200.13.6%2B-3e6fa8"></a>
 </p>
@@ -77,8 +79,9 @@ without a new gateseal release, as [Add a tool](docs/add-a-tool.md) shows.
   - Release binaries on GitHub
 - Planned:
   - Node packages, such as Prettier and ESLint
-  - Release binaries from other hosts, such as Terraform, or as single files
-  - Tools that import the project, such as mypy
+  - Release binaries from other hosts, such as Terraform
+  - Release binaries that ship as one file, such as Biome
+  - Tools that use the project's own dependencies, such as mypy and tsc
   - Tested examples for shell, Dockerfile, GitHub Actions, spelling and YAML tools
 
 ### CI
@@ -111,15 +114,17 @@ release that a repository pins, and installs a wheel by its reviewed SHA-256.
 
 Adopt the bundled policy in a repository. `hygiene` is required. Leave out
 `python` or `secrets` if you do not want them, and `--ci github` if you do not
-use GitHub Actions:
+use GitHub Actions. Copy the wheel's URL and SHA-256 from the release's files
+on PyPI, as [Pin the wheel on PyPI](docs/install.md#pin-the-wheel-on-pypi)
+shows:
 
 ```sh
 gateseal configure \
   --capability hygiene \
   --capability python \
   --capability secrets \
-  --compiler-source IMMUTABLE_WHEEL_URL \
-  --compiler-sha256 REVIEWED_SHA256 \
+  --compiler-source PYPI_WHEEL_URL \
+  --compiler-sha256 WHEEL_SHA256 \
   --ci github
 gateseal activate
 ```

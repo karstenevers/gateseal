@@ -140,10 +140,14 @@ interprets the rest of the Lock.
 `compiler.source` records `kind` and `location`.
 
 - For `local-wheel`, the location is an absolute path to the wheel.
-- For `https-wheel`, use a wheel on `raw.githubusercontent.com`. The path
-  must contain the owner, repository, full 40-character commit ID, and wheel
-  path. The URL must have no user information, port, query, fragment, or dot
-  segment.
+- For `https-wheel`, the location is a URL whose file cannot change, on one
+  of two hosts. The URL must have no user information, port, query, fragment,
+  or dot segment.
+    - On `files.pythonhosted.org`, PyPI's file URL. The path is `/packages/`,
+      then the wheel's BLAKE2b-256 digest in folders of 2, 2, and 60 hex
+      characters, then the wheel filename.
+    - On `raw.githubusercontent.com`. The path must contain the owner,
+      repository, full 40-character commit ID, and wheel path.
 
 You can supply a local wheel to activation if the recorded location is
 unavailable. Its SHA-256 must match. The Lock keeps its original location.

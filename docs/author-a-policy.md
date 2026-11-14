@@ -141,8 +141,8 @@ the candidate tag and the consumer repository on your machine.
     ```
 
 2. From the root of a disposable Git repository that does not use gateseal
-   yet, select the candidate. First set the compiler variables as described
-   in [Pin the release in a repository](install.md#pin-the-release-in-a-repository).
+   yet, select the candidate. First copy the wheel's URL and SHA-256, as
+   [Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows.
    Substitute your policy repository's real HTTPS URL and local absolute path
    below. The Git rewrite applies only to this command.
 
@@ -153,7 +153,7 @@ the candidate tag and the consumer repository on your machine.
     gateseal configure --capability hygiene --capability secrets \
       --policy https://github.com/team/gateseal-policy.git \
       --policy-path policy --policy-tag candidate-team-2026.11 \
-      --compiler-source "$GATESEAL_WHEEL_URL" --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+      --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
     ```
 
     Select only capabilities you kept in the policy. gateseal checks the

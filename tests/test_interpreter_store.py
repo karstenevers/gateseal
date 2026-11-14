@@ -21,8 +21,9 @@ from conftest import (
     uv_shim,
 )
 from gateseal import bootstrap, interpreter_store
-from gateseal.compiler_release import TARGETS, load_runtime
+from gateseal.compiler_release import load_runtime
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import TARGETS
 from installation import clone, success
 
 FIXED_MTIME_NS = int(datetime(2000, 1, 1, tzinfo=UTC).timestamp()) * 10**9

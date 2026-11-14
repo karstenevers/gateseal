@@ -90,8 +90,7 @@ on](github-ci.md#turn-it-on). Commit the generated
 
 ## What a commit checks
 
-The Git index contains the files you staged for the commit. The staged
-`gateseal.lock` selects the compiler and checks, even if you edited the Lock
-again in the worktree. A commit checks the index Git gives it. This includes
-the temporary index for `git commit -a`, `-i`, `-p`, or `git commit <path>`,
-and an index selected with `GIT_INDEX_FILE`.
+A commit checks the files you staged. The staged `gateseal.lock` selects the
+gateseal version and the checks, even if you change the Lock again after you
+stage it. [Which files run](how-a-commit-runs.md#which-files-run) covers
+`git commit -a` and the other ways Git chooses the files.

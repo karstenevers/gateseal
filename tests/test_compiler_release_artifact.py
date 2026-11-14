@@ -21,6 +21,8 @@ COMMIT = "0123456789abcdef0123456789abcdef01234567"
 HOST = "https://raw.githubusercontent.com"
 REPOSITORY = f"{HOST}/example/wheels"
 RAW = f"{REPOSITORY}/{COMMIT}/artifacts/{WHEEL}"
+DIGEST = "987a4053" + "c" * 52
+PYPI = f"https://files.pythonhosted.org/packages/5b/a5/{DIGEST}/{WHEEL}"
 SHA = "a" * 64
 MISMATCH = "dependencies"
 CURRENT = f"gateseal-{__version__}-py3-none-any.whl"
@@ -73,7 +75,9 @@ def pinned(path, release="0.1.0", sha=None):
 
 
 @pytest.mark.parametrize(
-    "kind,location", [("local-wheel", f"/wheels/{WHEEL}"), ("https-wheel", RAW)]
+    "kind,location",
+    [("local-wheel", f"/wheels/{WHEEL}"), ("https-wheel", RAW), ("https-wheel", PYPI)],
+    ids=["local wheel", "raw file", "PyPI file"],
 )
 def test_a_compiler_record_parses_to_the_artifact_it_documents(kind, location):
     artifact = CompilerArtifact.parse(document(kind, location))
@@ -147,6 +151,20 @@ def test_an_https_compiler_may_come_from_any_github_repository(path):
         RAW.replace("/example/", "/-example/"),
         RAW.replace(WHEEL, "gateseal-0.2.0-py3-none-any.whl"),
         "https://[raw.githubusercontent.com/artifacts/" + WHEEL,
+        PYPI.replace("https://", "http://"),
+        PYPI.replace("files.pythonhosted.org", "pypi.org"),
+        PYPI.replace("pythonhosted.org", "pythonhosted.org.example.com"),
+        PYPI.replace("https://", "https://token@"),
+        PYPI.replace("pythonhosted.org", "pythonhosted.org:443"),
+        PYPI + "?token=secret",
+        PYPI + "#latest",
+        PYPI.replace("/packages/", "/"),
+        PYPI.replace(DIGEST, DIGEST[:12]),
+        PYPI.replace(DIGEST, DIGEST.upper()),
+        PYPI.replace(DIGEST, f"{DIGEST}/artifacts"),
+        PYPI.replace(f"5b/a5/{DIGEST}", f"5ba5/{DIGEST[:2]}/{DIGEST[2:]}"),
+        PYPI.replace(WHEEL, "gateseal-0.2.0-py3-none-any.whl"),
+        f"https://files.pythonhosted.org/packages/py3/g/gateseal/{WHEEL}",
     ],
     ids=[
         "http",
@@ -165,9 +183,23 @@ def test_an_https_compiler_may_come_from_any_github_repository(path):
         "invalid owner",
         "other wheel",
         "unparsable",
+        "PyPI over http",
+        "PyPI's index host",
+        "PyPI look-alike host",
+        "PyPI credentials",
+        "PyPI port",
+        "PyPI query",
+        "PyPI fragment",
+        "PyPI without packages",
+        "PyPI short digest",
+        "PyPI uppercase digest",
+        "PyPI extra folder",
+        "PyPI digest split differently",
+        "PyPI other wheel",
+        "PyPI redirect by name",
     ],
 )
-def test_an_https_compiler_is_one_immutable_raw_file(location):
+def test_an_https_compiler_is_one_immutable_file(location):
     failure = refused(CompilerArtifact.parse, document("https-wheel", location))
     assert failure.code == "invalid_field"
     assert "URL" in str(failure)
@@ -277,6 +309,21 @@ def test_flags_name_one_compiler_and_its_digest(given, source, sha):
     assert failure.code == "missing_artifact"
     flags = ("--compiler-wheel", "--compiler-source", "--compiler-sha256")
     assert all(flag in str(failure) for flag in flags)
+
+
+def test_a_pypi_source_flag_pins_its_url_for_configure():
+    url = PYPI.replace(WHEEL, CURRENT)
+    assert artifact_from_flags(None, url, SHA) == CompilerArtifact(
+        "https-wheel", url, CURRENT, SHA, __version__
+    )
+
+
+def test_without_a_release_a_pypi_source_takes_it_from_its_name():
+    name = "gateseal-0.2.10-py3-none-any.whl"
+    url = PYPI.replace(WHEEL, name)
+    assert artifact_from_flags(None, url, SHA, None) == CompilerArtifact(
+        "https-wheel", url, name, SHA, "0.2.10"
+    )
 
 
 def test_a_source_of_another_release_than_the_compilers_is_refused():

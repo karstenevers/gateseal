@@ -135,6 +135,14 @@ def test_a_linked_tools_directory_is_refused(tmp_path):
     refused(record, str(record.paths.tools))
 
 
+def test_a_looping_entry_point_is_refused(tmp_path):
+    record = prepare(tmp_path, tmp_path)
+    link = record.attempt / bootstrap.ENTRY / bootstrap.PYTHON
+    link.unlink()
+    link.symlink_to(link.name)
+    refused(record, str(link))
+
+
 def hook_environment(record):
     ((path, environment),) = record.hook_environments.items()
     return path, environment

@@ -203,10 +203,7 @@ commands.
 
 ### Schemas
 
-This compiler reads schema 4. The schema is stable. Schema 3 used fixed
-`[hygiene]`, `[python]`, and `[secrets]` tables. To migrate, publish a
-schema-4 release with `[capabilities]` and `[tools]` before upgrading
-consumer repositories to this compiler.
+This compiler reads schema 4. The schema is stable.
 
 ### What a compiler reads first
 

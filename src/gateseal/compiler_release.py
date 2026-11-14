@@ -18,6 +18,8 @@ from gateseal import __version__
 from gateseal.bootstrap import sha
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import read, relative_name
+from gateseal.paths import resolved
+from gateseal.platforms import TARGETS, Target
 from gateseal.validation import (
     decode_json,
     digest,
@@ -27,30 +29,6 @@ from gateseal.validation import (
     string,
     version,
 )
-
-
-@dataclass(frozen=True)
-class Target:
-    """One supported machine, named as each tool that acquires for it names it.
-
-    platform is the target triple of python-build-standalone and of uv's
-    --python-platform.
-    """
-
-    python: str
-    mise: str
-    platform: str
-
-
-TARGETS = {
-    ("Darwin", "arm64"): Target(
-        "darwin-aarch64-none", "macos-arm64", "aarch64-apple-darwin"
-    ),
-    ("Linux", "x86_64"): Target(
-        "linux-x86_64-gnu", "linux-x64", "x86_64-unknown-linux-gnu"
-    ),
-}
-"""The machines a compiler release carries a CPython for."""
 
 RELEASES = "https://github.com/astral-sh/python-build-standalone/releases/download/"
 """Where python-build-standalone publishes each build's archives and SHA256SUMS."""
@@ -109,33 +87,47 @@ class CompilerArtifact:
         return cls(kind, location, filename, checksum, release)
 
 
-def _check_https_wheel(location: str, filename: str) -> None:
-    """Accept the wheel's raw file at a full commit of any GitHub repository.
+PYPI = "files.pythonhosted.org"
+"""The host that serves the files uploaded to PyPI, which PyPI never replaces."""
 
-    The path is /<owner>/<repository>/<commit>/<folders>/<wheel>, with any
-    number of folders. A dot segment would let the URL leave the commit.
+WHEEL_FOLDERS = {
+    "raw.githubusercontent.com": (
+        r"/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+/[0-9a-f]{40}/"
+        r"(?:[A-Za-z0-9._-]+/)*"
+    ),
+    PYPI: r"/packages/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{60}/",
+}
+"""The path before the wheel's name on each host whose files never change.
+
+raw.githubusercontent.com serves /<owner>/<repository>/<commit>/<folders>/ at a
+full commit. PyPI's folders are the file's BLAKE2b-256 digest split 2/2/60.
+"""
+
+
+def _check_https_wheel(location: str, filename: str) -> None:
+    """Accept the wheel's URL on a host of WHEEL_FOLDERS, under its folders.
+
+    The host is matched exactly, so userinfo or a port refuses the URL. A dot
+    segment would let the URL leave the immutable folders.
     """
     try:
         url = urlsplit(location)
     except ValueError:
         url = None
-    pattern = (
-        r"/[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+/[0-9a-f]{40}/"
-        r"(?:[A-Za-z0-9._-]+/)*" + re.escape(filename)
-    )
+    folders = None if url is None else WHEEL_FOLDERS.get(url.netloc)
     if (
         url is None
+        or folders is None
         or url.scheme != "https"
-        or url.netloc != "raw.githubusercontent.com"
         or url.query
         or url.fragment
-        or not re.fullmatch(pattern, url.path)
+        or not re.fullmatch(folders + re.escape(filename), url.path)
         or {".", ".."} & set(url.path.split("/"))
     ):
         raise GatesealError(
             "invalid_field",
-            "Use a credential-free raw.githubusercontent.com wheel URL that names "
-            "a full commit.",
+            f"Use a credential-free wheel URL on {PYPI}, or on "
+            "raw.githubusercontent.com at a full commit.",
         )
 
 
@@ -146,7 +138,7 @@ def verify_wheel(path: Path, artifact: CompilerArtifact) -> Path:
     resolved before the strict reader walks it. uv installs the resolved file,
     so its own name must be the locked filename.
     """
-    path = path.resolve()
+    path = resolved(path)
     if path.name != artifact.filename:
         raise GatesealError(
             "invalid_artifact",
@@ -217,7 +209,7 @@ def artifact_from_flags(
             "missing_artifact",
             "Supply one --compiler-wheel or --compiler-source and --compiler-sha256.",
         )
-    location = str(Path(wheel).resolve()) if wheel else str(source)
+    location = str(resolved(wheel)) if wheel else str(source)
     if release is None:
         # pytestmut: off[num.shift] -- only the last part is read
         named = WHEEL.fullmatch(location.rsplit("/", 1)[-1])

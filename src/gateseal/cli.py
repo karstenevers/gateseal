@@ -15,6 +15,8 @@ from gateseal import (
     upgrade,
 )
 from gateseal.diagnostics import GatesealError, Result
+from gateseal.paths import resolved
+from gateseal.worktree import Worktree, locate_worktree
 
 POLICY = {
     "init": authoring.init,
@@ -213,7 +215,7 @@ def _operation(arguments: argparse.Namespace) -> Result:
     if command == "policy":
         return _policy(arguments)
     requested = Path(cast(str | None, arguments.repo) or ".").absolute()
-    worktree = runtime.locate_worktree(requested)
+    worktree = locate_worktree(requested)
     root, preparation = worktree.root, worktree.preparation
     if command == "configure":
         with runtime.operation_lock(
@@ -259,7 +261,7 @@ def _operation(arguments: argparse.Namespace) -> Result:
 
 def _policy(arguments: argparse.Namespace) -> Result:
     action = cast(str, arguments.action)
-    directory = Path(cast(str, arguments.directory)).resolve()
+    directory = resolved(cast(str, arguments.directory))
     if action in REVIEW:
         return REVIEW[action](
             directory, cast(str, arguments.tool), cast(str, arguments.version)
@@ -267,7 +269,7 @@ def _policy(arguments: argparse.Namespace) -> Result:
     return POLICY[action](directory)
 
 
-def _upgrade(worktree: runtime.Worktree, arguments: argparse.Namespace) -> Result:
+def _upgrade(worktree: Worktree, arguments: argparse.Namespace) -> Result:
     policy = lock.PolicyRequest(
         arguments.policy,
         arguments.policy_commit,
@@ -292,7 +294,7 @@ def _upgrade(worktree: runtime.Worktree, arguments: argparse.Namespace) -> Resul
     )
 
 
-def _status(worktree: runtime.Worktree) -> Result:
+def _status(worktree: Worktree) -> Result:
     root, preparation = worktree.root, worktree.preparation
     if not (root / bootstrap.MANIFEST).exists():
         return Result(
@@ -322,7 +324,7 @@ def _status(worktree: runtime.Worktree) -> Result:
 
 
 def _locked_operation(
-    worktree: runtime.Worktree, command: str, arguments: argparse.Namespace
+    worktree: Worktree, command: str, arguments: argparse.Namespace
 ) -> Result:
     """Run check, doctor, run or gate on the worktree's loaded Lock."""
     root, preparation = worktree.root, worktree.preparation
@@ -354,9 +356,7 @@ def _locked_operation(
     return checks.gate(worktree, locked, _scope(worktree, arguments))
 
 
-def _scope(
-    worktree: runtime.Worktree, arguments: argparse.Namespace
-) -> ci.Scope | None:
+def _scope(worktree: Worktree, arguments: argparse.Namespace) -> ci.Scope | None:
     """Plan the gate's scope from at most one complete pair of revision flags."""
     given = cast(dict[str, str | None], vars(arguments))
     change, push = (given["base"], given["head"]), (given["before"], given["after"])

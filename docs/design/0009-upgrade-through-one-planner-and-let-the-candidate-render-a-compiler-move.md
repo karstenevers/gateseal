@@ -1,6 +1,6 @@
 # Upgrade through one planner and let the candidate render a compiler move
 
-Accepted on 2026-11-01 and implemented.
+Accepted on 2026-11-01 and implemented. [Design record 0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) replaces the candidate compiler and the activation after an upgrade. To move gateseal, a Repository Maintainer installs the new release and runs `gateseal upgrade`. 0013 also reverses in part the rejection in this record's last paragraph. A gateseal that runs `gateseal upgrade` reads the ownership ledger of a Lock that another release wrote, and nothing else. Between releases that follow 0013, a rollback is `git revert` of the upgrade commit.
 
 A Repository Maintainer moves a policy release, a component, or the compiler with `gateseal upgrade`, and rolls back with the same command and an older target. One planner reads a worktree whose Manifest and Lock agree, applies every target, revalidates every Version Exception against the target policy, and writes nothing until all of them hold. A component target edits that component's Version Exception, because the Manifest has no other place to deviate from the policy's pin, and a target without a version follows the pin but keeps a newer version that the policy still reviews. The writes follow configure's ownership rules, and activation runs only when asked, after the writes, so a failed activation keeps the tracked upgrade.
 

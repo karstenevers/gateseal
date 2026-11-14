@@ -12,14 +12,13 @@ repository](install.md#pin-the-release-in-a-repository) and add `--ci github`
 to the first `configure` command.
 
 For an existing repository, check `compiler.source.kind` in the Lock.
-If it is `local-wheel`, switch to a publicly readable copy **before** you
-edit `gateseal.toml`. Use the same wheel and its recorded digest. Set the
-[shared wheel variables](install.md#for-a-team-repository-or-github-actions),
-then change the location:
+If it is `local-wheel`, switch to the same wheel on PyPI **before** you edit
+`gateseal.toml`. Copy the wheel's URL from PyPI, as
+[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
+digest that the Lock records in `compiler.sha256`, and change the location:
 
 ```sh
-gateseal upgrade --compiler-source "$GATESEAL_WHEEL_URL" \
-  --compiler-sha256 "$GATESEAL_WHEEL_SHA256"
+gateseal upgrade --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
 ```
 
 For an existing repository with a public wheel, add this table to
@@ -120,8 +119,6 @@ See [JSON results](commands-and-results.md#json-results).
 
 ## Limits
 
-The generated workflow supports GitHub Actions on Linux. Tests on hosted
-runners covered new-branch and fast-forward pushes, passing and failing
-pull requests, an edit to a generated file, and read access to a Git policy.
-The package tests also cover merge groups, manual runs, schedules, and fork
-pull requests. See [tested platforms](tested-platforms.md).
+The workflow runs only on GitHub's `ubuntu-24.04` runner, and you cannot
+choose another runner yet. [Tested platforms](tested-platforms.md) lists the
+events that the tests covered.

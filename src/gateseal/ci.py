@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from gateseal.bootstrap import clean_environment
 from gateseal.diagnostics import GatesealError
 from gateseal.processes import execute
-from gateseal.runtime import Worktree
+from gateseal.worktree import Worktree
 
 OBJECT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 """A full object ID, which no Git command can read as an option."""

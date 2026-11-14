@@ -36,8 +36,9 @@ from pathlib import Path
 from typing import ClassVar
 
 from gateseal.bootstrap import TOOL_PREFIX, PreparedPaths, PreparedRecord, PreparedTool
-from gateseal.compiler_release import TARGETS, Target
 from gateseal.diagnostics import GatesealError
+from gateseal.paths import resolved
+from gateseal.platforms import TARGETS, Target
 from gateseal.processes import execute, find_tool
 from gateseal.tools.model import (
     OWNED,
@@ -453,7 +454,7 @@ def plan(tools: Iterable[object], target: Target, env: dict[str, str]) -> Mise |
         supported = version_key(reported.stdout.decode().split()[0]) >= version_key(
             MINIMUM_MISE
         )
-    except IndexError, GatesealError:
+    except (IndexError, GatesealError):
         supported = False
     if not supported:
         raise GatesealError(
@@ -540,14 +541,14 @@ def _install_location(directory: Path, reported: str, name: str) -> Path:
         not location.is_absolute()
         or location.is_symlink()
         or not location.is_dir()
-        or directory.resolve() not in location.resolve().parents
+        or resolved(directory) not in resolved(location).parents
     ):
         raise GatesealError(
             "invalid_preparation",
             f"mise installed {name} outside the attempt: {location}",
             4,
         )
-    return location.resolve()
+    return resolved(location)
 
 
 def _probe(

@@ -6,6 +6,7 @@ import stat
 import pytest
 from gateseal import bootstrap, runtime
 from gateseal.diagnostics import GatesealError
+from gateseal.worktree import locate_worktree
 from installation import clone, success
 
 REFUSED = "= \" ' $ ` \\ :"
@@ -36,13 +37,13 @@ def refused(call, *arguments):
 def test_a_clone_and_its_linked_worktree_prepare_in_their_own_git_directory(
     root, tmp_path
 ):
-    clone = runtime.locate_worktree(root)
+    clone = locate_worktree(root)
     assert clone.preparation == root / ".git" / bootstrap.PREPARATION
     assert clone.hook == root / ".git" / "hooks" / "pre-commit"
     assert clone.display(root / "src" / "a.py") == "src/a.py"
     assert clone.display(tmp_path / "elsewhere") == str(tmp_path / "elsewhere")
     success(["git", "worktree", "add", "--quiet", tmp_path / "linked"], root)
-    linked = runtime.locate_worktree(tmp_path / "linked")
+    linked = locate_worktree(tmp_path / "linked")
     assert linked.git_dir == root / ".git" / "worktrees" / "linked"
     assert linked.preparation == linked.git_dir / bootstrap.PREPARATION
     assert linked.hook == clone.hook
@@ -50,13 +51,13 @@ def test_a_clone_and_its_linked_worktree_prepare_in_their_own_git_directory(
 
 def test_an_index_path_with_a_line_break_is_unsupported(root, tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_INDEX_FILE", f"{tmp_path}/index\n")
-    error = refused(runtime.locate_worktree, root)
+    error = refused(locate_worktree, root)
     assert error.code == "unsupported_path"
 
 
 def test_another_index_is_refused_rather_than_ignored(root, tmp_path, monkeypatch):
     monkeypatch.setenv("GIT_INDEX_FILE", str(tmp_path / "other index"))
-    error = refused(runtime.locate_worktree, root)
+    error = refused(locate_worktree, root)
     assert error.code == "alternate_index"
     assert all(
         str(index) in str(error)
@@ -66,7 +67,7 @@ def test_another_index_is_refused_rather_than_ignored(root, tmp_path, monkeypatc
 
 
 def test_the_preparation_folder_is_private_and_made_only_on_request(root):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     assert runtime.preparation_directory(worktree) == worktree.preparation
     assert not worktree.preparation.exists()
     for _ in range(2):
@@ -78,7 +79,7 @@ def test_the_preparation_folder_is_private_and_made_only_on_request(root):
 
 @pytest.mark.parametrize("kind", ["file", "link", "dangling link"])
 def test_a_preparation_that_is_not_a_folder_is_refused(root, tmp_path, kind):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     if kind == "file":
         worktree.preparation.write_text("")
     else:
@@ -91,7 +92,7 @@ def test_a_preparation_that_is_not_a_folder_is_refused(root, tmp_path, kind):
 
 
 def test_one_gateseal_writer_runs_at_a_time(root):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     local = runtime.preparation_directory(worktree, create=True)
     with runtime.operation_lock(local):
         with pytest.raises(GatesealError) as failure, runtime.operation_lock(local):
@@ -104,10 +105,10 @@ def test_one_gateseal_writer_runs_at_a_time(root):
 
 @pytest.mark.parametrize("folder", ["a=b", "a:b"])
 def test_a_clone_path_the_hook_cannot_pass_is_refused(root, tmp_path, folder):
-    runtime.require_supported_path(runtime.locate_worktree(root))
+    runtime.require_supported_path(locate_worktree(root))
     moved = tmp_path / folder
     root.rename(moved)
-    worktree = runtime.locate_worktree(moved)
+    worktree = locate_worktree(moved)
     error = refused(runtime.require_supported_path, worktree)
     assert error.code == "unsupported_path"
     assert str(worktree.git_dir) in str(error)
@@ -118,7 +119,7 @@ def test_a_clone_path_the_hook_cannot_pass_is_refused(root, tmp_path, folder):
 
 def test_a_linked_worktree_name_the_hook_cannot_pass_is_refused(root, tmp_path):
     success(["git", "worktree", "add", "--quiet", tmp_path / "wt$x"], root)
-    worktree = runtime.locate_worktree(tmp_path / "wt$x")
+    worktree = locate_worktree(tmp_path / "wt$x")
     error = refused(runtime.require_supported_path, worktree)
     assert error.code == "unsupported_path"
     assert str(worktree.git_dir) in str(error)
@@ -127,7 +128,7 @@ def test_a_linked_worktree_name_the_hook_cannot_pass_is_refused(root, tmp_path):
 
 
 def test_the_gateseal_hook_is_owned_and_any_other_is_not(root):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     worktree.hook.parent.mkdir(exist_ok=True)
     worktree.hook.write_bytes(bootstrap.HOOK)
     runtime.require_owned_hook(worktree)
@@ -136,7 +137,7 @@ def test_the_gateseal_hook_is_owned_and_any_other_is_not(root):
 
 
 def test_an_unreadable_git_configuration_stops_the_hook_check(root):
-    worktree = runtime.locate_worktree(root)
+    worktree = locate_worktree(root)
     with (root / ".git" / "config").open("a") as config:
         config.write("[core\n")
     error = refused(runtime.require_owned_hook, worktree)

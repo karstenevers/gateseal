@@ -5,15 +5,11 @@ from importlib.resources import files
 import pytest
 from conftest import TRACKED, preserved
 from gateseal import __version__
-from gateseal.compiler_release import (
-    TARGETS,
-    CompilerArtifact,
-    load_runtime,
-    parse_runtime,
-)
+from gateseal.compiler_release import CompilerArtifact, load_runtime, parse_runtime
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_lock
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
+from gateseal.platforms import TARGETS
 from gateseal.policy import load_bundled_policy
 from installation import (
     install,

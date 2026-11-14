@@ -10,6 +10,7 @@ from gateseal import __version__, hook_python
 from gateseal.diagnostics import GatesealError
 from gateseal.hook_python import HookPython
 from gateseal.managed_files import read
+from gateseal.paths import resolved
 from gateseal.policy_tools import Alternatives, Toolset, read_toolset
 from gateseal.tools import built_in_tools
 from gateseal.tools.choices import Choice
@@ -626,7 +627,7 @@ def bundled_root() -> Path:
         raise GatesealError(
             "unsupported_resource", "Install the wheel as filesystem-backed resources."
         )
-    return root.resolve()
+    return resolved(root)
 
 
 def load_bundled_policy() -> Policy:

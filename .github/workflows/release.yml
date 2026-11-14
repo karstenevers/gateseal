@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    name: Find a new version
+    # A copy of this repository runs nothing, even when started by hand.
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      release: ${{ steps.check.outputs.release }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare the version with the previous commit
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: python3 ci/release.py check
+
+  tests:
+    name: Wait for the tests
+    needs: version
+    if: github.repository == 'karstenevers/gateseal' && needs.version.outputs.release == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Wait for Tests and Integration tests on this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 ci/release.py wait
+
+  build:
+    name: Build twice
+    needs: [version, tests]
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      wheel-sha256: ${{ steps.build.outputs.wheel-sha256 }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Build the wheel and the sdist twice and compare them
+        id: build
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          wheel="gateseal-$VERSION-py3-none-any.whl"
+          sdist="gateseal-$VERSION.tar.gz"
+          expected="$(printf '%s\n' "$sdist" "$wheel" | sort)"
+          for n in 1 2; do
+            out="$RUNNER_TEMP/build-$n"
+            env -u PYTHONPATH UV_CACHE_DIR="$RUNNER_TEMP/cache-$n" \
+              uv build --no-config --python 3.14.10 --out-dir "$out" .
+            # uv builds the sdist, then the wheel from it, and writes a
+            # .gitignore into the out dir.
+            actual="$(find "$out" -maxdepth 1 -type f ! -name '.*' -printf '%f\n' | sort)"
+            if [ "$actual" != "$expected" ]; then
+              echo "::error::Build $n made ${actual//$'\n'/ } instead of $sdist and $wheel"
+              exit 1
+            fi
+          done
+          echo "SHA-256 of both builds:" >> "$GITHUB_STEP_SUMMARY"
+          for file in "$wheel" "$sdist"; do
+            first="$(sha256sum "$RUNNER_TEMP/build-1/$file" | cut -d ' ' -f 1)"
+            second="$(sha256sum "$RUNNER_TEMP/build-2/$file" | cut -d ' ' -f 1)"
+            if [ "$first" != "$second" ]; then
+              echo "::error::The two builds of $file differ: $first and $second"
+              exit 1
+            fi
+            echo "- \`$file\`: \`$first\`" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$file" = "$wheel" ]; then
+              echo "wheel-sha256=$first" >> "$GITHUB_OUTPUT"
+            fi
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: dist
+          path: |
+            ${{ runner.temp }}/build-1/gateseal-${{ needs.version.outputs.version }}-py3-none-any.whl
+            ${{ runner.temp }}/build-1/gateseal-${{ needs.version.outputs.version }}.tar.gz
+          if-no-files-found: error
+
+  testpypi:
+    name: Publish to TestPyPI
+    needs: [version, build]
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/gateseal/${{ needs.version.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          # A re-run finds its files there already. The demo job then proves
+          # that TestPyPI serves this build's wheel.
+          skip-existing: true
+
+  demo:
+    name: Run the demo from TestPyPI
+    needs: [version, build, testpypi]
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9
+        with:
+          version: "0.13.6"
+          python-version: "3.14.10"
+          enable-cache: false
+      - name: Install the tested mise floor
+        uses: ./.github/actions/install-mise
+      - name: Download the wheel TestPyPI serves
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA256: ${{ needs.build.outputs.wheel-sha256 }}
+        run: python3 ci/release.py served --version "$VERSION" --sha256 "$SHA256" --dest "$RUNNER_TEMP/served"
+      - name: Install the served wheel in a fresh environment
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA256: ${{ needs.build.outputs.wheel-sha256 }}
+        run: |
+          wheel="$RUNNER_TEMP/served/gateseal-$VERSION-py3-none-any.whl"
+          environment="$RUNNER_TEMP/gateseal-env"
+          requirements="$RUNNER_TEMP/gateseal-requirements.txt"
+          uv venv --python 3.14.10 "$environment"
+          printf '%s --hash=sha256:%s\n' "$wheel" "$SHA256" > "$requirements"
+          uv pip install --python "$environment/bin/python" --require-hashes -r "$requirements"
+          echo "$environment/bin" >> "$GITHUB_PATH"
+          "$environment/bin/gateseal" --version
+      - name: Run the demo
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA256: ${{ needs.build.outputs.wheel-sha256 }}
+        run: ci/demo.sh "$RUNNER_TEMP/served/gateseal-$VERSION-py3-none-any.whl" "$SHA256"
+
+  pypi:
+    name: Publish to PyPI
+    needs: [version, demo]
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/gateseal/${{ needs.version.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086
+
+  github-release:
+    name: Release on GitHub
+    needs: [version, pypi]
+    if: github.repository == 'karstenevers/gateseal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: dist
+          path: dist/
+      - name: Create the release with both files and their SHA-256
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          (cd dist && sha256sum "gateseal-$VERSION-py3-none-any.whl" "gateseal-$VERSION.tar.gz") > SHA256SUMS
+          cat SHA256SUMS
+          python3 ci/release.py notes --version "$VERSION" > "$RUNNER_TEMP/notes.md"
+          # gh uploads the files to a draft and publishes it afterwards, as an
+          # immutable release needs, and deletes the draft if an upload fails.
+          gh release create "v$VERSION" dist/* SHA256SUMS --target "$GITHUB_SHA" \
+            --title "gateseal $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

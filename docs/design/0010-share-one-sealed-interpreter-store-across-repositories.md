@@ -1,6 +1,6 @@
 # Share one sealed interpreter store across repositories
 
-Accepted on 2026-11-02 and implemented. It narrows [design record 0003](0003-prepare-gateseal-tools-before-commits.md)'s rule that commits start the exact prepared interpreter: the interpreter is still exact and verified, but a machine holds one copy of it instead of one per attempt. [Design record 0011](0011-share-sealed-hook-environments-through-the-interpreter-store.md) moves pre-commit's hook environments into the same store.
+Accepted on 2026-11-02 and implemented. It narrows [design record 0003](0003-prepare-gateseal-tools-before-commits.md)'s rule that commits start the exact prepared interpreter: the interpreter is still exact and verified, but a machine holds one copy of it instead of one per attempt. [Design record 0011](0011-share-sealed-hook-environments-through-the-interpreter-store.md) moves pre-commit's hook environments into the same store. [Design record 0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) replaces this record. pre-commit and mise each keep one install per machine, and the Interpreter Store goes away.
 
 Each activation used to unpack the Compiler Runtime's CPython into its new attempt. A worktree kept up to two copies of 69 to 108 MB, and every activation gave the interpreter a new path. macOS app firewalls such as Little Snitch match an ad-hoc-signed interpreter by path, so a rule that allowed it forever stopped matching after the next activation.
 

@@ -1,6 +1,6 @@
 # Share sealed hook environments through the interpreter store
 
-Accepted on 2026-11-05 and implemented. It narrows [design record 0010](0010-share-one-sealed-interpreter-store-across-repositories.md)'s statement that pre-commit's hook environments stay in each attempt.
+Accepted on 2026-11-05 and implemented. It narrows [design record 0010](0010-share-one-sealed-interpreter-store-across-repositories.md)'s statement that pre-commit's hook environments stay in each attempt. [Design record 0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) replaces this record. pre-commit builds each hook environment once per machine in its own cache.
 
 Each activation that prepared a new attempt gave it a new pre-commit home, so pre-commit cloned every hook repository and built its environment again. On Linux that was 40 MiB per attempt and 20.9 seconds of a 26.2-second warm activation, the largest cost left once the interpreter moved into the store.
 
