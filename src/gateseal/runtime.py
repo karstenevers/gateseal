@@ -30,6 +30,7 @@ from gateseal.environments import (
     uv_environment,
 )
 from gateseal.managed_files import open_directory, read_optional, write_atomic
+from gateseal.paths import resolved
 from gateseal.platforms import TARGETS
 from gateseal.processes import execute, find_tool, pre_commit_command
 from gateseal.tools import pre_commit_repository, release_binary
@@ -102,7 +103,7 @@ def require_supported_store() -> None:
     their launchers as it writes the Git directory's into the attempt's.
     virtualenv, which builds them, refuses a path with a colon.
     """
-    store = interpreter_store.location().resolve()
+    store = resolved(interpreter_store.location())
     found = sorted(set(str(store)) & set(UNSUPPORTED_PATH))
     if found:
         raise GatesealError(
@@ -291,7 +292,7 @@ def _require_uv(uv: str, root: Path) -> None:
     try:
         found = reported.stdout.decode().split()[1]
         supported = version_key(found) >= version_key(minimum)
-    except IndexError, GatesealError:
+    except (IndexError, GatesealError):
         supported = False
     if not supported:
         raise GatesealError(
@@ -354,7 +355,7 @@ def _prepare(plan: Plan, local: Path) -> Path:
         interpreter=shared.executable,
         compiler_python=Path(compiler),
         pre_commit_python=Path(pre_commit),
-        bootstrap=Path(found.stdout.decode().strip()).resolve(),
+        bootstrap=resolved(found.stdout.decode().strip()),
         pre_commit_home=attempt / "pre-commit-home",
         tools=attempt / "tools",
     )

@@ -7,6 +7,11 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+### Changed
+
+- gateseal runs on Python 3.11 and later, the floor of the pre-commit version
+  it names. It needed Python 3.14.10 or a later 3.14 release before.
+
 ## [0.1.0] - 2026-11-11
 
 The first release.

@@ -217,3 +217,14 @@ def test_a_store_that_another_activation_holds_is_collected_later(store):
         os.close(descriptor)
     interpreter_store.collect()
     assert set(os.listdir(store)) == {"store.lock"}
+
+
+def test_a_store_path_with_a_symlink_loop_is_neither_swept_nor_linked(
+    monkeypatch, tmp_path
+):
+    loop = tmp_path.resolve() / "loop"
+    loop.symlink_to(loop.name)
+    store = loop / "store"
+    monkeypatch.setenv("GATESEAL_INTERPRETER_STORE", str(store))
+    interpreter_store.collect()
+    assert not interpreter_store.linked(tmp_path / attempt("1"), [store / OTHER])

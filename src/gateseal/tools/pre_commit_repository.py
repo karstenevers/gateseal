@@ -30,6 +30,7 @@ from typing import ClassVar
 
 from gateseal.bootstrap import HookEnvironment, PreparedRecord, sha
 from gateseal.diagnostics import GatesealError
+from gateseal.paths import resolved
 from gateseal.processes import execute, find_python
 from gateseal.tools.model import (
     Catalog,
@@ -225,21 +226,19 @@ def stored_repositories(home: Path) -> dict[Path, tuple[str, str]]:
         ) from exc
     finally:
         connection.close()
-    return {
-        Path(str(path)).resolve(): (str(repo), str(ref)) for repo, ref, path in rows
-    }
+    return {resolved(str(path)): (str(repo), str(ref)) for repo, ref, path in rows}
 
 
 def _base_interpreter(environment: Path) -> Path | None:
     """Return the resolved interpreter that virtualenv built environment from."""
     try:
         text = (environment / "pyvenv.cfg").read_text(encoding="utf-8")
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         return None
     for line in text.splitlines():
         key, _, value = line.partition("=")
         if key.strip() == "base-executable":
-            return Path(value.strip()).resolve()
+            return resolved(value.strip())
     return None
 
 

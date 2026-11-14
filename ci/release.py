@@ -18,7 +18,7 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
-from typing import cast
+from typing import TypeVar, cast
 
 HEADING = re.compile(r"## \[(?P<version>[^\]]+)\](?: - (?P<date>.*))?")
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -28,9 +28,6 @@ WORKFLOWS = ("tests.yml", "integration.yml")
 POLL_SECONDS = 30
 TESTS_DEADLINE_SECONDS = 80 * 60
 INDEX_DEADLINE_SECONDS = 10 * 60
-# A tuple constant keeps ruff format, which targets Python 3.14, from dropping
-# the parentheses that Python 3.12 needs in an except clause.
-UNREADABLE_BASE = (subprocess.CalledProcessError, tomllib.TOMLDecodeError, KeyError)
 
 
 class Refusal(Exception):
@@ -173,7 +170,7 @@ def base_version(before: str) -> str | None:
         return None
     try:
         return project_version(git("show", f"{before}:pyproject.toml"))
-    except UNREADABLE_BASE:
+    except (subprocess.CalledProcessError, tomllib.TOMLDecodeError, KeyError):
         return None
 
 
@@ -230,7 +227,10 @@ def fetch_json(url: str, token: str | None = None) -> object:
         return json.load(response)
 
 
-def poll[T](attempt: Callable[[], T | None], deadline_seconds: int) -> T | None:
+T = TypeVar("T")
+
+
+def poll(attempt: Callable[[], T | None], deadline_seconds: int) -> T | None:
     deadline = time.monotonic() + deadline_seconds
     while (result := attempt()) is None and time.monotonic() < deadline:
         time.sleep(POLL_SECONDS)

@@ -6,6 +6,7 @@ from pathlib import Path
 from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError
 from gateseal.environments import tool_environment
+from gateseal.paths import resolved
 from gateseal.processes import execute, find_git
 
 
@@ -80,7 +81,7 @@ def locate_worktree(requested: Path) -> Worktree:
     lines = response.stdout.decode().split("\n")
     if len(lines) != 5 or lines[4]:
         raise GatesealError("unsupported_path", "A Git path contains a line break.")
-    root, git_dir, common_dir, index = (Path(line).resolve() for line in lines[:4])
+    root, git_dir, common_dir, index = (resolved(line) for line in lines[:4])
     if index != git_dir / "index":
         raise GatesealError(
             "alternate_index",

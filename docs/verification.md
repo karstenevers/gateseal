@@ -14,8 +14,9 @@ run its test layers and its model check, and which CI jobs run them.
 ## Build and test
 
 **Before you start**, put Git 2.54.0, uv 0.13.6 and mise 2026.10.19 or later
-on `PATH`. The package declares CPython 3.14.10, the tested patch, as its
-floor.
+on `PATH`. The package runs on CPython 3.11 and later, the floor of the
+pre-commit version it names. Development and the integration layer use CPython
+3.14.10, and CI also runs the unit layer on 3.11.
 
 ### Run the checks and tests
 
@@ -84,6 +85,7 @@ The three pytest commands run these layers:
 | Job | What it runs | When it runs |
 | --- | --- | --- |
 | `tests` | Ruff, strict Pyright, and the unit layer. | On pull requests, main pushes, and manually. |
+| `tests (Python 3.11)` | The unit layer on CPython 3.11, the oldest supported Python. | On pull requests, main pushes, and manually. |
 | `tlc` | The [model check](#model-check-the-prepared-attempts). | When formal inputs or the pre-commit pin change, on manual runs, and when the comparison is unavailable. |
 | `docs` | A strict build of the documentation site. | On pull requests, main pushes, and manually. |
 | `integration` | The unit and integration layers on Linux and macOS. | On pull requests, main pushes, every Monday at 04:43 UTC, and manually. |
