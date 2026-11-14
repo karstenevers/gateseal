@@ -1,6 +1,6 @@
 # Acquire Git policy releases by exact commit
 
-Accepted on 2026-10-27 and implemented.
+Accepted on 2026-10-27 and implemented. [Design record 0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) replaces `gateseal activate` in this record, so only `configure`, `check` and `upgrade` acquire a release or fetch a damaged copy again. A commit no longer reads the stored copy.
 
 A Manifest names a team's Git policy release by a credential-free `https://` or `ssh://` repository URL, a directory in it, a full commit and the release tag. The Lock records the same identity with the content digest. Only adoption, a release the Lock does not record yet, asks the policy repository whether the tag names the commit; every later command treats the tag as a label. That check also shows the commit belongs to the team's repository, since hosts serve objects from forks by ID.
 

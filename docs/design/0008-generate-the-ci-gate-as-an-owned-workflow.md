@@ -1,6 +1,6 @@
 # Generate the CI gate as an owned workflow
 
-Accepted on 2026-11-01 and implemented for GitHub Actions. It applies [design record 0003](0003-prepare-gateseal-tools-before-commits.md)'s rule that disposable CI jobs prepare deliberately, and it keeps room for per-tool stages.
+Accepted on 2026-11-01 and implemented for GitHub Actions. It applies [design record 0003](0003-prepare-gateseal-tools-before-commits.md)'s rule that disposable CI jobs prepare deliberately, and it keeps room for per-tool stages. [Design record 0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) replaces the wheel pin and the activation step. The workflow installs pre-commit and gateseal at the Lock's commit, then runs the gate.
 
 A repository's CI has to run the Lock that its commits run, on a runner that has nothing prepared. A common answer is a generated workflow that installs pinned tools and plans each event's scope in inline shell and Python. gateseal keeps that event planning but moves it out of the workflow.
 
