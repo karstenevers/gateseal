@@ -9,6 +9,7 @@ select a different worktree. For an operation's flags, run
 
 | Command | Use it to |
 | --- | --- |
+| `setup` | Install pre-commit and its commit launcher for every new clone on this machine, once. With `--refresh`, also add the launcher to the clone at `--repo`. See [Set up pre-commit](install.md#set-up-pre-commit-on-this-machine). |
 | `configure` | Compile the Manifest into the Lock and generated files. See [Configure a repository](configure-a-repository.md). |
 | `activate` | Prepare the locked tools for this worktree and install the Git hook. |
 | `check` | Validate the tracked configuration without activation. For a missing Git policy, fetch the locked commit and verify its digest. |

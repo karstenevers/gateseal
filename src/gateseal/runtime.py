@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import NoReturn
 
 from gateseal import (
-    __version__,
     bootstrap,
     configured_hooks,
     hook_store,
@@ -33,9 +32,10 @@ from gateseal.managed_files import open_directory, read_optional, write_atomic
 from gateseal.paths import resolved
 from gateseal.platforms import TARGETS
 from gateseal.processes import execute, find_tool, pre_commit_command
+from gateseal.setup import require_uv
 from gateseal.tools import pre_commit_repository, release_binary
 from gateseal.tools.model import HOOK_STAGES, Stage, Tool
-from gateseal.validation import canonical, version_key
+from gateseal.validation import canonical
 from gateseal.worktree import Worktree
 
 
@@ -266,7 +266,7 @@ def _plan(locked: lock.Locked, git: Path, wheel: Path | None) -> Plan:
     if wheel is None and locked.artifact.kind == "local-wheel":
         wheel = verify_wheel(Path(locked.artifact.location), locked.artifact)
     uv = find_tool("uv")
-    _require_uv(uv, locked.root)
+    require_uv(uv, locked.root)
     environment = uv_environment(locked.selection.tools)
     if "UV_PYTHON_CACHE_DIR" not in environment:
         cache = execute([uv, "cache", "dir", "--no-config"], locked.root, environment)
@@ -283,23 +283,6 @@ def _plan(locked: lock.Locked, git: Path, wheel: Path | None) -> Plan:
     tools = locked.selection.tools
     mise = release_binary.plan(tools, target, tool_environment(tools))
     return Plan(locked, git, uv, environment, python, hook_python, source, mise)
-
-
-def _require_uv(uv: str, root: Path) -> None:
-    """Refuse a uv that reports a release older than minimum_uv, or none."""
-    reported = execute([uv, "--version"], root, tool_environment())
-    minimum = load_runtime().minimum_uv
-    try:
-        found = reported.stdout.decode().split()[1]
-        supported = version_key(found) >= version_key(minimum)
-    except (IndexError, GatesealError):
-        supported = False
-    if not supported:
-        raise GatesealError(
-            "uv_version_mismatch",
-            f"gateseal {__version__} requires uv {minimum} or later.",
-            4,
-        )
 
 
 def _probe_tools(record: bootstrap.PreparedRecord, locked: lock.Locked) -> list[str]:

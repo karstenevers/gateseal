@@ -441,6 +441,11 @@ def plan(tools: Iterable[object], target: Target, env: dict[str, str]) -> Mise |
             name, tool.version, archive.url, archive.sha256, archive.executable
         )
         natives.append((tool, native))
+    return Mise(require_mise(env), env, tuple(natives))
+
+
+def require_mise(env: dict[str, str]) -> str:
+    """Return the mise on PATH once it reports MINIMUM_MISE or later."""
     mise = find_tool("mise")
     # mise writes its own cache and state even to report its version, so they
     # go to a scratch directory rather than the user's home.
@@ -462,7 +467,7 @@ def plan(tools: Iterable[object], target: Target, env: dict[str, str]) -> Mise |
             f"gateseal requires mise {MINIMUM_MISE} or later.",
             4,
         )
-    return Mise(mise, env, tuple(natives))
+    return mise
 
 
 def _mise_environment(directory: Path, env: dict[str, str]) -> dict[str, str]:

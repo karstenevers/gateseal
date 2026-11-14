@@ -12,6 +12,7 @@ from gateseal import (
     ci,
     lock,
     runtime,
+    setup,
     upgrade,
 )
 from gateseal.diagnostics import GatesealError, Result
@@ -89,6 +90,7 @@ def _parser() -> Parser:
         "run": "gateseal run; gateseal --repo '/work/team repo' run --json",
         "gate": "gateseal gate; gateseal gate --base BASE_SHA --head HEAD_SHA; "
         "gateseal gate --before BEFORE_SHA --after AFTER_SHA --json",
+        "setup": "gateseal setup; gateseal setup --refresh; gateseal setup --json",
         "status": "gateseal status --json",
         "doctor": "gateseal doctor --verbose",
     }
@@ -111,6 +113,12 @@ def _parser() -> Parser:
             )
         elif command == "activate":
             child.add_argument("--compiler-wheel")
+        elif command == "setup":
+            child.add_argument(
+                "--refresh",
+                action="store_true",
+                help="Also install the launcher in the existing clone at --repo",
+            )
         elif command == "gate":
             for flag, about in GATE_SCOPES.items():
                 child.add_argument(flag, help=about)
@@ -215,6 +223,8 @@ def _operation(arguments: argparse.Namespace) -> Result:
     if command == "policy":
         return _policy(arguments)
     requested = Path(cast(str | None, arguments.repo) or ".").absolute()
+    if command == "setup":
+        return setup.run(requested if arguments.refresh else None)
     worktree = locate_worktree(requested)
     root, preparation = worktree.root, worktree.preparation
     if command == "configure":
@@ -396,6 +406,7 @@ def _command_name(raw: list[str]) -> str:
                 "gate",
                 "status",
                 "doctor",
+                "setup",
                 "policy",
             }
         ),

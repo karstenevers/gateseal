@@ -7,6 +7,14 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+### Added
+
+- `gateseal setup` prepares a machine once: it installs pre-commit in a folder
+  of its own and names a Git template with pre-commit's commit launcher in the
+  global `init.templateDir`, so every new clone runs pre-commit at
+  `git commit`. `gateseal setup --refresh` adds the launcher to an existing
+  clone.
+
 ### Changed
 
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
