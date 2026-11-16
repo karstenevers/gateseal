@@ -149,7 +149,7 @@ explains.
 
 | Generated file | What to review |
 | --- | --- |
-| `.pre-commit-config.yaml` | The selected hooks in policy order, each with its stages. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
+| `.pre-commit-config.yaml` | gateseal's repository at the pinned commit with its `gateseal-check` hook, then the selected hooks in policy order, each with its stages. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
 | `.gateseal/ruff.toml` | The selected target version and the policy's Ruff rules. |
 | `.gateseal/betterleaks.toml` | The policy's secret detection rules. |
 | `.gateseal/betterleaks-report.tmpl`, `.gateseal/betterleaks-history-report.tmpl` | Redacted findings. The history report also names the commit. |

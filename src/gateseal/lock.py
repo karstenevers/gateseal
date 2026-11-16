@@ -86,7 +86,9 @@ def compile_outputs(
 ) -> dict[str, bytes]:
     """Return every owned output of a selection, by name in Lock order.
 
-    Each tool renders its repository of the native configuration, in
+    The native configuration starts with gateseal's own repository at the
+    pinned commit, whose hook checks the staged files against the Lock before
+    any tool runs. Each tool renders its repository after it, in
     capability order, and declares its own outputs, which its capability's
     choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it. Only hygiene defines one, so a file is
@@ -97,7 +99,10 @@ def compile_outputs(
     """
     config = {
         "minimum_pre_commit_version": load_runtime().pre_commit,
-        "repos": [tool.entry(_exclude(selection, tool)) for tool in selection.tools],
+        "repos": [
+            pin.hook_repository(),
+            *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
+        ],
     }
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
@@ -403,6 +408,47 @@ def _recorded(lock: dict[str, object], name: str, data: bytes) -> bool:
     return isinstance(entry, dict) and cast(dict[str, object], entry).get(
         "sha256"
     ) == sha(data)
+
+
+@dataclass(frozen=True)
+class Ledger:
+    """What the commit check reads of a Lock that this gateseal wrote.
+
+    files holds the Manifest's SHA-256 and each owned output's, by path, from
+    the ownership ledger.
+    """
+
+    files: dict[str, str]
+
+
+def own_ledger(lock: bytes) -> Ledger:
+    """Return the ledger of a Lock that this gateseal wrote.
+
+    Reading it needs no policy and no network. A path this gateseal never
+    writes means the Lock was edited, as it does for _obsolete.
+    """
+    document = _readable(lock)
+    _locked_pin(document)
+    try:
+        manifest = digest(document.get("manifest_sha256"), "manifest_sha256")
+        outputs = {
+            name: digest(
+                mapping(record, f"outputs.{name}").get("sha256"),
+                f"outputs.{name}.sha256",
+            )
+            for name, record in mapping(document.get("outputs"), "outputs").items()
+        }
+    except GatesealError as exc:
+        raise _unreadable(exc) from exc
+    for name in outputs:
+        if not _ownable(name):
+            raise GatesealError(
+                "ownership_conflict",
+                f"{LOCK} lists {name} as a file gateseal wrote, but gateseal "
+                f"{__version__} never writes it.",
+                next_step=f"Restore {LOCK} from Git, then run gateseal configure.",
+            )
+    return Ledger({MANIFEST: manifest, **outputs})
 
 
 def _optional(root: Path, name: str) -> bytes | None:

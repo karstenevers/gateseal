@@ -195,7 +195,8 @@ def versioned_package(destination, version, package=PACKAGE):
         destination / "src",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
-    shutil.copy(package / "README.md", destination / "README.md")
+    for name in ("README.md", "LICENSE", ".pre-commit-hooks.yaml"):
+        shutil.copy(package / name, destination / name)
     for name, key in (
         ("pyproject.toml", "version"),
         ("src/gateseal/__init__.py", "__version__"),
@@ -211,8 +212,14 @@ def versioned_package(destination, version, package=PACKAGE):
     return destination
 
 
-BUILD_INPUTS = ("src", "README.md", "pyproject.toml", "LICENSE")
-"""The files of a package that its wheel is built from."""
+BUILD_INPUTS = (
+    "src",
+    "README.md",
+    "pyproject.toml",
+    "LICENSE",
+    ".pre-commit-hooks.yaml",
+)
+"""The files of a package that its wheel is built from, and its hook definition."""
 
 
 def tag_release(origin, version, package=PACKAGE):

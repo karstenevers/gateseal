@@ -82,7 +82,7 @@ def test_python_capability_locks_and_renders_ruff(installed, consumer):
     }
     assert lock["components"]["pre-commit-hooks"]["tools"] == {}
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
-    ruff = config["repos"][1]
+    ruff = config["repos"][2]
     assert [hook["id"] for hook in ruff["hooks"]] == ["ruff-check", "ruff-format"]
     assert ruff["hooks"][0]["args"][-1] == "--"
     assert installed.cli(consumer, "check")["code"] == "consistent"

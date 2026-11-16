@@ -15,6 +15,8 @@ commit or an upgrade goes wrong.
 | Minimal GUI-style `PATH` | The launcher still runs the pre-commit that setup installed. |
 | Clone without a launcher, or with `core.hooksPath` set | `gateseal doctor` names the failed launcher check, or warns about the setting, each with its next step. |
 | Partially staged source file | The commit checks the staged part and keeps the unstaged edits. |
+| Staged hand edit of `.pre-commit-config.yaml` | The `gateseal-check` hook stops the commit and names `gateseal configure`. |
+| A developer's own pre-commit on Python 3.11 or 3.12, and no gateseal on `PATH` | pre-commit builds the `gateseal-check` hook on that Python, and the commit passes. |
 | Clone with `core.autocrlf=true` | Configure, validation, and a commit succeed without changes to tracked content. |
 
 Tests also commit with a path, `-a`, `-i`, and a user-supplied alternate

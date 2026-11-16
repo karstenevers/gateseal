@@ -59,8 +59,9 @@ See [Policy format](policy-format.md) and [Tool definitions](tool-definitions.md
 
 `gateseal configure` writes the Lock and the native configuration that tools
 read. You can review those files with an ordinary Git diff. If you edit a
-generated file, configure reports an ownership conflict. Change the Manifest
-or the policy to change a check. See [Manifest and Lock](policy-contract.md).
+generated file, configure reports an ownership conflict, and a commit that
+stages it stops at the `gateseal-check` hook. Change the Manifest or the
+policy to change a check. See [Manifest and Lock](policy-contract.md).
 
 ## What gateseal promises
 

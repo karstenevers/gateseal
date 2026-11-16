@@ -257,6 +257,7 @@ def test_a_consumer_compiles_and_labels_team_tools(tmp_path, upstream):
     outputs = locked.snapshot.outputs
     config = json.loads(outputs[".pre-commit-config.yaml"])
     assert [repository["repo"] for repository in config["repos"]] == [
+        PIN.repository,
         HOOKS,
         YAMLLINT,
         "local",
@@ -484,7 +485,10 @@ def test_a_policy_without_hygiene_compiles_a_selection_of_secrets(tmp_path, upst
     assert locked.policy.capabilities == ("files", "secrets")
     assert (lock["components"], set(lock["native_artifacts"])) == ({}, {"gitleaks"})
     config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
-    assert [repository["repo"] for repository in config["repos"]] == ["local"]
+    assert [repository["repo"] for repository in config["repos"]] == [
+        PIN.repository,
+        "local",
+    ]
 
 
 def test_omitted_hook_ids_run_every_hook_in_definition_order(tmp_path, upstream):

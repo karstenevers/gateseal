@@ -89,8 +89,9 @@ allow comments and ignore files.
 
 ## gateseal reports an ownership conflict
 
-If `configure` reports `ownership_conflict`, inspect the named file and save
-any changes you need to keep. If the file is a generated output you edited,
+If `configure` reports `ownership_conflict`, or the `gateseal-check` hook
+stops a commit because a staged file differs from the file gateseal wrote,
+inspect the named file and save any changes you need to keep. If the file is a generated output you edited,
 restore its generated contents and make the intended change in the Manifest
 or policy. If another tool owns the file, move it before you run
 `gateseal configure` again.
