@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 import pytest
-from conftest import TRACKED, git_path
+from conftest import TRACKED, git_path, on_machine
 from gateseal import sources
 from gateseal.manifest import GitSource
 from installation import clone, success
@@ -82,6 +82,11 @@ def stored_policies(root):
     return sorted(directory.iterdir()) if directory.exists() else []
 
 
+def lock_check(result):
+    """Return the Lock check of a status or doctor result."""
+    return next(d for d in result["diagnostics"] if d.get("check") == "lock")
+
+
 CHOICE_AND_EXCEPTION = """
 [choices.hygiene]
 exclude = ["vendor"]
@@ -98,20 +103,23 @@ def adopted(installed, team, tmp_path_factory):
     """A consumer that adopted v1 with a choice and an overdue exception."""
     origin, first, _ = team
     root = tmp_path_factory.mktemp("team consumer ü")
-    consumer = clone(root / "origin", root / "consumer")
     env = environment(installed, origin)
-    result = adopt(installed, consumer, env)
-    assert categories(result)["policy_tag"]["message"] == (
-        f"Tag v1 names commit {first}, as adoption requires."
-    )
-    manifest = consumer / "gateseal.toml"
-    manifest.write_text(manifest.read_text() + CHOICE_AND_EXCEPTION)
-    reconciled = installed.cli(consumer, "configure", env=env)
-    assert "policy_tag" not in categories(reconciled)
-    assert sorted(reconciled["changed"]) == [".pre-commit-config.yaml", "gateseal.lock"]
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
-    success(["git", "add", *TRACKED], consumer)
-    success(["git", "commit", "-m", "Adopt the team policy"], consumer)
+    with on_machine(installed):
+        consumer = clone(root / "origin", root / "consumer")
+        result = adopt(installed, consumer, env)
+        assert categories(result)["policy_tag"]["message"] == (
+            f"Tag v1 names commit {first}, as adoption requires."
+        )
+        manifest = consumer / "gateseal.toml"
+        manifest.write_text(manifest.read_text() + CHOICE_AND_EXCEPTION)
+        reconciled = installed.cli(consumer, "configure", env=env)
+        assert "policy_tag" not in categories(reconciled)
+        assert sorted(reconciled["changed"]) == [
+            ".pre-commit-config.yaml",
+            "gateseal.lock",
+        ]
+        success(["git", "add", *TRACKED], consumer)
+        success(["git", "commit", "-m", "Adopt the team policy"], consumer)
     return consumer, env
 
 
@@ -193,8 +201,9 @@ def test_moved_tag_is_descriptive_after_adoption(installed, team, adopted, tmp_p
         fresh = tmp_path / "fresh"
         success(["git", "clone", consumer, fresh], tmp_path)
         status = installed.cli(fresh, "status", env=env)
-        assert status["code"] == "needs_activation"
-        assert status["next_steps"] == ["gateseal activate"]
+        assert status["code"] == "unhealthy"
+        assert lock_check(status)["status"] == "failed"
+        assert status["next_steps"] == ["gateseal check"]
         assert stored_policies(fresh) == []
         assert installed.cli(fresh, "check", env=env)["code"] == "consistent"
         assert len(stored_policies(fresh)) == 1
@@ -207,9 +216,8 @@ def test_moved_tag_is_descriptive_after_adoption(installed, team, adopted, tmp_p
         git(origin, "tag", "-f", "-a", "-m", "v1", "v1", first)
 
 
-@pytest.mark.parametrize("conflict", ["custom_hooks_path", "unmanaged_hook"])
-def test_uncached_policy_status_names_hook_conflicts(
-    installed, team, consumer, tmp_path, conflict
+def test_status_reads_no_policy_and_doctor_fetches_it(
+    installed, team, consumer, tmp_path
 ):
     env = environment(installed, team[0])
     adopt(installed, consumer, env)
@@ -218,30 +226,13 @@ def test_uncached_policy_status_names_hook_conflicts(
     fresh = tmp_path / "fresh"
     success(["git", "clone", consumer, fresh], tmp_path)
     before = tracked(fresh)
-    hook = git_path(fresh, "hooks/pre-commit")
-    foreign = b"#!/bin/sh\nexit 0\n"
-    if conflict == "custom_hooks_path":
-        git(fresh, "config", "core.hooksPath", "custom-hooks")
-    else:
-        hook.write_bytes(foreign)
-    assert stored_policies(fresh) == []
     status = installed.cli(fresh, "status")
-    assert status["code"] == conflict
-    assert status["next_steps"] and status["next_steps"] != ["gateseal activate"]
+    assert status["code"] == "unhealthy"
+    assert "is not stored" in lock_check(status)["message"]
     assert stored_policies(fresh) == []
-    refused = installed.cli(fresh, "activate", env=env, code=2)
-    assert refused["code"] == conflict
-    assert status["next_steps"] == refused["next_steps"]
-    if conflict == "custom_hooks_path":
-        git(fresh, "config", "--unset", "core.hooksPath")
-    else:
-        assert hook.read_bytes() == foreign
-        hook.rename(tmp_path / "preserved-pre-commit")
-    unprepared = installed.cli(fresh, "status")
-    assert unprepared["code"] == "needs_activation"
-    assert unprepared["next_steps"][0] == "gateseal activate"
-    assert installed.cli(fresh, "activate", env=env)["code"] == "prepared"
-    assert installed.cli(fresh, "status")["code"] == "recorded"
+    assert installed.cli(fresh, "doctor", env=env)["code"] == "healthy"
+    assert len(stored_policies(fresh)) == 1
+    assert installed.cli(fresh, "status")["code"] == "healthy"
     assert tracked(fresh) == before
 
 
@@ -257,10 +248,16 @@ def test_another_compilers_lock_is_named_before_any_fetch(installed, adopted, tm
     location = Path(compiler["source"]["location"])
     compiler["source"]["location"] = str(location.with_name(compiler["filename"]))
     lock.write_text(json.dumps(document))
-    for command in ("status", "check", "activate"):
+    needed = "Use the locked gateseal 0.1.1 compiler."
+    for command, code in (("status", 0), ("doctor", 3)):
+        unhealthy = installed.cli(fresh, command, env=env, code=code)
+        assert lock_check(unhealthy)["status"] == "failed"
+        assert lock_check(unhealthy)["message"] == needed
+        assert unhealthy["next_steps"] == []
+    for command in ("check", "run", "gate"):
         refused = installed.cli(fresh, command, env=env, code=2)
         assert refused["code"] == "selected_compiler_required"
-        assert "Use the locked gateseal 0.1.1 compiler." in json.dumps(refused)
+        assert needed in json.dumps(refused)
     assert stored_policies(fresh) == []
 
 
@@ -279,8 +276,10 @@ def test_malformed_lock_is_named_before_its_policy_is_read(
     document = json.loads(lock.read_bytes())
     document["surprise"] = 1
     lock.write_text(json.dumps(document))
-    refused = installed.cli(fresh, "status", env=env, code=2)
+    refused = installed.cli(fresh, "check", env=env, code=2)
     assert refused["code"] == "invalid_field"
+    unhealthy = installed.cli(fresh, "doctor", env=env, code=3)
+    assert lock_check(unhealthy)["message"] == refused["diagnostics"][0]["message"]
     assert stored_policies(fresh) == []
 
 
@@ -291,20 +290,13 @@ def test_damaged_store_is_reported_and_repaired(installed, adopted):
     entry.write_bytes(original.replace(b"trailing-whitespace", b"trailing-whitespacE"))
     try:
         status = installed.cli(consumer, "status", env=env)
-        assert status["code"] == "needs_activation"
-        assert "changed" in status["diagnostics"][0]["message"]
-        (consumer / "notes.txt").write_text("damaged store\n")
-        success(["git", "add", "notes.txt"], consumer)
-        stopped = subprocess.run(
-            ["git", "commit", "-m", "Commit"], cwd=consumer, capture_output=True
-        )
-        assert stopped.returncode != 0
-        assert b"gateseal activate" in stopped.stdout + stopped.stderr
-        assert installed.cli(consumer, "activate", env=env)["code"] == (
-            "already_prepared"
-        )
+        assert status["code"] == "unhealthy"
+        assert "changed" in lock_check(status)["message"]
+        assert status["next_steps"] == ["gateseal check"]
+        assert entry.read_bytes() != original
+        assert installed.cli(consumer, "check", env=env)["code"] == "consistent"
         assert entry.read_bytes() == original
-        success(["git", "commit", "-m", "Commit"], consumer)
+        assert installed.cli(consumer, "status", env=env)["code"] == "healthy"
     finally:
         entry.write_bytes(original)
 

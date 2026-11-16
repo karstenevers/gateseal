@@ -4,7 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from gateseal import __version__, github, hook_python, sources
+from gateseal import __version__, github, sources
 from gateseal.bootstrap import CONFIG, LOCK, MANIFEST, sha, tracked_bytes
 from gateseal.compiler_release import (
     CompilerArtifact,
@@ -35,7 +35,6 @@ from gateseal.manifest import (
     tool_note,
 )
 from gateseal.policy import Policy, load_bundled_policy
-from gateseal.tools import release_binary
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
 from gateseal.validation import (
     canonical,
@@ -87,26 +86,20 @@ def compile_outputs(
 
     Each tool renders its repository of the native configuration, in
     capability order, and declares its own outputs, which its capability's
-    choices may change; the release-binary kind adds the outputs it owns
-    across its tools. A capability's exclude choice applies to the hooks of
+    choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it. Only hygiene defines one, so a file is
     kept from Ruff or a secret scanner only by a policy that puts that tool in
     hygiene. A Manifest's [ci] adds the provider's workflow, which names
     the compiler CI installs and the policy repository its credential helper
-    serves. A Hook Python is each kind's to render, as its hooks'
-    language_version.
+    serves.
     """
-    python = None if selection.python is None else selection.python.name
     config = {
         "minimum_pre_commit_version": load_runtime().pre_commit,
-        "repos": [
-            tool.entry(_exclude(selection, tool), python) for tool in selection.tools
-        ],
+        "repos": [tool.entry(_exclude(selection, tool)) for tool in selection.tools],
     }
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
-    outputs |= release_binary.outputs(selection.tools)
     if selection.ci is not None:
         outputs[github.WORKFLOW] = github.workflow(selection.ci, artifact, source)
     return dict(sorted(outputs.items()))
@@ -153,8 +146,6 @@ def compile_lock(
     for tool in selection.tools:
         section, key, record = tool.lock_entry()
         records[section][key] = record
-    if selection.python is not None:
-        records["components"][hook_python.COMPONENT] = selection.python.lock_entry()
     inputs: dict[str, object] = {
         "schema": 1,
         "manifest_sha256": sha(manifest),
@@ -259,7 +250,7 @@ def _policy(manifest: Manifest, recorded: object, preparation: Path) -> Policy:
         "policy_unavailable",
         f"Policy commit {source.commit} is not stored in this worktree yet.",
         3,
-        "gateseal activate",
+        "gateseal check",
     )
 
 
@@ -305,13 +296,9 @@ def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
         "policy",
         f"Policy {policy.release} {origin}, digest {policy.content_digest}.",
     )
-    python = locked.selection.python
-    if python is None and policy.hook_python and policy.hook_python.on_runtime:
-        python = policy.hook_python
     return (
         identity,
         load_runtime().note(),
-        *(() if python is None else (python.note(),)),
         *map(tool_note, locked.selection.tools),
         *notes(locked.selection, today or date.today()),
     )
@@ -365,38 +352,6 @@ def _lock_inputs(manifest: bytes, lock: bytes, preparation: Path) -> _LockInputs
     return _LockInputs(document, artifact, parsed, policy, resolve(parsed, policy))
 
 
-def validate_snapshot(root: Path, snapshot: Snapshot, preparation: Path) -> Locked:
-    """Check a Manifest, Lock and outputs against the selected policy."""
-    inputs = _lock_inputs(snapshot.manifest, snapshot.lock, preparation)
-    return _check_snapshot(root, snapshot, inputs)
-
-
-def _check_snapshot(root: Path, snapshot: Snapshot, inputs: _LockInputs) -> Locked:
-    policy, selection = inputs.policy, inputs.selection
-    expected = compile_lock(
-        snapshot.manifest, inputs.manifest.source, policy, inputs.artifact, selection
-    )
-    if canonical(inputs.document) != canonical(expected):
-        raise GatesealError(
-            "lock_mismatch",
-            "Lock inputs or ownership disagree with the selected policy.",
-            next_step="gateseal configure",
-        )
-    outputs = compile_outputs(selection, inputs.artifact, inputs.manifest.source)
-    if snapshot.outputs.keys() != outputs.keys():
-        raise GatesealError(
-            "lock_mismatch", "Owned outputs disagree with the Manifest's capabilities."
-        )
-    for name, content in outputs.items():
-        if snapshot.outputs[name] != content:
-            raise GatesealError(
-                "ownership_conflict", f"Restore the owned {name}; it has been edited."
-            )
-    return Locked(
-        root, policy, inputs.artifact, snapshot, inputs.manifest.source, selection
-    )
-
-
 def _tracked(root: Path, name: str) -> bytes:
     return tracked_bytes(read(root, name, non_executable=True))
 
@@ -432,7 +387,7 @@ def _recorded_lock(data: bytes | None) -> dict[str, object]:
 def ensure_policy(root: Path, preparation: Path, git: str) -> None:
     """Store the Git release the worktree's Lock records, if it is not stored.
 
-    Activation, check and upgrade run this, so a fresh clone or worktree
+    Every command but status runs this, so a fresh clone or worktree
     acquires its policy without configure. Only the locked commit is fetched,
     and its content must have the digest the Lock records. A Lock that names
     another release than the Manifest is left for load to report.
@@ -469,14 +424,28 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
         manifest = _tracked(root, MANIFEST)
         lock = _tracked(root, LOCK)
         inputs = _lock_inputs(manifest, lock, preparation)
-        names = compile_outputs(
-            inputs.selection, inputs.artifact, inputs.manifest.source
-        )
+        source, policy = inputs.manifest.source, inputs.policy
+        artifact, selection = inputs.artifact, inputs.selection
+        compiled = compile_outputs(selection, artifact, source)
         found = {
             name: _tracked(root, name) if outputs else content
-            for name, content in names.items()
+            for name, content in compiled.items()
         }
-        return _check_snapshot(root, Snapshot(manifest, lock, found), inputs)
+        expected = compile_lock(manifest, source, policy, artifact, selection)
+        if canonical(inputs.document) != canonical(expected):
+            raise GatesealError(
+                "lock_mismatch",
+                "Lock inputs or ownership disagree with the selected policy.",
+                next_step="gateseal configure",
+            )
+        for name, content in compiled.items():
+            if found[name] != content:
+                raise GatesealError(
+                    "ownership_conflict",
+                    f"Restore the owned {name}; it has been edited.",
+                )
+        snapshot = Snapshot(manifest, lock, found)
+        return Locked(root, policy, artifact, snapshot, source, selection)
     except FileNotFoundError as exc:
         raise GatesealError(
             "missing_configuration", "Run gateseal configure before this command."

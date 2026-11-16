@@ -1,7 +1,7 @@
 """Refuse a Policy Lock that disagrees with policy.toml, before anything runs.
 
-Every load of a policy checks its lock, so configure, activation, adoption and
-gateseal policy check refuse it the same way.
+Every load of a policy checks its lock, so configure, adoption and gateseal
+policy check refuse it the same way.
 """
 
 import json

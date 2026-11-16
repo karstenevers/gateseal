@@ -40,7 +40,6 @@ also enabled Python or secrets for the first time, stage `.gateseal` too.
 ```sh
 gateseal configure
 gateseal check
-gateseal activate
 git add gateseal.toml gateseal.lock .pre-commit-config.yaml .github/workflows/gateseal.yml
 ```
 
@@ -62,6 +61,10 @@ only to the policy repository's HTTPS URL. Fork pull requests do not receive
 the secret. For SSH URLs and other hosts, the job needs separate Git
 credentials. See [Authenticate to a private policy](authenticate.md).
 
+The token serves only the policy fetch. pre-commit clones each hook
+repository in the gate step without it, so the runner must be able to read
+every hook repository without credentials.
+
 ## What the workflow does
 
 The workflow runs on `ubuntu-24.04` with `contents: read`. It checks pushes to
@@ -73,15 +76,16 @@ other events.
    request, check out GitHub's merge commit. The Lock, workflow, and files
    come from the proposed merge.
 2. Download the pinned uv and mise releases and verify them. Install the
-   locked gateseal wheel, then run `gateseal activate` to prepare the tools
-   and check the repository configuration.
+   locked gateseal wheel. Run `gateseal setup` to install pre-commit, then
+   `gateseal check` to check the repository configuration.
 3. Run `gateseal gate` on the files and commits selected by the event.
 
 ## The gate
 
-The gate runs hooks selected for the policy's CI stage (pre-commit's
-`manual` stage). Every hook runs at every stage, so the gate runs the
-same hooks as a commit and `gateseal run`.
+The gate runs the hooks of the CI stage (pre-commit's `manual` stage). A tool
+whose definition lists every stage runs in the gate, at a commit, and in
+`gateseal run`. A tool whose definition lists only `ci` runs in the gate
+alone. The gate starts the pre-commit that `gateseal setup` installed.
 
 | Event | Files checked | History scanned |
 | --- | --- | --- |

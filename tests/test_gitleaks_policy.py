@@ -13,6 +13,7 @@ import textwrap
 from pathlib import Path
 
 import pytest
+from conftest import on_machine
 from gateseal.validation import canonical
 from installation import clone, success
 from team_policy import URL, environment, git, publish
@@ -108,7 +109,46 @@ def guarded(installed, tmp_path_factory):
     git(origin, "init", "--initial-branch=main")
     publish(origin, "v1", add_gitleaks)
     root = tmp_path_factory.mktemp("gitleaks consumer ü")
-    consumer = clone(root / "origin", root / "consumer")
+    env = environment(installed, origin)
+    with on_machine(installed):
+        consumer = clone(root / "origin", root / "consumer")
+        installed.cli(
+            consumer,
+            "configure",
+            *("--capability", "hygiene", "--capability", "secrets"),
+            *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
+            *("--compiler-wheel", installed.wheel),
+            *("--compiler-sha256", installed.checksum),
+            env=env,
+        )
+        success(["git", "add", "-A"], consumer)
+        success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
+    return consumer, env
+
+
+ALL_STAGES = 'stages = ["commit", "run", "ci"]'
+
+
+def ci_only(data):
+    """Add Gitleaks to the policy in data as a tool of the ci stage alone."""
+    add_gitleaks(data)
+    definition = data / "tools/gitleaks.toml"
+    text = definition.read_text()
+    assert ALL_STAGES in text
+    definition.write_text(text.replace(ALL_STAGES, 'stages = ["ci"]'))
+
+
+def hooks_run(result):
+    """Return the tools whose hooks a run or gate result reports."""
+    return {d["tool"] for d in result["diagnostics"] if d["category"] == "hook"}
+
+
+def test_a_ci_only_tool_runs_in_the_gate_and_not_at_a_commit(installed, tmp_path):
+    origin = tmp_path / "gateseal-policy"
+    origin.mkdir()
+    git(origin, "init", "--initial-branch=main")
+    publish(origin, "v1", ci_only)
+    consumer = clone(tmp_path / "origin", tmp_path / "consumer")
     env = environment(installed, origin)
     installed.cli(
         consumer,
@@ -119,10 +159,16 @@ def guarded(installed, tmp_path_factory):
         *("--compiler-sha256", installed.checksum),
         env=env,
     )
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
     success(["git", "add", "-A"], consumer)
-    success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
-    return consumer, env
+    commit = success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
+    shown = commit.stdout + commit.stderr
+    assert re.search(r"Detect secrets with Betterleaks\.+Passed", shown), shown
+    assert "Gitleaks" not in shown
+    every_stage = {"pre-commit-hooks", "betterleaks"}
+    assert hooks_run(installed.cli(consumer, "run", env=env)) == every_stage
+    gated = installed.cli(consumer, "gate", env=env)
+    assert gated["code"] == "checks_passed"
+    assert hooks_run(gated) == every_stage | {"gitleaks"}
 
 
 def tool_notes(result):
@@ -141,7 +187,7 @@ def test_status_and_doctor_label_gitleaks_team_defined(installed, guarded):
         ]
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
     entries = [h.get("entry", "") for repo in config["repos"] for h in repo["hooks"]]
-    assert any(entry.startswith("gateseal-gitleaks dir --config") for entry in entries)
+    assert any(" -- gitleaks dir --config " in entry for entry in entries)
 
 
 def test_a_staged_secret_stops_the_commit_without_printing_it(guarded):

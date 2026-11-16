@@ -69,11 +69,8 @@ A **Tool Definition** that a **Policy** ships in its `tools/` folder, of a **Too
 <a id="compiler-runtime"></a>**Compiler Runtime**:
 The CPython and pre-commit closure that one compiler release carries, and that run its compiler, its hook gate, and pre-commit. Moving to a newer pre-commit means moving to a newer compiler release.
 
-<a id="hook-python"></a>**Hook Python**:
-The CPython release that a **Policy** pins for the hooks of its pre-commit hook repositories. A tool that parses code with the interpreter it runs on, such as Black, then knows the syntax of a newer Python than the **Compiler Runtime**'s. Without one, those hooks run on the **Compiler Runtime**'s CPython. It is not the project's Python, because gateseal never reads the repository's interpreter for it.
-
 <a id="interpreter-store"></a>**Interpreter Store**:
-The machine-wide directory of one read-only, sealed copy of each **Compiler Runtime**'s CPython, each **Hook Python**, and each hook environment built on them. Every **Prepared Attempt** on the machine runs from it, and only activation installs, repairs, or removes an entry.
+The machine-wide directory of one read-only, sealed copy of each **Compiler Runtime**'s CPython and each hook environment built on it. Every **Prepared Attempt** on the machine runs from it, and only activation installs, repairs, or removes an entry.
 
 <a id="prepared-attempt"></a>**Prepared Attempt**:
 One activation's complete local preparation of a **Lock**. It is **published** while it is its worktree's current attempt. A commit, `gateseal run`, or `gateseal gate` **pins** the attempt it resolved, and cleanup keeps a pinned attempt until that commit, run, or gate ends.
@@ -100,11 +97,11 @@ A tool's scan of every commit in a revision range, which the **CI Gate** runs so
 - Each commit runs every stage from the one **Prepared Attempt** it pinned.
 - A commit runs only when its **Staged Lock** is the Lock of the **Prepared Attempt** that its worktree publishes.
 - Each compiler release carries exactly one **Compiler Runtime**, which no **Policy** or **Version Exception** changes, and a **Lock** records it.
-- Every **Prepared Attempt** links itself to the **Interpreter Store** entries of its **Compiler Runtime**'s CPython, of its **Hook Python** if its policy pins one, and of its hook environments. An entry stays while a linked attempt exists.
+- Every **Prepared Attempt** links itself to the **Interpreter Store** entries of its **Compiler Runtime**'s CPython and of its hook environments. An entry stays while a linked attempt exists.
 - A **Capability** may offer alternatives as a **Policy Choice**, whose value names the one hook of its tools that runs.
 - An upgrade's **Candidate Compiler** renders its compiler target, and must take the **Policy** and every **Version Exception** as they are.
 - A **Policy Lock** belongs to one **Policy** release and is part of its content digest.
 - Each **Built-in Tool** is a **Tool Definition** of one **Tool Kind**.
 - A **Policy** defines its **Capabilities**, and each tool belongs to one. A **Team-defined Tool** never takes a **Built-in Tool**'s name.
-- The **CI Gate** runs from a **Prepared Attempt** that its job activated, as a commit does, and selects its hooks by stage.
+- The **CI Gate** runs the pre-commit that `gateseal setup` installed, as a commit does, and selects its hooks by stage.
 - A **Policy Author** releases a **Policy**, and a **Repository Maintainer** selects one release of it in a **Manifest**.

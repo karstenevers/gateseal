@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from gateseal import bootstrap
-from prepared_attempts import executable as program
+from stand_ins import executable as program
 
 LOCK = b'{"schema":1,"compiler":"0.1.0"}\n'
 REPLACED = "attempt-" + "f" * 32

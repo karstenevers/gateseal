@@ -86,7 +86,7 @@ def current(policy, *exceptions, capabilities=("hygiene", "secrets")):
 
 
 def changes(locked, policy, components, reason=None, review_by=None):
-    request = upgrade.Request(None, None, components, reason, review_by, False)
+    request = upgrade.Request(None, None, components, reason, review_by)
     manifest = parse_manifest(locked.snapshot.manifest)
     return upgrade._exception_changes(manifest, locked, policy, request)
 
@@ -135,7 +135,6 @@ def test_invalid_targets_are_refused(arguments, code, named):
             "Compiler Runtime",
             ("--compiler-source", "--compiler-wheel", "--compiler-sha256"),
         ),
-        ("python", "runtime_target", "Hook Python", ("Hook Python",)),
         ("ruff", "unsupported_component", "capabilities", ()),
         ("shellcheck", "unsupported_component", "offers", ()),
     ],
@@ -435,8 +434,22 @@ def test_a_compiler_move_names_the_command_that_runs_the_new_lock(policies):
         before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
     )
     assert (result.code, result.changed) == ("upgraded", (LOCK,))
-    install, activate, review = result.next_steps
+    install, review = result.next_steps
     assert "0.2.0" in install
-    assert activate == "gateseal activate"
     assert "git diff" in review
     assert "compiler 0.1.0 to 0.2.0: upgrade." in result.details.split("\n")
+
+
+def test_a_pre_commit_move_names_gateseal_setup(policies):
+    before = built(lock_document(policies["bundled"]))
+    after = built(before, "0.2.0", "b" * 64, hooks="4.8.0")
+    result = upgrade._result(
+        before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
+    )
+    install, setup, review = result.next_steps
+    assert "0.2.0" in install
+    assert setup == (
+        "Run gateseal setup with the command of gateseal 0.2.0, so git commit runs "
+        "pre-commit 4.8.0."
+    )
+    assert "git diff" in review

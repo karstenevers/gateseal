@@ -1,14 +1,15 @@
-"""Run the selected checks from the published attempt: gateseal run and the gate.
+"""Run the selected checks with pre-commit: gateseal run and the gate.
 
-Both pin the attempt for as long as they run from it, history scans included,
-so cleanup cannot delete it underneath them.
+Both start the pre-commit that gateseal setup installed, never one from the
+PATH, so a clone and CI run the same pre-commit. pre-commit gets the caller's
+environment, as it does at git commit.
 """
 
+import os
 import re
 import subprocess
 
-from gateseal import ci, environments, lock, runtime
-from gateseal.bootstrap import TOOL_PREFIX
+from gateseal import ci, lock, runtime, setup
 from gateseal.ci import OFFLINE, Scope
 from gateseal.diagnostics import Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
@@ -27,18 +28,17 @@ SCAN_MESSAGES = {
 """How a history scan ended, by outcome, as its diagnostic says."""
 
 
-def run(worktree: Worktree, locked: lock.Locked) -> Result:
-    """Run pre-commit on every file from the published attempt."""
-    with runtime.pinned(worktree, locked) as record:
-        process = execute(
-            pre_commit_command(
-                str(record.paths.pre_commit_python),
-                [*runtime.hook_run(Stage.RUN), "--all-files", "--color", "never"],
-            ),
-            locked.root,
-            environments.pre_commit_environment(record.paths, locked.selection.tools),
-            allow_failure=True,
-        )
+def run(locked: lock.Locked) -> Result:
+    """Run the hooks of a commit on every file."""
+    process = execute(
+        pre_commit_command(
+            setup.require_pre_commit(),
+            [*runtime.hook_run(Stage.RUN), "--all-files", "--color", "never"],
+        ),
+        locked.root,
+        dict(os.environ),
+        allow_failure=True,
+    )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
     entries = tuple(hook_results(details, locked.selection.hooks, "run"))
     if process.returncode == 0:
@@ -91,35 +91,31 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         if scope.files is None
         else ["--from-ref", scope.files[0], "--to-ref", scope.files[1]]
     )
-    with runtime.pinned(worktree, locked) as record:
-        if scope.head is not None:
-            ci.require_checked_out(worktree, scope.head)
-        env = (
-            environments.pre_commit_environment(record.paths, locked.selection.tools)
-            | OFFLINE
-        )
-        process = execute(
-            pre_commit_command(
-                str(record.paths.pre_commit_python),
-                [*runtime.hook_run(Stage.CI), *files, "--color", "never"],
-            ),
-            locked.root,
-            env,
-            allow_failure=True,
-        )
-        revisions = scope.history
-        scans: list[tuple[ToolDefinition, subprocess.CompletedProcess[bytes]]] = []
-        for tool in locked.selection.tools:
-            definition, history = tool.definition, tool.definition.history
-            if revisions is not None and history is not None:
-                link = record.paths.tools / (TOOL_PREFIX + definition.name)
-                scanned = execute(
-                    [str(link), *(a.replace(RANGE, revisions) for a in history)],
-                    locked.root,
-                    env,
-                    allow_failure=True,
-                )
-                scans.append((definition, scanned))
+    python = setup.require_pre_commit()
+    if scope.head is not None:
+        ci.require_checked_out(worktree, scope.head)
+    env = dict(os.environ) | OFFLINE
+    process = execute(
+        pre_commit_command(
+            python, [*runtime.hook_run(Stage.CI), *files, "--color", "never"]
+        ),
+        locked.root,
+        env,
+        allow_failure=True,
+    )
+    revisions = scope.history
+    scans: list[tuple[ToolDefinition, subprocess.CompletedProcess[bytes]]] = []
+    for tool in locked.selection.tools:
+        definition, history = tool.definition, tool.definition.history
+        program = tool.program(OFFLINE)
+        if revisions is not None and history is not None and program is not None:
+            scanned = execute(
+                [*program, *(a.replace(RANGE, revisions) for a in history)],
+                locked.root,
+                env,
+                allow_failure=True,
+            )
+            scans.append((definition, scanned))
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
     entries = hook_results(details, locked.selection.hooks, "ci")
     outcomes: set[str] = set()

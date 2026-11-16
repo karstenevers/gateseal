@@ -162,7 +162,7 @@ def test_adoption_without_a_lock_checks_the_tag_again(
 def test_load_needs_the_release_stored_in_this_worktree(adoption, tmp_path):
     root = copied(adoption, tmp_path, stored=False)
     error = refused(lock.load, root, preparation(root))
-    assert outcome(error) == ("policy_unavailable", "gateseal activate")
+    assert outcome(error) == ("policy_unavailable", "gateseal check")
     assert adoption.source.commit in str(error)
     assert error.exit_code == 3
 

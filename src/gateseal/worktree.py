@@ -34,14 +34,6 @@ class Worktree:
     def hook(self) -> Path:
         return self.common_dir / "hooks" / "pre-commit"
 
-    def display(self, path: Path) -> str:
-        """Name path relative to root when it is inside, otherwise absolutely."""
-        return (
-            path.relative_to(self.root).as_posix()
-            if path.is_relative_to(self.root)
-            else str(path)
-        )
-
 
 def locate_worktree(requested: Path) -> Worktree:
     """Ask Git which worktree contains requested and where its paths are.

@@ -40,15 +40,13 @@ currently pinned command to update the repository:
 
 ```sh
 gateseal upgrade --compiler-source PYPI_WHEEL_URL \
-  --compiler-sha256 WHEEL_SHA256 --activate
+  --compiler-sha256 WHEEL_SHA256
 ```
 
 After a compiler upgrade, [install the new pinned
-release](install.md#install-from-pypi) for subsequent commands. For other
-upgrades, run `gateseal activate` to prepare the changed Lock, or include
-`--activate` in the upgrade command. Review the changed files, stage them
-together, and commit. A commit uses the staged Lock and needs a worktree
-prepared for that Lock.
+release](install.md#install-from-pypi) for subsequent commands. Review the
+changed files, stage them together, and commit. The first commit after an
+upgrade installs the tools that changed.
 
 ## Usage
 
@@ -57,7 +55,7 @@ gateseal upgrade [COMPONENT[=VERSION] ...]
                  [--policy-tag TAG] [--policy URL | --policy bundled]
                  [--policy-path PATH] [--policy-commit COMMIT]
                  [--compiler-wheel PATH | --compiler-source URL] [--compiler-sha256 SHA256]
-                 [--reason TEXT] [--review-by DATE] [--activate]
+                 [--reason TEXT] [--review-by DATE]
 ```
 
 Put component names before flags. Use `--repo` to specify a worktree,
@@ -85,8 +83,6 @@ the stored copy. See [policy acquisition](policy-acquisition.md).
 Upgrade the compiler on its own or together with `--policy bundled`. Run
 other policy or tool upgrades with the new compiler. To change the runtime
 Python or pre-commit, select a compiler that carries the version you need.
-To change the policy's [Hook Python](policy-format.md#hook-python), select a
-policy release that pins it.
 
 ## Steps
 
@@ -98,8 +94,8 @@ and select a reviewed version.
 gateseal prepares the new Manifest, Lock, and generated files before writing
 to the worktree. It preserves unrelated Manifest text. If the change would
 overwrite an edited generated file, it stops with `ownership_conflict`.
-It writes the Lock last and checks the result. With `--activate`, it also
-prepares the worktree. You decide when to stage and commit the changes.
+It writes the Lock last and checks the result. You decide when to stage and
+commit the changes.
 
 ### An interrupted upgrade
 
@@ -124,7 +120,7 @@ inherits the worktree's applicable Git directory-based configuration.
 If the new compiler ships a different bundled policy, the upgrade reports
 `bundled_policy_moves`. Review that policy. To adopt it with the compiler, add
 `--policy bundled`. A successful upgrade writes the files produced by the
-target compiler. Other worktrees still need their own activation.
+target compiler.
 
 ## Results
 
@@ -137,7 +133,6 @@ redundant. A redundant exception remains until you remove it.
 | Result | Next step |
 | --- | --- |
 | `upgraded` or `unchanged` (exit 0) | Review any changed files. |
-| `activation_failed` | The tracked files already contain the upgrade. Follow the activation error's next step. If the wheel cannot be downloaded, use the new command with `activate --compiler-wheel` and a matching copy. |
 | `incompatible_exception`, `unknown_version`, `invalid_exception`, `unsupported_component`, `runtime_target` (exit 2) | Check the target policy, supported components, and exception fields. |
 | `bundled_policy_moves` or `candidate_rejected` | Review the target compiler's message and the policy it accepts. |
 | `candidate_unavailable`, `missing_artifact`, `artifact_hash_mismatch` (exit 4), or `invalid_artifact` (exit 2) | Check the wheel's location, filename, release, and digest. |

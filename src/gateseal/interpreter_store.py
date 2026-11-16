@@ -1,7 +1,7 @@
 """The machine-wide store of interpreters and hook environments that attempts share.
 
 The store is a directory of entries, each named by a SHA-256: an interpreter
-by its archive's, a hook environment by its recipe's (see hook_store):
+by its archive's, a hook environment by its recipe's:
 
     store.lock                       flock file, never deleted
     <sha256>/                        the entry

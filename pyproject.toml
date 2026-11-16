@@ -113,8 +113,6 @@ max_survivors = 0
 
 [tool.pytestmut.suppress]
 symbols = [
-    # Downloads CPython and the PyPI packages that build an attempt.
-    "src/gateseal/runtime.py::_prepare",
     # Installs a downloaded or locally built candidate wheel with uv.
     "src/gateseal/candidate.py::installed",
 ]

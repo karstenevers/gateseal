@@ -8,8 +8,9 @@ The bundled policy ships with the compiler. For private repositories, see
 
 | Command | How it reads a Git release |
 | --- | --- |
-| `configure`, `activate`, `check`, `upgrade` | Use the stored release. Fetch it if the worktree's copy is missing or damaged. |
-| `status`, `doctor`, `run`, `gate`, commits | Use only the stored release. These operations never fetch or look up tags or branches. |
+| `configure`, `check`, `run`, `gate`, `doctor`, `upgrade` | Use the stored release. Fetch it if the worktree's copy is missing or damaged. |
+| `status` | Uses only the stored release. It never fetches or looks up tags or branches. |
+| Commits | Read no policy. pre-commit runs the generated configuration. |
 
 ## Adoption checks the tag once
 
@@ -76,12 +77,12 @@ digest each time it reads a release.
 
 | Condition | Code | Exit | Next step |
 | --- | --- | --- | --- |
-| The stored content changed. | `policy_content_mismatch` | 3 | Run `gateseal activate` to fetch the release again. |
+| The stored content changed. | `policy_content_mismatch` | 3 | Run `gateseal check` to fetch the release again. |
 | The digest in the Lock differs from the content at the selected commit. | `lock_mismatch` | 2 | Run `gateseal configure` to record the digest of that content. |
-| The worktree has no stored copy. | `policy_unavailable` | 3 | Run `gateseal activate`. |
+| The worktree has no stored copy. | `policy_unavailable` | 3 | Run `gateseal check`. |
 
-For the two exit-3 conditions, `gateseal status` reports the
-[preparation result](commands-and-results.md#commands) `needs_activation`.
+For the two exit-3 conditions, `gateseal status` reports a failed
+[`lock` check](commands-and-results.md#reading-status-and-doctor) and exits 0.
 
 ## Credentials
 
@@ -92,7 +93,8 @@ rewrites. gateseal does not store or log credentials.
 If the fetch fails, gateseal returns `policy_fetch_failed` (exit 4) with
 Git's redacted message. Try `git ls-remote <url>` with the policy URL. If
 Git cannot list the refs, ask the policy owner for read access. Each
-contributor who activates a private policy needs that access.
+contributor who runs gateseal commands with a private policy needs that
+access.
 
 In CI, scope the credential helper to the exact policy URL. For pull
 requests, use the URL from the base branch. See

@@ -24,9 +24,9 @@ its `compiler.version` field. For example, for version `0.1.0`, run:
 uv tool install --python 3.14.10 gateseal==0.1.0
 ```
 
-Then [activate the worktree](work-in-a-configured-repository.md#prepare-the-clone).
+Then [set up your machine](work-in-a-configured-repository.md#set-up-your-machine).
 If you work on repositories that use different releases, you can call each
-version separately, for example `uvx --python 3.14.10 gateseal@0.1.0 activate`.
+version separately, for example `uvx --python 3.14.10 gateseal@0.1.0 status`.
 
 ## Set up pre-commit on this machine
 
@@ -91,8 +91,7 @@ In those clones, run `pre-commit uninstall` or delete
 When you first configure a repository, you record which gateseal wheel each
 clone must use. The wheel is the release file whose name ends in `.whl`.
 Use the version printed by `gateseal --version`. Once you commit
-`gateseal.lock`, contributors can activate their clones without entering the
-wheel details.
+`gateseal.lock`, contributors need no wheel details.
 
 ### Pin the wheel on PyPI
 
@@ -109,9 +108,9 @@ gateseal configure --capability hygiene \
 
 You can add `--capability python`, `--capability secrets`, or `--ci github`.
 PyPI never changes a file after upload, so every clone and every GitHub
-Actions run gets the same wheel. Activation checks its SHA-256 before it
-installs it. [Configure and commit](configure-a-repository.md#configure-and-commit)
-to prepare the checks.
+Actions run gets the same wheel. The generated workflow checks its SHA-256
+before it installs it. [Configure and commit](configure-a-repository.md#configure-and-commit)
+the generated files.
 
 ### Pin a copy on GitHub
 
@@ -140,9 +139,7 @@ gateseal configure --capability hygiene \
   --compiler-sha256 WHEEL_SHA256
 ```
 
-The Lock records the local path. On another machine, run
-`gateseal activate --compiler-wheel` with the absolute path of a copy that has
-the same filename and digest.
+The Lock records the local path.
 
 ## Install a reviewed wheel
 

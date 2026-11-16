@@ -64,7 +64,7 @@ MISMATCH = check_answer(
     "Lock inputs or ownership disagree with the selected policy.",
     ["gateseal configure"],
 )
-UPGRADE = upgrade.Request(None, (None, SOURCE, ARTIFACT.sha256), {}, None, None, False)
+UPGRADE = upgrade.Request(None, (None, SOURCE, ARTIFACT.sha256), {}, None, None)
 
 
 def install_stub(tmp_path, monkeypatch, answer, status, claims=()):

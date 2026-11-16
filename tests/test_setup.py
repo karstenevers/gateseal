@@ -19,6 +19,7 @@ import pre_commit
 import pytest
 from gateseal import setup
 from gateseal.cli import main
+from gateseal.diagnostics import GatesealError
 from installation import process, success
 
 PYTHON = "{}.{}".format(*sys.version_info)
@@ -184,6 +185,20 @@ def test_setup_installs_pre_commit_and_the_launcher_for_new_clones(machine, tmp_
     committed = commit(clone)
     assert committed.returncode == 0, committed.stdout + committed.stderr
     assert "config file not found. Skipping `pre-commit`." in committed.stderr
+
+
+def test_only_the_pre_commit_that_setup_installed_is_required(machine):
+    with pytest.raises(GatesealError) as failure:
+        setup.require_pre_commit()
+    assert (failure.value.code, failure.value.exit_code, failure.value.next_step) == (
+        "needs_setup",
+        3,
+        "gateseal setup",
+    )
+    assert str(machine.root / "tools") in str(failure.value)
+    assert gateseal("setup")[0] == 0
+    python = machine.root / "tools" / "pre-commit" / "bin" / "python"
+    assert setup.require_pre_commit() == str(python)
 
 
 def test_a_second_setup_changes_nothing(machine):
@@ -609,27 +624,38 @@ def test_setup_refuses_an_old_git_or_uv(machine):
     assert not machine.root.exists()
 
 
+NEED = (
+    "A Policy with a release binary, such as Betterleaks, needs mise 2026.10.19 "
+    "or later, and"
+)
+
+
 @pytest.mark.parametrize(
-    ("mise", "category", "found"),
+    ("mise", "category", "message"),
     [
-        (None, "missing_prerequisite", "none is"),
-        ('echo "2026.10.18 linux-x64 (2026-10-18)"\n', "mise_version_mismatch", "an"),
+        (None, "missing_prerequisite", f"{NEED} none is on PATH."),
+        (
+            'echo "2026.10.18 linux-x64 (2026-10-18)"\n',
+            "mise_version_mismatch",
+            f"{NEED} an older one is on PATH.",
+        ),
+        (
+            "echo broken >&2\nexit 1\n",
+            "tool_failed",
+            "The mise on PATH did not report its version: broken",
+        ),
     ],
 )
-def test_setup_warns_about_a_missing_or_old_mise(machine, mise, category, found):
+def test_setup_warns_about_a_missing_old_or_broken_mise(
+    machine, mise, category, message
+):
     (machine.shims / "mise").unlink()
     if mise:
         machine.shim("mise", mise)
     code, result = gateseal("setup")
     assert (code, result["code"]) == (0, "set_up")
-    expected = "none is" if found == "none is" else "an older one is"
     assert notes(result) == [
-        {
-            "severity": "warning",
-            "category": category,
-            "message": "A Policy with a release binary, such as Betterleaks, needs "
-            f"mise 2026.10.19 or later, and {expected} on PATH.",
-        }
+        {"severity": "warning", "category": category, "message": message}
     ]
 
 

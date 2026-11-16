@@ -83,10 +83,8 @@ its own current preparation. The machine's interpreter store holds the Python
 interpreters and hook environments that worktrees can reuse.
 See [How a commit runs](how-a-commit-runs.md).
 
-The compiler release fixes CPython and pre-commit. A policy can also pin a
-[Hook Python](policy-format.md#hook-python) for Python-language hooks. For
-example, a formatter can then parse syntax newer than the compiler's Python.
-To change pre-commit itself, [upgrade the compiler](upgrade.md#compiler-targets).
+The compiler release fixes CPython and pre-commit. To change pre-commit
+itself, [upgrade the compiler](upgrade.md#compiler-targets).
 
 ## What gateseal trusts
 

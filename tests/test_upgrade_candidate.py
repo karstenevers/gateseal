@@ -52,7 +52,7 @@ def configured(policy):
 
 
 def planned(current, root, policy=None, components=None, flags=(None, None)):
-    request = upgrade.Request(policy, FLAGS, components or {}, *flags, False)
+    request = upgrade.Request(policy, FLAGS, components or {}, *flags)
     compiler = candidate.Candidate(sys.executable, TARGET)
     return upgrade._plan_candidate(current, request, compiler, find_git(root), root)
 

@@ -25,12 +25,12 @@ name under a capability in `policy.toml`.
 | Field | Accepted value or purpose |
 | --- | --- |
 | `kind` | `pre-commit-repository` or `release-binary`. gateseal reads this field first. |
-| `stages` | All three stages, `["commit", "run", "ci"]`. |
+| `stages` | `["commit", "run", "ci"]` for a tool that runs everywhere, or `["ci"]` for a tool that runs only in the [CI gate](github-ci.md#the-gate). |
 | `scope` | `files`. pre-commit passes filenames to the hooks. |
-| `removed_prefixes` | Unique environment variable prefixes, such as `GITLEAKS_`. While the tool is selected, gateseal removes matching variables from each process it starts. A prefix must preserve `GIT_DIR` and `GIT_INDEX_FILE`, which identify the index being committed. |
+| `removed_prefixes` | Unique environment variable prefixes, such as `GITLEAKS_`. A prefix must preserve `GIT_DIR` and `GIT_INDEX_FILE`. The field does not change how a hook starts: see [Environment](#environment). |
 | `source` | The [source fields for the tool's kind](#kinds). |
 | `configuration.format` | Optional. Use `toml` if the policy supplies a configuration. Configure writes it to `.gateseal/<name>.toml`. |
-| `executable` | Describes the prepared program and its version check. Required for a release binary. |
+| `executable` | Names the program that a hook starts. Required for a release binary. |
 | `files.<key>` | Optional. A lowercase `extension` and text `content` with LF line endings. Configure writes the file to `.gateseal/<name>-<key>.<extension>`. |
 | `hooks.<id>` | A [hook](#hooks). Define at least one. |
 | `history.args` | Optional for a release binary. Arguments for a revision-range scan in the [CI gate](github-ci.md#the-gate). Include `{range}` exactly once. |
@@ -50,7 +50,7 @@ field.
 | `name` | The name pre-commit displays. Each hook ID and name must be unique across the policy. |
 | `args` | Optional. Literal arguments to pass to the hook. |
 | `types_or` | Optional. The pre-commit file types to match. |
-| `probe` | A command for activation and `doctor` to run at the worktree root. Start with the bare name of a program the tool kind prepares. The probe receives no filenames and reads empty standard input. |
+| `probe` | A command that shows the hook works, without filenames and with empty standard input. Start with the bare name of the tool's program. No command runs it. |
 | `output` | Use `concise` for findings in the form `file:line:column: rule message`. gateseal reports each as a JSON `finding`. Use `plain` to report only passed, failed, or modified. |
 
 To pass an owned file, use `{configuration}` or `{<files key>}` as a whole
@@ -62,9 +62,9 @@ such as `/dev/null`, directly to the tool without a shell.
 
 | Field | Accepted value or purpose |
 | --- | --- |
-| `name` | The bare program name. A release-binary hook runs it through the prepared attempt's `tools/gateseal-<name>` link. Start each release-binary probe with this name. |
-| `version` | The arguments that make the program print its version. |
-| `version_output` | A regular expression for the entire output after trimming whitespace. Include `{version}` once. It matches the exact selected version, so `8.30.10` cannot satisfy a pin of `8.30.1`. |
+| `name` | The bare program name. A release-binary hook starts it through mise. Start each release-binary probe with this name. |
+| `version` | The arguments that make the program print its version. No command runs them. |
+| `version_output` | A regular expression for the entire output after trimming whitespace. Include `{version}` once. |
 
 Declare an executable for a pre-commit repository if it installs its tool
 from a package index by version, as `ruff-pre-commit` does. For hooks
@@ -81,10 +81,9 @@ or a trailing slash. Include `{version}` in the pattern, for example
 `v{version}`.
 
 `gateseal policy lock` records the commit each reviewed tag points to.
-pre-commit clones that commit and builds the hook environment. It uses the
-policy's [Hook Python](policy-format.md#hook-python) if set. Otherwise it
-uses the compiler runtime's CPython. Activation rejects an environment built
-with a different interpreter.
+pre-commit clones that commit and builds the hook environment at the hook's
+first use. A Python hook runs on the Python that `gateseal setup` installed
+pre-commit with.
 
 ### `release-binary`
 
@@ -96,9 +95,26 @@ with a different interpreter.
 | `platforms` | Map each platform the tool supports to its name in the release filenames. Include at least one of `linux-x64` and `macos-arm64`. |
 
 `gateseal policy lock` downloads each new archive and verifies the published
-SHA-256. It records the archive URL and checksum for each platform. During
-activation, mise installs the verified binary inside the prepared attempt.
-pre-commit runs it as a `local` hook.
+SHA-256. It records the archive URL and checksum for each platform, and the
+hook's entry in `.pre-commit-config.yaml` names them. pre-commit runs the
+entry as a `local` hook, one start at a time. At the first use, mise
+downloads the archive for the machine's platform, checks the checksum, and
+installs it once for all repositories on the machine that lock the same
+archives. The tool name in the entry ends in a digest of the archives, so a
+policy with other archives for the same version gets its own install.
+
+### Environment
+
+A release binary starts through `mise --no-config exec --deny-env`. No mise
+file changes which archive runs, and the program gets only the variables that
+mise keeps, such as `HOME` and `PATH`. The gate's history scan also gets
+`GIT_NO_LAZY_FETCH`. A hook of a pre-commit repository gets
+the caller's environment, so a variable such as `RUFF_OUTPUT_FILE` reaches
+Ruff.
+
+mise does not check an installed tool again. With its install turned off by
+`MISE_AUTO_INSTALL` or `MISE_EXEC_AUTO_INSTALL`, mise starts a program of the
+same name from `PATH`, and `gateseal doctor` warns about it.
 
 ## Choices
 
@@ -117,11 +133,9 @@ version supports.
 
 ## What a team definition guarantees
 
-The tool kind enforces the exact pin and verifies the recorded commit or
-checksum. Activation and `doctor` check the prepared tool. gateseal runs
-the prepared program, uses the owned configuration, and removes environment
-variables with the declared prefixes. If preparation is missing or invalid,
-the check stops and points to `gateseal activate`.
+The tool kind enforces the exact pin: pre-commit clones the recorded commit,
+and mise checks the recorded checksum before it installs a binary. Each hook
+uses the owned configuration. A hook that cannot start stops the commit.
 
 The compiler treats the definition as data and runs programs only through
 the selected kind. Review the tool's own behavior and arguments separately.

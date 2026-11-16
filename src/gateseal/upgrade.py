@@ -5,8 +5,7 @@ It starts from a worktree whose Manifest and Lock agree, plans every target,
 and renders the result with the compiler that the result pins: this one, or
 the candidate that a compiler target installs. Every target and every
 requirement between components is checked before the first write, and the
-writes follow configure's ownership rules. Activation runs only when asked,
-after the tracked files are written, so a failed activation keeps them.
+writes follow configure's ownership rules.
 """
 
 import contextlib
@@ -15,15 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
-from gateseal import (
-    bootstrap,
-    candidate,
-    hook_python,
-    lock,
-    manifest_toml,
-    runtime,
-    sources,
-)
+from gateseal import candidate, lock, manifest_toml, runtime, sources
 from gateseal.bootstrap import LOCK, MANIFEST
 from gateseal.compiler_release import CompilerArtifact, artifact_from_flags
 from gateseal.diagnostics import GatesealError, Note, Result
@@ -42,13 +33,10 @@ from gateseal.validation import (
     canonical,
     decode_json,
     mapping,
-    sequence,
     version,
     version_key,
 )
 from gateseal.worktree import Worktree
-
-ACTIVATE = "gateseal activate"
 
 RESTORE = (
     "Run gateseal configure after an edit of gateseal.toml. If an interrupted "
@@ -79,7 +67,6 @@ class Request:
     components: Mapping[str, str | None]
     reason: str | None
     review_by: date | None
-    activate: bool
 
 
 def components(arguments: list[str]) -> dict[str, str | None]:
@@ -121,14 +108,6 @@ def _unknown(name: str, policy: Policy) -> GatesealError:
             next_step="Upgrade the compiler to the release that carries the "
             "pre-commit you need, with --compiler-source or --compiler-wheel and "
             "--compiler-sha256.",
-        )
-    if name == hook_python.COMPONENT:
-        return GatesealError(
-            "runtime_target",
-            "python is the Compiler Runtime's CPython, which moves only with the "
-            "compiler. A policy's Hook Python moves only with the policy release.",
-            next_step="Upgrade the compiler, or the policy to a release that pins "
-            "the Hook Python you need.",
         )
     return GatesealError(
         "unsupported_component",
@@ -386,16 +365,11 @@ def _state(before: str, after: str) -> str:
     # pytestmut: on
 
 
-HOOK_PYTHON = "hook-python"
-"""The Hook Python's target, which differs from the runtime's python."""
-
-
 def _target_entry(
     target: str, before: str | None, after: str | None, state: str, note: str = ""
 ) -> dict[str, object]:
     """Describe one target's move; an added one has no before, a removed no after."""
     moved = " to ".join(dict.fromkeys(v for v in (before, after) if v is not None))
-    label = "Hook Python" if target == HOOK_PYTHON else target
     return {
         "severity": "info",
         "category": "upgrade",
@@ -403,7 +377,7 @@ def _target_entry(
         "state": state,
         "from": before,
         "to": after,
-        "message": f"{label} {moved}: {state}{note}.",
+        "message": f"{target} {moved}: {state}{note}.",
     }
 
 
@@ -411,8 +385,7 @@ def _versions(document: dict[str, object]) -> dict[str, str]:
     """Return each component's version that a Lock records, by its target."""
     found: dict[str, str] = {}
     for key, record in mapping(document.get("components"), "components").items():
-        name = HOOK_PYTHON if key == hook_python.COMPONENT else key
-        found[name] = str(mapping(record, key).get("version"))
+        found[key] = str(mapping(record, key).get("version"))
     for name, record in mapping(document.get("native_artifacts"), "native").items():
         found[name] = str(mapping(record, name).get("version"))
     return found
@@ -536,8 +509,14 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
             f"Install the command of gateseal {release} as Install a reviewed wheel "
             "shows; only it runs gateseal commands on the new Lock."
         )
+    pre_commit = _runtime(after)["pre-commit"]
+    if pre_commit != _runtime(before)["pre-commit"]:
+        steps.append(
+            f"Run gateseal setup with the command of gateseal {release}, so git "
+            f"commit runs pre-commit {pre_commit}."
+        )
     if written:
-        steps += [ACTIVATE, "Review git diff, then stage and commit the changed files."]
+        steps.append("Review git diff, then stage and commit the changed files.")
     return Result(
         "upgrade",
         "upgraded" if written else "unchanged",
@@ -549,54 +528,6 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
         details="\n".join(str(entry["message"]) for entry in entries),
         notes=plan.notes,
         entries=tuple(entries),
-    )
-
-
-def _activation_failed(
-    result: Result, failure: GatesealError, remaining: list[str]
-) -> Result:
-    """Report a failed activation the way gateseal activate reports it."""
-    return replace(
-        result,
-        code="activation_failed",
-        exit_code=failure.exit_code,
-        message=f"{result.message} Activation failed with {failure.code}, and the "
-        f"tracked files stay upgraded: {failure}",
-        next_steps=tuple(dict.fromkeys((failure.next_step or ACTIVATE, *remaining))),
-    )
-
-
-def _activate(
-    worktree: Worktree,
-    preparation: Path,
-    result: Result,
-    compiler: candidate.Candidate | None,
-) -> Result:
-    """Activate the upgraded Lock with the compiler it pins, keeping the upgrade."""
-    remaining = [step for step in result.next_steps if step != ACTIVATE]
-    try:
-        if compiler is not None:
-            done = compiler.run(worktree.root, "activate")
-            changed = tuple(map(str, sequence(done.get("changed", []), "changed")))
-            steps = tuple(map(str, sequence(done.get("next_steps", []), "steps")))
-        else:
-            with runtime.operation_lock(preparation):
-                locked = lock.load(worktree.root, preparation)
-                activated = runtime.activate(worktree, locked, None)
-            changed, steps = activated.changed, activated.next_steps
-    except GatesealError as exc:
-        return _activation_failed(result, exc, remaining)
-    except bootstrap.BootstrapError as exc:
-        failure = GatesealError("needs_activation", str(exc), 3, exc.next_step)
-        return _activation_failed(result, failure, remaining)
-    except OSError as exc:
-        failure = GatesealError("filesystem_error", str(exc), 4)
-        return _activation_failed(result, failure, remaining)
-    return replace(
-        result,
-        message=result.message + " Activated the result.",
-        changed=(*result.changed, *changed),
-        next_steps=(*steps, *remaining),
     )
 
 
@@ -622,9 +553,9 @@ def _write(
 
 
 def run(worktree: Worktree, request: Request) -> Result:
-    """Plan every target, write the tracked files, and activate when asked."""
+    """Plan every target and write the tracked files."""
     root, git = worktree.root, worktree.git
-    local = runtime.preparation_directory(worktree, create=True)
+    local = runtime.preparation_directory(worktree)
     artifact = (
         artifact_from_flags(*request.compiler, release=None)
         if request.compiler
@@ -649,7 +580,4 @@ def run(worktree: Worktree, request: Request) -> Result:
                 # pytestmut: off[stmt.call_remove] -- the files it just wrote load
                 lock.load(root, local)
                 # pytestmut: on
-        result = _result(before, plan, changes.names)
-        if request.activate:
-            result = _activate(worktree, local, result, compiler)
-    return result
+        return _result(before, plan, changes.names)

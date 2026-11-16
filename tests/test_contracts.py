@@ -7,7 +7,7 @@ from gateseal import bootstrap
 from gateseal.compiler_release import CompilerArtifact
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
-from gateseal.lock import Snapshot, compile_outputs, validate_snapshot
+from gateseal.lock import compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import (
     Asset,
@@ -149,6 +149,20 @@ def test_policy_rejects_invalid_inputs(tmp_path, change, replacement, category):
     with pytest.raises(GatesealError) as failure:
         load_policy_tree(tmp_path)
     assert failure.value.code == category
+
+
+def test_policy_names_the_component_that_is_no_tool_of_a_capability(tmp_path):
+    tree(tmp_path)
+    path = tmp_path / "policy.toml"
+    text = path.read_text()
+    path.write_text(text.replace("[components.betterleaks]", "[components.black]", 1))
+    with pytest.raises(GatesealError) as failure:
+        load_policy_tree(tmp_path)
+    assert str(failure.value) == (
+        "This policy's capabilities need exactly the components betterleaks, "
+        "pre-commit-hooks, ruff, so components.black is missing or names no tool "
+        "of a capability."
+    )
 
 
 def test_policy_names_its_reviewed_versions():
@@ -517,13 +531,9 @@ def test_all_contracts_reject_unknown_or_boolean_schema(installed, configured):
     for key, value in (("schema", True), ("surprise", "value")):
         document = json.loads(locked.snapshot.lock)
         document[key] = value
-        snapshot = Snapshot(
-            locked.snapshot.manifest,
-            json.dumps(document).encode(),
-            locked.snapshot.outputs,
-        )
+        (configured / "gateseal.lock").write_text(json.dumps(document))
         with pytest.raises(GatesealError):
-            validate_snapshot(configured, snapshot, preparation)
+            load(configured, preparation)
 
 
 def test_diagnostics_redact_complete_output():

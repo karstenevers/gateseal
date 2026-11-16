@@ -1,8 +1,8 @@
 """Tool Definitions, and what every Tool Kind shares.
 
 A Tool Definition is data that parameterizes one Tool Kind. Each kind's module
-owns its [source] table, its policy release fields, its rendering, its Lock
-record and its preparation. This module holds what every kind shares, so no
+owns its [source] table, its policy release fields, its rendering and its Lock
+record. This module holds what every kind shares, so no
 kind renders a hook argument, an owned output or a local hook its own way.
 
 Every placeholder is resolved, and every closed value checked, when a
@@ -14,13 +14,12 @@ from __future__ import annotations
 import json
 import re
 import shlex
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
-from gateseal.bootstrap import TOOL_PREFIX
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.choices import Choice, parse_choices
 from gateseal.validation import fields, mapping, sequence, string, version_key
@@ -35,10 +34,10 @@ Its language, unsupported, came with pre-commit 4.4.0.
 """
 
 NAME = re.compile(r"[a-z][a-z0-9-]*")
-"""A tool's, hook's or file's name, as owned paths and prepared links use it."""
+"""A tool's, hook's or file's name, as owned paths use it."""
 
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-"""An executable's bare name, which its kind resolves to one it prepared."""
+"""An executable's bare name, which its kind finds in the tool it installs."""
 
 PREFIX = re.compile(r"[A-Z][A-Z0-9]*_")
 
@@ -61,9 +60,18 @@ HOOK_STAGES: Mapping[Stage, str] = {
     Stage.RUN: "pre-commit",
     Stage.CI: "manual",
 }
-"""The pre-commit stage that runs each Stage's hooks, as --hook-stage names it.
+"""The pre-commit stage that runs each Stage's hooks, as --hook-stage names it."""
 
-A built-in hook has no stages key, so pre-commit runs it in every stage.
+STAGE_SETS: Mapping[frozenset[Stage], tuple[str, ...]] = {
+    stages: tuple(
+        dict.fromkeys(HOOK_STAGES[stage] for stage in Stage if stage in stages)
+    )
+    for stages in (frozenset(Stage), frozenset({Stage.CI}))
+}
+"""The stages a definition may list, and the stages its hooks name for them.
+
+pre-commit cannot tell a commit from gateseal run, so commit and run go
+together. A hook outside the ci stage would not be part of the gate.
 """
 
 
@@ -192,9 +200,18 @@ class Hook:
     probe: tuple[str, ...]
     output: OutputFormat
 
-    def base_entry(self, exclude: str | None) -> dict[str, object]:
-        """Return the native configuration keys every rendering of the hook shares."""
-        entry: dict[str, object] = {"id": self.id, "name": self.name}
+    def base_entry(
+        self, exclude: str | None, stages: frozenset[Stage]
+    ) -> dict[str, object]:
+        """Return the native configuration keys every rendering of the hook shares.
+
+        stages is the definition's, which STAGE_SETS holds.
+        """
+        entry: dict[str, object] = {
+            "id": self.id,
+            "name": self.name,
+            "stages": list(STAGE_SETS[stages]),
+        }
         if self.types_or:
             entry["types_or"] = list(self.types_or)
         if exclude is not None:
@@ -288,14 +305,12 @@ class Source(Protocol):
     """A definition's [source] table as its kind parsed it, and the kind's rules.
 
     kind is the kind's value of the definition's kind field. local says that
-    the kind's hooks run the prepared executable through the attempt's tools
-    link, as local_repository renders them. python says that the kind's hooks
-    run on a Python interpreter, which a policy's Hook Python replaces.
+    the kind's hooks start the tool's own executable, as local_repository
+    renders them.
     """
 
     kind: ClassVar[str]
     local: ClassVar[bool]
-    python: ClassVar[bool]
 
     def offer(
         self,
@@ -336,9 +351,9 @@ class ToolDefinition:
     to, .gateseal/<name>.<format>; files maps each fixed owned output,
     .gateseal/<name>-<key>.<extension>, to its bytes. Both are derived from
     the name, so a definition cannot name a path the compiler does not own.
-    stages and scope are closed values that no rendering reads yet, because
-    this compiler renders every tool into every stage and implements one
-    scope. history holds the arguments of the prepared
+    stages is one of STAGE_SETS' sets, which every hook's stages render.
+    scope is a closed value that no rendering reads yet, because this
+    compiler implements one scope. history holds the arguments of the tool's
     executable that scan a revision range, one of which holds RANGE, where
     the CI gate puts the range; only a kind whose hooks are local has one.
     choices holds the Policy Choices the definition declares, by name; only a
@@ -483,9 +498,10 @@ def _hook(
 
 def _stages(value: object, field: str) -> frozenset[Stage]:
     listed = [closed(item, Stage, field) for item in sequence(value, field)]
-    if set(listed) != set(Stage) or len(set(listed)) != len(listed):
+    stages = frozenset(listed)
+    if stages not in STAGE_SETS or len(stages) != len(listed):
         raise unsupported(field, ", ".join(listed))
-    return frozenset(listed)
+    return stages
 
 
 def _removed_prefixes(value: object, field: str) -> tuple[str, ...]:
@@ -529,7 +545,7 @@ def _history(
         raise GatesealError(
             "invalid_field",
             f"{field}.args must hold {RANGE} once, and only a tool "
-            "whose hooks run its prepared executable scans history.",
+            "whose hooks start its own executable scans history.",
         )
     return history
 
@@ -554,9 +570,8 @@ def parse_definition(
 
     The caller has read kind. The other closed values are read before any
     other field, so a newer compiler's value stops with the step to use it.
-    stages must name every Stage, since this compiler renders every tool into
-    every stage. A kind whose hooks are local needs an executable, and each
-    of its probes must start with that executable, which the link replaces.
+    A kind whose hooks are local needs an executable, and each of its probes
+    must start with that executable.
     """
     field = f"tools.{name}"
     stages = _stages(document.get("stages"), f"{field}.stages")
@@ -688,12 +703,17 @@ class Tool(Protocol):
         """Return this tool running only hooks, some of its use's in their order."""
         ...
 
-    def entry(self, exclude: str | None, python: str | None) -> dict[str, object]:
-        """Return its one repository in the native pre-commit configuration.
+    def program(self, variables: Collection[str] = ()) -> tuple[str, ...] | None:
+        """Return the command that starts the tool's executable, or None.
 
-        python is the language_version that names the Hook Python, which a kind
-        whose hooks run on Python renders for each hook.
+        Only a kind whose hooks are local has one. variables names the caller's
+        environment variables that the executable also gets. The gate starts a
+        history scan with it.
         """
+        ...
+
+    def entry(self, exclude: str | None) -> dict[str, object]:
+        """Return its one repository in the native pre-commit configuration."""
         ...
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:
@@ -709,8 +729,7 @@ def owned_outputs(tool: Tool, chosen: Mapping[str, object]) -> dict[str, bytes]:
     tool's capability. Each of the definition's choices that chosen holds
     renders as one line, key = "value", before the policy's configuration and
     in definition order, so it stays a top-level key whatever tables the policy
-    declares. Without one, the configuration is the policy's bytes. Outputs a
-    kind owns across its tools, such as mise.toml, come from the kind.
+    declares. Without one, the configuration is the policy's bytes.
     """
     outputs = dict(tool.definition.files)
     # pytestmut: off[bool.and_or] -- a use has one when its definition does
@@ -726,23 +745,27 @@ def owned_outputs(tool: Tool, chosen: Mapping[str, object]) -> dict[str, bytes]:
 
 
 def local_repository(
-    tool: str, hooks: Iterable[Hook], exclude: str | None
+    program: Sequence[str],
+    hooks: Iterable[Hook],
+    exclude: str | None,
+    stages: frozenset[Stage],
 ) -> dict[str, object]:
-    """Render hooks that run a prepared executable through the attempt's tools link.
+    """Render hooks that start a tool's own executable with program.
 
-    No single kind owns this rendering: the release-binary kind uses it today
-    and a planned project-environment kind will. Each entry is the link
-    gateseal-<tool> and the hook's args, joined so pre-commit's shlex split
-    returns them exactly; pre-commit appends file names and starts no shell.
-    Its hooks need LOCAL_MINIMUM_PRE_COMMIT.
+    Each entry is program and the hook's args, joined so pre-commit's shlex
+    split returns them exactly; pre-commit appends file names and starts no
+    shell. Its hooks need LOCAL_MINIMUM_PRE_COMMIT. pre-commit starts one
+    process of a hook at a time, because two first starts of one program at
+    once can fail while the program is installed.
     """
     return {
         "repo": "local",
         "hooks": [
-            hook.base_entry(exclude)
+            hook.base_entry(exclude, stages)
             | {
                 "language": "unsupported",
-                "entry": shlex.join([TOOL_PREFIX + tool, *hook.args]),
+                "entry": shlex.join([*program, *hook.args]),
+                "require_serial": True,
             }
             for hook in hooks
         ],

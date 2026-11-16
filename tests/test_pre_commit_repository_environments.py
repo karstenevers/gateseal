@@ -29,7 +29,7 @@ from gateseal.tools.pre_commit_repository import (
     stored_repositories,
 )
 from installation import success
-from prepared_attempts import executable
+from stand_ins import executable
 
 INTERPRETER = Path(sys.executable).resolve()
 HOOKS = ("trailing-whitespace-fixer", "end-of-file-fixer", "check-yaml")

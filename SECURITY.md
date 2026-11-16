@@ -18,10 +18,10 @@ unless you prefer not to be named.
 
 ## Scope
 
-gateseal pins the compiler, the policy and every tool in a lock, and runs only
-what activation prepared from it. These are in scope:
+gateseal pins the compiler, the policy and every tool in a lock. A commit and
+the CI gate run only the tools that the lock records. These are in scope:
 
-- A way to make gateseal fetch, prepare or run anything other than what the
+- A way to make gateseal fetch, install or run anything other than what the
   lock records.
 - A way for a gateseal command or a generated file to expose a credential.
 

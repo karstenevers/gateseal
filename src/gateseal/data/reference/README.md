@@ -29,7 +29,7 @@ this README and every other file.
   `gateseal policy add` writes it the same way. Run lock after you add or
   remove a reviewed version by hand, and never edit `policy.lock` by hand.
 - `gateseal policy check` proves offline that `policy.lock` agrees with
-  `policy.toml`. Run it before you commit. Configure and activation refuse a
+  `policy.toml`. Run it before you commit. Configure and check refuse a
   policy that fails it.
 
 `gateseal policy lock` never changes a fact that `policy.lock` already

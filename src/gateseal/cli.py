@@ -7,9 +7,9 @@ from typing import NoReturn, cast
 from gateseal import (
     __version__,
     authoring,
-    bootstrap,
     checks,
     ci,
+    health,
     lock,
     runtime,
     setup,
@@ -63,7 +63,7 @@ def _options(
 def _parser() -> Parser:
     parser = Parser(
         prog="gateseal",
-        description="Compile and prepare reviewed repository checks.",
+        description="Compile reviewed repository checks and run them.",
         epilog="Examples: gateseal status; gateseal configure --help; "
         "gateseal doctor --json",
     )
@@ -75,17 +75,12 @@ def _parser() -> Parser:
             "gateseal configure --capability hygiene --compiler-wheel "
             "/absolute/gateseal-0.1.0-py3-none-any.whl --compiler-sha256 SHA256"
         ),
-        "activate": (
-            "gateseal activate; "
-            "gateseal activate --compiler-wheel "
-            "/absolute/gateseal-0.1.0-py3-none-any.whl"
-        ),
         "check": "gateseal check --json",
         "upgrade": (
             "gateseal upgrade --policy-tag v2026.12; gateseal upgrade "
             "betterleaks=1.8.0 --reason 'Upstream issue 123' --review-by "
             "2026-12-31; gateseal upgrade betterleaks; gateseal upgrade "
-            "--compiler-source URL --compiler-sha256 SHA256 --activate"
+            "--compiler-source URL --compiler-sha256 SHA256"
         ),
         "run": "gateseal run; gateseal --repo '/work/team repo' run --json",
         "gate": "gateseal gate; gateseal gate --base BASE_SHA --head HEAD_SHA; "
@@ -111,8 +106,6 @@ def _parser() -> Parser:
             child.add_argument(
                 "--ci", choices=["github"], help="Write the CI provider's workflow"
             )
-        elif command == "activate":
-            child.add_argument("--compiler-wheel")
         elif command == "setup":
             child.add_argument(
                 "--refresh",
@@ -143,9 +136,6 @@ def _parser() -> Parser:
                 "--review-by",
                 type=date.fromisoformat,
                 help="Date to review a Version Exception, such as 2026-12-31",
-            )
-            child.add_argument(
-                "--activate", action="store_true", help="Activate the result"
             )
     policy = commands.add_parser(
         "policy",
@@ -182,41 +172,6 @@ GATE_SCOPES = {
 }
 """gate's revision flags, in pairs: --base and --head, or --before and --after."""
 
-UNPREPARED = frozenset({"policy_unavailable", "policy_content_mismatch"})
-"""Missing local policy codes; status checks hook ownership before activation."""
-
-
-def _staged(arguments: list[str]) -> int:
-    """Validate the staged blobs the bootstrap names, then become pre-commit.
-
-    Only bootstrap.main runs this, after its repository, index, staged Lock and
-    seal checks, so it trusts the attempt it is given.
-    """
-    try:
-        attempt, *oids = arguments or [""]
-        record = bootstrap.PreparedRecord.read(Path(attempt))
-        if len(oids) != 2 + len(record.outputs) or not all(
-            ci.OBJECT_ID.fullmatch(oid) for oid in oids
-        ):
-            raise bootstrap.BootstrapError("Unexpected staged arguments.")
-        manifest, staged_lock, *outputs = (
-            bootstrap.read_blob(record.paths.git, record.root, oid) for oid in oids
-        )
-        # pytestmut: off[bool.literal] -- the check above matched the counts
-        snapshot = lock.Snapshot(
-            manifest, staged_lock, dict(zip(record.outputs, outputs, strict=True))
-        )
-        # pytestmut: on
-        locked = lock.validate_snapshot(record.root, snapshot, record.attempt.parent)
-        runtime.exec_pre_commit(record, locked.selection.tools)
-    except GatesealError as exc:
-        step = exc.next_step or bootstrap.CHECK
-        return bootstrap.report(str(exc), step, exc.exit_code)
-    except bootstrap.BootstrapError as exc:
-        return bootstrap.report(str(exc), exc.next_step, 3)
-    except OSError as exc:
-        return bootstrap.report(str(exc), bootstrap.ACTIVATE, 4)
-
 
 def _operation(arguments: argparse.Namespace) -> Result:
     command = cast(str | None, arguments.command) or "status"
@@ -226,47 +181,60 @@ def _operation(arguments: argparse.Namespace) -> Result:
     if command == "setup":
         return setup.run(requested if arguments.refresh else None)
     worktree = locate_worktree(requested)
-    root, preparation = worktree.root, worktree.preparation
     if command == "configure":
-        with runtime.operation_lock(
-            runtime.preparation_directory(worktree, create=True)
-        ):
-            changed, notes = lock.configure(
-                root,
-                worktree.git,
-                preparation,
-                arguments.capability,
-                lock.PolicyRequest(
-                    arguments.policy,
-                    arguments.policy_commit,
-                    arguments.policy_path,
-                    arguments.policy_tag,
-                ),
-                arguments.compiler_wheel,
-                arguments.compiler_source,
-                arguments.compiler_sha256,
-                arguments.ci,
-            )
-        return Result(
-            command,
-            "configured",
-            "Tracked policy is configured.",
-            changed=changed,
-            next_steps=lock.review_steps(notes),
-            notes=notes,
-        )
+        return _configure(worktree, arguments)
     if command == "upgrade":
         return _upgrade(worktree, arguments)
     if command == "status":
-        return _status(worktree)
-    if command == "activate":
-        with runtime.operation_lock(
-            runtime.preparation_directory(worktree, create=True)
-        ):
-            lock.ensure_policy(root, preparation, worktree.git)
-            locked = lock.load(root, preparation)
-            return runtime.activate(worktree, locked, arguments.compiler_wheel)
-    return _locked_operation(worktree, command, arguments)
+        return health.status(worktree)
+    if command == "doctor":
+        return health.doctor(worktree)
+    return _locked(command, worktree, arguments)
+
+
+def _configure(worktree: Worktree, arguments: argparse.Namespace) -> Result:
+    with runtime.operation_lock(runtime.preparation_directory(worktree)):
+        changed, notes = lock.configure(
+            worktree.root,
+            worktree.git,
+            worktree.preparation,
+            arguments.capability,
+            lock.PolicyRequest(
+                arguments.policy,
+                arguments.policy_commit,
+                arguments.policy_path,
+                arguments.policy_tag,
+            ),
+            arguments.compiler_wheel,
+            arguments.compiler_source,
+            arguments.compiler_sha256,
+            arguments.ci,
+        )
+    return Result(
+        "configure",
+        "configured",
+        "Tracked policy is configured.",
+        changed=changed,
+        next_steps=lock.review_steps(notes),
+        notes=notes,
+    )
+
+
+def _locked(command: str, worktree: Worktree, arguments: argparse.Namespace) -> Result:
+    """Run a command that needs a Lock that agrees with the tracked files."""
+    locked = health.load(worktree)
+    if command == "check":
+        notes = lock.describe(locked)
+        return Result(
+            command,
+            "consistent",
+            "Manifest, lock, and native policy agree.",
+            next_steps=lock.review_steps(notes),
+            notes=notes,
+        )
+    if command == "run":
+        return checks.run(locked)
+    return checks.gate(worktree, locked, _scope(worktree, arguments))
 
 
 def _policy(arguments: argparse.Namespace) -> Result:
@@ -299,71 +267,8 @@ def _upgrade(worktree: Worktree, arguments: argparse.Namespace) -> Result:
             upgrade.components(cast(list[str], arguments.components)),
             arguments.reason,
             arguments.review_by,
-            bool(arguments.activate),
         ),
     )
-
-
-def _status(worktree: Worktree) -> Result:
-    root, preparation = worktree.root, worktree.preparation
-    if not (root / bootstrap.MANIFEST).exists():
-        return Result(
-            "status",
-            "unconfigured",
-            "No gateseal manifest exists.",
-            next_steps=("gateseal configure --help",),
-        )
-    try:
-        locked = lock.load(root, preparation)
-    except GatesealError as exc:
-        if exc.code not in UNPREPARED:
-            raise
-        try:
-            runtime.require_owned_hook(worktree)
-        except GatesealError as conflict:
-            return Result(
-                "status",
-                conflict.code,
-                str(conflict),
-                next_steps=(conflict.next_step,) if conflict.next_step else (),
-            )
-        return Result(
-            "status", "needs_activation", str(exc), next_steps=(exc.next_step,)
-        )
-    return runtime.status(worktree, locked)
-
-
-def _locked_operation(
-    worktree: Worktree, command: str, arguments: argparse.Namespace
-) -> Result:
-    """Run check, doctor, run or gate on the worktree's loaded Lock."""
-    root, preparation = worktree.root, worktree.preparation
-    try:
-        locked = lock.load(root, preparation)
-    except GatesealError as exc:
-        if exc.code not in UNPREPARED or command != "check":
-            raise
-        # Activation runs the prepared compiler's check under its own lock,
-        # after it stored the policy, so only a check that must fetch locks.
-        with runtime.operation_lock(
-            runtime.preparation_directory(worktree, create=True)
-        ):
-            lock.ensure_policy(root, preparation, worktree.git)
-        locked = lock.load(root, preparation)
-    if command == "check":
-        notes = lock.describe(locked)
-        return Result(
-            command,
-            "consistent",
-            "Manifest, lock, and native policy agree.",
-            next_steps=lock.review_steps(notes),
-            notes=notes,
-        )
-    if command == "doctor":
-        return runtime.doctor(worktree, locked)
-    if command == "run":
-        return checks.run(worktree, locked)
-    return checks.gate(worktree, locked, _scope(worktree, arguments))
 
 
 def _scope(worktree: Worktree, arguments: argparse.Namespace) -> ci.Scope | None:
@@ -399,7 +304,6 @@ def _command_name(raw: list[str]) -> str:
             if a
             in {
                 "configure",
-                "activate",
                 "check",
                 "upgrade",
                 "run",
@@ -420,8 +324,6 @@ def _command_name(raw: list[str]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     raw = sys.argv[1:] if argv is None else argv
-    if raw[:1] == ["_staged"]:
-        return _staged(raw[1:])
     command = _command_name(raw)
     as_json = "--json" in raw
     # pytestmut: off[cmp.membership] -- a Result of a parse error has no details
@@ -438,10 +340,6 @@ def main(argv: list[str] | None = None) -> int:
             str(exc),
             exc.exit_code,
             next_steps=(exc.next_step,) if exc.next_step else (),
-        )
-    except bootstrap.BootstrapError as exc:
-        result = Result(
-            command, "needs_activation", str(exc), 3, next_steps=("gateseal activate",)
         )
     except OSError as exc:
         result = Result(command, "filesystem_error", str(exc), 4)

@@ -7,30 +7,34 @@ Guarantees this module owns, whatever a definition says:
   <repository>/releases/download/<tag>/<archive>, the definition's executable
   and the SHA-256 that gateseal policy lock read from the release's checksum
   file and checked against the downloaded archive.
-- Verified acquisition: mise installs the archive inside the attempt by that
-  URL and checksum, with no configuration file and no caller MISE_ setting.
-  Commits never start mise.
-- Version proof: activation and doctor run the linked executable's version
-  arguments and refuse any other version, then run each hook's probe.
-- No host fallback: each hook runs only the attempt's tools/gateseal-<name>
-  link, which the record seals and commits check.
-- Closed failure: an unsupported platform, a mise older than MINIMUM_MISE,
-  or a failed probe stops with its next step, before the attempt or inside it.
+- Verified acquisition: each hook starts its executable with mise exec, and
+  the hook's entry names every platform's URL and checksum. mise installs the
+  archive at its first use and checks the checksum. mise names an install by
+  the tool's name and version, so the name carries a digest of the archives:
+  requests share an install on a machine only when their archives are equal.
+- No other source: mise runs with --no-config, so no mise file of the
+  repository or of the user changes the archive or turns the install off.
+- Clean environment: mise exec --deny-env passes the executable only the
+  variables that mise keeps, such as HOME and PATH, and those that the caller
+  names with --allow-env.
+- Closed failure: a wrong checksum, a missing archive or a platform without
+  an archive stops the hook.
+
+mise never checks an installed tool again, and with its auto-install off it
+starts an executable of the same name from the PATH.
 
 Each version's Policy Lock record holds its archives by mise platform. The
-Lock records each tool in native_artifacts under its name. The kind also owns
-.gateseal/mise.toml.
+Lock records each tool in native_artifacts under its name.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import re
 import stat
 import tempfile
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar
@@ -41,7 +45,6 @@ from gateseal.paths import resolved
 from gateseal.platforms import TARGETS, Target
 from gateseal.processes import execute, find_tool
 from gateseal.tools.model import (
-    OWNED,
     Catalog,
     Executable,
     Hook,
@@ -65,10 +68,11 @@ from gateseal.validation import (
     version_key,
 )
 
-MISE = OWNED + "/mise.toml"
+MISE_EXEC = ("mise", "--no-config", "exec", "--deny-env")
+"""Start an executable from a tool that the command names, and from no mise file."""
 
 MINIMUM_MISE = "2026.10.19"
-"""The oldest mise that installs an archive as install and outputs ask it to."""
+"""The oldest mise that installs an archive as a hook's entry asks it to."""
 
 
 @dataclass(frozen=True)
@@ -95,7 +99,6 @@ class ReleaseBinary:
 
     kind: ClassVar[str] = "release-binary"
     local: ClassVar[bool] = True
-    python: ClassVar[bool] = False
     repository: str
     tag: str
     archive: str
@@ -327,8 +330,36 @@ class BinaryTool:
     def using(self, hooks: tuple[Hook, ...]) -> BinaryTool:
         return replace(self, use=replace(self.use, hooks=hooks))
 
-    def entry(self, exclude: str | None, python: str | None) -> dict[str, object]:
-        return local_repository(self.definition.name, self.use.hooks, exclude)
+    @property
+    def mise_request(self) -> str:
+        """Return mise's request for the tool, with every platform's archive.
+
+        mise reads the option platforms_<os>_<arch>_<name> as the nested
+        platforms.<os>-<arch>.<name> of a mise file. A URL, a checksum and a
+        version hold no comma or bracket, which would end an option. mise
+        installs a request once under its tool name and version and never
+        reads its options again, so the tool name ends in a digest of them.
+        """
+        options = ",".join(
+            f"platforms_{platform.replace('-', '_')}_{name}={value}"
+            for platform, archive in sorted(self.release.platforms.items())
+            for name, value in (
+                ("url", archive.url),
+                ("checksum", "sha256:" + archive.sha256),
+            )
+        )
+        digest = hashlib.sha256(options.encode()).hexdigest()[:12]
+        return f"http:{self.definition.name}-{digest}[{options}]@{self.version}"
+
+    def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
+        """Return the command that installs the tool if needed and starts it."""
+        flags = (flag for name in variables for flag in ("--allow-env", name))
+        return (*MISE_EXEC, *flags, self.mise_request, "--", self.executable.name)
+
+    def entry(self, exclude: str | None) -> dict[str, object]:
+        return local_repository(
+            self.program(), self.use.hooks, exclude, self.definition.stages
+        )
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:
         release = self.release
@@ -355,37 +386,6 @@ def _own(tools: Iterable[object]) -> list[BinaryTool]:
         (tool for tool in tools if isinstance(tool, BinaryTool)),
         key=lambda tool: tool.definition.name,
     )
-
-
-def outputs(tools: Iterable[object]) -> dict[str, bytes]:
-    """Return the kind's owned outputs: mise.toml, when a release binary is selected.
-
-    It declares each selected release binary by name, with its version and
-    each platform's URL and checksum.
-    """
-    binaries = _own(tools)
-    if not binaries:
-        return {}
-    lines = [
-        "# gateseal owns this file; gateseal configure writes it from gateseal.lock."
-    ]
-    for tool in binaries:
-        name = json.dumps("http:" + tool.definition.name)
-        if len(lines) > 1:  # pytestmut: skip[num.shift] -- the first tool sees one line
-            lines.append("")
-        lines += [
-            f"[tools.{name}]",
-            f"version = {json.dumps(tool.version)}",
-            "",
-            f"[tools.{name}.platforms]",
-        ]
-        for platform, archive in sorted(tool.release.platforms.items()):
-            url, checksum = (
-                json.dumps(archive.url),
-                json.dumps("sha256:" + archive.sha256),
-            )
-            lines.append(f"{platform} = {{ url = {url}, checksum = {checksum} }}")
-    return {MISE: ("\n".join(lines) + "\n").encode()}
 
 
 @dataclass(frozen=True)
@@ -468,6 +468,18 @@ def require_mise(env: dict[str, str]) -> str:
             4,
         )
     return mise
+
+
+_FOUND = {"missing_prerequisite": "none is", "mise_version_mismatch": "an older one is"}
+"""What the PATH holds for each way require_mise finds no usable mise."""
+
+
+def mise_problem(need: str, error: GatesealError) -> str:
+    """Complete need with what require_mise found, or report mise's own failure."""
+    found = _FOUND.get(error.code)
+    if found is None:
+        return f"The mise on PATH did not report its version: {str(error).strip()}"
+    return f"{need} mise {MINIMUM_MISE} or later, and {found} on PATH."
 
 
 def _mise_environment(directory: Path, env: dict[str, str]) -> dict[str, str]:

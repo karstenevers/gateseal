@@ -97,8 +97,8 @@ See [Configure a repository](configure-a-repository.md).
 With an existing Manifest, omitted options keep its settings. Supplied
 capabilities must match the complete selected set, and source flags must
 match the Manifest. Conflicting flags produce `configure_assertion_failed`.
-Edit the Manifest and run configure again. Configure and activation preserve
-an existing compiler pin and source.
+Edit the Manifest and run configure again. Configure preserves an existing
+compiler pin and source.
 
 ## Flat policy
 
@@ -120,7 +120,7 @@ an existing compiler pin and source.
 | `compiler` | `name`, `version`, wheel `filename`, `sha256`, and `source`. |
 | `policy` | `kind`, `release`, and content `digest`. A bundled policy also records `compiler_sha256`. A Git policy records `repository`, `path`, `commit`, and `tag`. |
 | `runtime` | The compiler's `minimum_uv`, `python`, and `pre_commit` installation records. See [Compiler runtime](compiler-runtime.md). |
-| `components` | Selected hook repositories. When the policy selects a separate Hook Python for Python hooks, `python` records its version and platform downloads. |
+| `components` | Selected hook repositories. |
 | `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. |
 | `choices` | Values for selected capabilities, including defaults. |
 | `exceptions` | Each component's selected `version`, policy `pin`, `reason`, and `review_by`. |
@@ -149,18 +149,14 @@ interprets the rest of the Lock.
     - On `raw.githubusercontent.com`. The path must contain the owner,
       repository, full 40-character commit ID, and wheel path.
 
-You can supply a local wheel to activation if the recorded location is
-unavailable. Its SHA-256 must match. The Lock keeps its original location.
-
 ## Owned outputs
 
 | Generated file | What to review |
 | --- | --- |
-| `.pre-commit-config.yaml` | The selected hooks in policy order. The file uses JSON syntax that pre-commit accepts as YAML. |
+| `.pre-commit-config.yaml` | The selected hooks in policy order, each with its stages. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
 | `.gateseal/ruff.toml` | The selected target version and the policy's Ruff rules. |
 | `.gateseal/betterleaks.toml` | The policy's secret detection rules. |
 | `.gateseal/betterleaks-report.tmpl`, `.gateseal/betterleaks-history-report.tmpl` | Redacted findings. The history report also names the commit. |
-| `.gateseal/mise.toml` | Release binary versions, URLs, and checksums. |
 | `.github/workflows/gateseal.yml` | The CI workflow when enabled. |
 | `.gateseal/<tool>.<format>`, `.gateseal/<tool>-<key>.<extension>` | Configuration and fixed files declared by a team-defined tool. |
 
@@ -174,7 +170,8 @@ column, and rule. `ruff-format` formats matching files. Both use
 `.gateseal/ruff.toml` for Python files, stubs, and notebooks, including
 files under directories with their own Ruff configuration.
 
-The Betterleaks hook runs the prepared `gateseal-betterleaks` executable.
+The Betterleaks hook starts `betterleaks` through mise, which installs the
+version in the hook's entry at the first use.
 It ignores repository ignore files and inline allow comments. Its report
 shows the location and rule without the line of source that held the
 secret. Both Ruff and Betterleaks treat filenames that start with a hyphen

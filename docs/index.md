@@ -22,7 +22,7 @@ those same tools in CI.
 
 ## Find an answer
 
-- [Troubleshoot a failed check or activation](troubleshooting.md).
+- [Troubleshoot a failed check or commit](troubleshooting.md).
 - [Look up a command or result](commands-and-results.md) or [find a term in the glossary](../GLOSSARY.md).
 - [Follow a commit through its checks](how-a-commit-runs.md) or [read about the architecture](architecture.md).
 - [See what the tests cover](what-the-tests-prove.md) or [build and test gateseal](verification.md).

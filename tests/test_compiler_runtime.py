@@ -209,7 +209,7 @@ def tracked(root):
 
 
 @pytest.mark.integration
-def test_pre_commit_exception_stops_configure_and_commits(installed, prepared):
+def test_pre_commit_exception_stops_configure_and_check(installed, prepared):
     manifest = prepared / "gateseal.toml"
     before = tracked(prepared)
     with preserved(manifest) as original:
@@ -218,16 +218,8 @@ def test_pre_commit_exception_stops_configure_and_commits(installed, prepared):
         assert result["code"] == "runtime_exception"
         assert result["next_steps"] == [REMOVE_EXCEPTION]
         assert tracked(prepared) | {manifest.name: original} == before
-        success(["git", "add", manifest.name], prepared)
-        try:
-            commit = process(["git", "commit", "-m", "Exception"], prepared)
-            assert commit.returncode != 0
-            assert commit.stderr.startswith("gateseal: exceptions.pre-commit "), (
-                commit.stderr
-            )
-            assert f"Next: {REMOVE_EXCEPTION}" in commit.stderr
-        finally:
-            success(["git", "reset", "-q", "--", manifest.name], prepared)
+        refused = installed.cli(prepared, "check", code=2)
+        assert refused["code"] == "runtime_exception"
     assert success(["git", "status", "--porcelain"], prepared).stdout == ""
 
 
@@ -247,7 +239,7 @@ def test_configure_keeps_another_builds_runtime(installed, prepared):
 def runtime_release(installed, directory, version, pre_commit):
     """Install a release at version whose runtime.lock pins pre_commit.
 
-    Only the pin changes, so the release configures but cannot activate.
+    Only the pin changes, so the recorded hashes belong to another version.
     """
     package = versioned_package(directory / "package", version)
     path = package / "src" / "gateseal" / "data" / "runtime.lock"

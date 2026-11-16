@@ -4,10 +4,9 @@ Only a compiler renders its own Lock and outputs, so an upgrade to another
 compiler asks that candidate. The current compiler installs the candidate's
 verified wheel with uv into a scratch environment, which it removes
 afterwards, and drives the candidate only through its public commands:
-configure and check in a scratch repository that holds the planned Manifest,
-and activate when the upgrade asks for it. The scratch repository has its own
-Git directory inside the worktree's preparation directory, so the candidate
-prepares and stores nothing for any worktree until that activation.
+configure and check in a scratch repository that holds the planned Manifest.
+The scratch repository has its own Git directory inside the worktree's
+preparation directory, so the candidate stores nothing for any worktree.
 """
 
 import contextlib
@@ -110,7 +109,7 @@ class Candidate:
         It lives in the worktree's preparation directory, as sources.remote's
         scratch repositories do, so the user's includeIf gitdir: configuration
         applies to the candidate's policy fetch as it would to the worktree's.
-        Activation's cleanup deletes one that an interrupted upgrade left.
+        runtime.operation_lock deletes one that a killed upgrade left.
         """
         directory = preparation / f".gateseal-{uuid.uuid4().hex}"
         try:

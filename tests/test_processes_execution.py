@@ -21,7 +21,7 @@ def refused(call, *arguments, **options):
 def test_a_failed_tool_reports_both_streams_and_the_step_to_retry(tmp_path):
     error = refused(execute, SPEAKS, tmp_path, dict(os.environ))
     assert (error.code, str(error), error.exit_code) == ("tool_failed", "out\nerr\n", 4)
-    assert error.next_step == "gateseal activate"
+    assert error.next_step == ""
     named = refused(
         execute, SPEAKS, tmp_path, dict(os.environ), next_step="gateseal configure"
     )

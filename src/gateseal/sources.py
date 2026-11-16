@@ -1,9 +1,7 @@
 """Acquire Git policy releases by exact commit, and keep them per worktree.
 
-Only configure, activate, check and upgrade acquire a release, and they fetch
-it only when the worktree has not stored it. Every other command, and every
-commit, reads a release that an earlier acquisition stored, and checks its
-digest.
+A command acquires a release only when the worktree has not stored it, and
+checks the digest of a stored one. status never acquires one.
 """
 
 import contextlib
@@ -295,8 +293,8 @@ def remote(
 ) -> Generator[Remote]:
     """Yield a scratch Remote for repository, and delete it afterwards.
 
-    Activation's cleanup deletes a scratch repository an interrupted run left,
-    since its name starts with .gateseal-.
+    runtime.operation_lock deletes one that a killed run left, since its name
+    starts with .gateseal-.
     """
     directory = preparation / f".gateseal-{uuid.uuid4().hex}.git"
     origin = Remote(git, directory, repository, subject)
@@ -327,8 +325,8 @@ def _name(source: GitSource, digest: str) -> str:
 def stored(preparation: Path, source: GitSource, digest: str) -> Policy | None:
     """Return the stored release of source with digest, or None.
 
-    A stored release whose content no longer has its digest is damaged
-    preparation, which activation repairs by fetching it again.
+    A stored release whose content no longer has its digest is damaged, and
+    lock.ensure_policy repairs it by fetching it again.
     """
     name = _name(source, digest)
     try:
@@ -360,7 +358,7 @@ def _damaged(name: str, detail: str) -> GatesealError:
         "policy_content_mismatch",
         f"The stored policy release {STORE}/{name} changed. {detail}",
         3,
-        "gateseal activate",
+        "gateseal check",
     )
 
 
@@ -368,7 +366,7 @@ def store(preparation: Path, source: GitSource, policy: Policy) -> None:
     """Store policy as source's release, replacing a damaged copy.
 
     Each release is one file, its content stream, written atomically. Only
-    configure, activate, check and upgrade store, under the worktree's
+    configure, check, run, gate, doctor and upgrade store, under the worktree's
     operation lock, so a scratch file that is already there was left by an
     interrupted run.
     """

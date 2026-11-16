@@ -147,5 +147,4 @@ and run health probes. For example, they check the prepared Ruff version and
 run lint and formatting probes on empty input with the owned configuration.
 
 A matching record cannot establish that every third-party hook dependency
-will still run. See [Cache loss](what-the-tests-prove.md#cache-loss) and
-[What gateseal trusts](architecture.md#what-gateseal-trusts).
+will still run. See [What gateseal trusts](architecture.md#what-gateseal-trusts).

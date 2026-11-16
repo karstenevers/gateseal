@@ -71,7 +71,10 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     assert checkout["uses"] == CHECKOUT
     assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
     assert gate["env"]["GATESEAL_HEAD"] == "${{ github.sha }}"
-    assert prepare["run"].rstrip().endswith('"$command/bin/gateseal" activate')
+    assert prepare["run"].splitlines()[-2:] == [
+        '"$command/bin/gateseal" setup',
+        '"$command/bin/gateseal" check',
+    ]
     assert (
         gate["run"]
         .rstrip()

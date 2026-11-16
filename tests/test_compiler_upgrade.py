@@ -11,7 +11,7 @@ import json
 import sys
 
 import pytest
-from conftest import TRACKED, adopt, commit_hygiene, snapshot, uv_shim
+from conftest import TRACKED, adopt, commit_hygiene
 from installation import (
     clone,
     next_release,
@@ -58,7 +58,7 @@ def variant(tmp_path_factory):
     """Return the wheel and SHA-256 of a release with another runtime and policy.
 
     It carries pre-commit 4.6.0, CPython 3.14.11 and its own bundled policy
-    release. It is never activated, since those hashes are made up.
+    release. No test runs its pre-commit, since those hashes are made up.
     """
     directory = tmp_path_factory.mktemp("variant wheel ü")
     package = versioned_package(directory / "package", next_release(NEXT))
@@ -92,34 +92,29 @@ def test_two_repositories_upgrade_and_roll_back_independently(
         'reason = "Pinned for the migration"\nreview_by = 2027-01-31\n'
     )
     next_installed.cli(second, "configure")
-    next_installed.cli(second, "activate")
     success(["git", "add", *TRACKED], second)
     success(["git", "commit", "-m", "Adopt the next compiler"], second)
-    other = (snapshot(second), tracked(second))
-    prepared = snapshot(first)
+    other = tracked(second)
 
-    upgraded = installed.cli(first, "upgrade", *flags(next_installed), "--activate")
+    upgraded = installed.cli(first, "upgrade", *flags(next_installed))
     assert upgraded["code"] == "upgraded"
     assert targets(upgraded)["compiler"] == (CURRENT, NEXT, "upgrade")
     assert targets(upgraded)["pre-commit-hooks"] == ("6.0.0", "6.0.0", "unchanged")
     assert upgraded["changed"][0] == "gateseal.lock"
-    assert snapshot(first) != prepared
     success(["git", "add", *TRACKED], first)
     commit_hygiene(first)
     assert committed_compiler(first) == NEXT
     assert next_installed.cli(first, "doctor")["code"] == "healthy"
-    assert (
-        installed.cli(first, "status", code=2)["code"] == "selected_compiler_required"
-    )
-    assert (snapshot(second), tracked(second)) == other
+    assert installed.cli(first, "check", code=2)["code"] == "selected_compiler_required"
+    assert tracked(second) == other
 
-    back = next_installed.cli(first, "upgrade", *flags(installed), "--activate")
+    back = next_installed.cli(first, "upgrade", *flags(installed))
     assert targets(back)["compiler"] == (NEXT, CURRENT, "rollback")
     success(["git", "add", *TRACKED], first)
     commit_hygiene(first)
     assert committed_compiler(first) == CURRENT
-    assert installed.cli(first, "status")["code"] == "recorded"
-    assert (snapshot(second), tracked(second)) == other
+    assert installed.cli(first, "status")["code"] == "healthy"
+    assert tracked(second) == other
     commit_hygiene(second)
     assert committed_compiler(second) == NEXT
 
@@ -146,6 +141,8 @@ def test_bundled_policy_and_runtime_move_only_when_asked(installed, variant, con
     assert config["minimum_pre_commit_version"] == "4.6.0"
     install = "Install the command of gateseal"
     assert any(install in step for step in moved["next_steps"])
+    setup = "Run gateseal setup with the command of gateseal"
+    assert any(setup in step and "4.6.0" in step for step in moved["next_steps"])
 
 
 def test_candidate_must_take_every_existing_pin(installed, next_installed, tmp_path):
@@ -243,21 +240,6 @@ def test_corrupt_or_unavailable_candidates_write_nothing(
     )
     assert named["code"] == "invalid_artifact"
     assert tracked(configured) == before
-
-
-def test_activation_failure_keeps_the_compiler_upgrade(
-    installed, next_installed, configured, tmp_path
-):
-    failing = uv_shim(installed, tmp_path, "exit 7")
-    result = installed.cli(
-        configured, "upgrade", *flags(next_installed), "--activate", code=4, env=failing
-    )
-    assert result["code"] == "activation_failed"
-    assert f"gateseal {NEXT}" in result["diagnostics"][0]["message"]
-    assert any(NEXT in step for step in result["next_steps"])
-    assert next_installed.cli(configured, "check")["code"] == "consistent"
-    assert next_installed.cli(configured, "status")["code"] == "needs_activation"
-    assert not (configured / ".git/gateseal/current").exists()
 
 
 def test_candidate_fetches_with_the_worktrees_path_scoped_git_config(

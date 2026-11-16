@@ -6,7 +6,7 @@ compiler supports its kind. The examples use both supported kinds.
 | To add | Tool kind | Example |
 | --- | --- | --- |
 | A binary from a release with checksums | `release-binary` | [Add Gitleaks to secret detection](#define-the-tool) |
-| A Python-language pre-commit hook repository | `pre-commit-repository` | [Offer Black as an alternative to Ruff](#offer-black-as-a-formatter-on-a-newer-python) |
+| A Python-language pre-commit hook repository | `pre-commit-repository` | [Offer Black as an alternative to Ruff](#offer-black-as-a-formatter) |
 
 Start with [a copy of the bundled policy](author-a-policy.md#start-the-policy)
 in `policy/`. From the root of the policy repository, create the
@@ -77,7 +77,7 @@ output = "concise"
 ```
 
 `source` describes the release archives and their checksum file.
-`executable` tells activation to check the output of `gitleaks version`.
+`executable` names the program that each hook starts through mise.
 In the hook arguments, `{configuration}` names the generated
 `.gateseal/gitleaks.toml`, and `{report}` names the generated
 `.gateseal/gitleaks-report.tmpl`. The report prints each finding as
@@ -154,21 +154,18 @@ repository that adopts it and selects `secrets`, run `gateseal status`.
 Look for Betterleaks marked `built-in` and Gitleaks marked `team-defined`.
 Both hooks redact secret values from their findings.
 
-## Offer Black as a formatter on a newer Python
+## Offer Black as a formatter
 
 Use this example when some repositories need Black and others use Ruff for
-formatting. Black parses code with the interpreter it runs on. To format
-syntax newer than the compiler runtime supports, the policy must also select
-a [Hook Python](../GLOSSARY.md#hook-python) that can parse it.
+formatting. Black parses code with the interpreter it runs on, which is the
+Python that `gateseal setup` installed pre-commit with.
 
 Save the definition as `policy/tools/black.toml`.
 
 <!-- policy file: tools/black.toml -->
 ```toml
-# Black parses the code it formats with the interpreter it runs on, so it
-# formats syntax newer than gateseal's runtime CPython only on a Hook Python
-# that knows that syntax. The mirror's hook installs Black from PyPI by
-# version and without a hash, so the prepared black must report its pin.
+# Black parses the code it formats with the interpreter it runs on. The
+# mirror's hook installs Black from PyPI by version and without a hash.
 kind = "pre-commit-repository"
 stages = ["commit", "run", "ci"]
 scope = "files"
@@ -228,38 +225,22 @@ pin = "26.10.1"
 [components.black.versions."26.10.1"]
 ```
 
-Lock the Black release. Then add the Hook Python. For a new CPython version,
-use the patch release available in the latest python-build-standalone build.
-This example uses 3.15.2.
+Lock the Black release:
 
 ```sh
 gateseal policy lock policy
-gateseal policy add python 3.15.2 policy
 gateseal policy check policy
 ```
 
-The first `policy add python` pins the interpreter in `[components.python]`.
-It records each supported machine's download data in `policy.lock` using
-the build's `SHA256SUMS`. If the policy already pins a different Hook
-Python, also run `gateseal policy pin python 3.15.2 policy`.
-
-The pin applies to all Python-language hooks from pre-commit repositories,
-including Ruff and pre-commit-hooks. Without a pin, they use the compiler
-runtime's CPython. Release binaries run independently of this choice.
-
 After a repository adopts the release, select Black in its `gateseal.toml`.
-For code that uses Python 3.15 syntax, also tell Ruff which syntax to accept.
 
 ```toml
 [choices.python]
 formatter = "black"
-target_version = "py315"
 ```
 
-Run `gateseal configure` and `gateseal activate` in that repository.
-Run `gateseal status` and look for the selected Hook Python and
-`Choice python.formatter: black.` If Black rejects newer syntax, check the
-interpreter in the status output.
+Run `gateseal configure` in that repository. Run `gateseal status` and look
+for `Choice python.formatter: black.`
 
 ## What the Gitleaks definition guarantees
 

@@ -1,9 +1,7 @@
 """Dispatch each repository command through gateseal.cli.main in-process.
 
-Every command stops before activation would build a uv environment: the
-worktrees are configured but never prepared, and a compiler wheel that does
-not exist, or a pre-commit hook that gateseal does not own, stops activation
-before it installs anything.
+No command installs anything: the worktrees are configured and gateseal setup
+never runs, so a command that needs pre-commit stops with needs_setup.
 """
 
 import contextlib
@@ -63,7 +61,7 @@ def tracked(root):
 
 @pytest.fixture(scope="module")
 def adopted(tmp_path_factory):
-    """A consumer that committed a bundled configuration and never activated."""
+    """A consumer that committed a bundled configuration, on a machine without setup."""
     root = tmp_path_factory.mktemp("cli consumer")
     consumer = clone(root / "origin", root / "consumer")
     configure(consumer)
@@ -154,33 +152,44 @@ def test_before_configure_status_points_to_configure_and_check_fails(unconfigure
     assert "gateseal configure" in message(result)
 
 
-@pytest.mark.parametrize(
-    "command,exit_code", [("status", 0), ("doctor", 3), ("run", 3)]
-)
-def test_an_unprepared_worktree_needs_activation(adopted, command, exit_code):
+def checks(result):
+    """Return each check's status from a status or doctor result."""
+    return {
+        entry["check"]: entry["status"]
+        for entry in result["diagnostics"]
+        if entry["category"] == "check"
+    }
+
+
+@pytest.mark.parametrize("command,exit_code", [("status", 0), ("doctor", 3)])
+def test_status_and_doctor_report_the_same_checks_before_setup(
+    adopted, command, exit_code
+):
     code, result = gateseal(adopted, command)
-    assert (code, result["command"]) == (exit_code, command)
-    assert result["code"] == "needs_activation"
-    assert result["next_steps"][0] == "gateseal activate"
+    assert (code, result["command"], result["code"]) == (
+        exit_code,
+        command,
+        "unhealthy",
+    )
+    assert message(result) == "2 of 4 checks failed."
+    assert checks(result) == {
+        "lock": "passed",
+        "pre-commit": "failed",
+        "launcher": "failed",
+        "mise": "skipped",
+    }
+    assert result["next_steps"] == ["gateseal setup", "gateseal setup --refresh"]
 
 
-def test_check_agrees_without_a_preparation(adopted):
+def test_run_before_setup_names_setup(adopted):
+    code, result = gateseal(adopted, "run")
+    assert (code, result["command"], result["code"]) == (3, "run", "needs_setup")
+    assert result["next_steps"] == ["gateseal setup"]
+
+
+def test_check_agrees_before_setup(adopted):
     code, result = gateseal(adopted, "check")
     assert (code, result["command"], result["code"]) == (0, "check", "consistent")
-
-
-def test_activate_in_a_fresh_clone_checks_the_wheel_it_names(adopted, tmp_path):
-    fresh = tmp_path / "fresh"
-    success(["git", "clone", "--quiet", adopted, fresh], tmp_path)
-    wheel = tmp_path / WHEEL
-    code, result = gateseal(fresh, "activate", "--compiler-wheel", wheel)
-    assert (code, result["command"], result["code"]) == (
-        4,
-        "activate",
-        "missing_artifact",
-    )
-    assert str(wheel) in message(result)
-    assert git_path(fresh, "gateseal").is_dir()
 
 
 def test_upgrade_without_targets_changes_nothing(adopted):
@@ -255,16 +264,6 @@ def test_upgrade_targets_reach_their_checks(
     assert tracked(adopted) == before
 
 
-def test_upgrade_reports_an_activation_that_cannot_start(configured):
-    hook = git_path(configured, "hooks/pre-commit")
-    hook.parent.mkdir(exist_ok=True)
-    hook.write_bytes(b"#!/bin/sh\nexit 0\n")
-    code, result = gateseal(configured, "upgrade", "--activate")
-    assert (code, result["code"]) == (2, "activation_failed")
-    assert "unmanaged_hook" in message(result)
-    assert hook.read_bytes() == b"#!/bin/sh\nexit 0\n"
-
-
 def map_team_url(monkeypatch, origin):
     """Point the team policy's URL at origin through Git's own configuration."""
     settings = {f"url.{origin.as_uri()}.insteadOf": URL}
@@ -306,59 +305,42 @@ def stored(root):
     return sorted(policies.iterdir()) if policies.exists() else []
 
 
-def test_status_of_an_unfetched_policy_needs_activation_without_fetching(unfetched):
+def test_status_of_an_unfetched_policy_names_check_without_fetching(unfetched):
     import tomllib
 
     code, result = gateseal(unfetched, "status")
-    assert (code, result["command"], result["code"]) == (
-        0,
-        "status",
-        "needs_activation",
-    )
+    assert (code, result["command"], result["code"]) == (0, "status", "unhealthy")
+    assert checks(result)["lock"] == "failed"
     manifest = tomllib.loads((unfetched / "gateseal.toml").read_text())
-    assert manifest["policy"]["commit"] in message(result)
-    assert result["next_steps"] == ["gateseal activate"]
+    [lock] = [e for e in result["diagnostics"] if e.get("check") == "lock"]
+    assert manifest["policy"]["commit"] in lock["message"]
+    assert result["next_steps"][0] == "gateseal check"
     assert stored(unfetched) == []
 
 
-@pytest.mark.parametrize("conflict", ["custom_hooks_path", "unmanaged_hook"])
-def test_status_names_a_hook_conflict_before_the_policy_is_fetched(unfetched, conflict):
-    if conflict == "custom_hooks_path":
-        success(["git", "config", "core.hooksPath", "custom-hooks"], unfetched)
-    else:
-        hook = git_path(unfetched, "hooks/pre-commit")
-        hook.parent.mkdir(exist_ok=True)
-        hook.write_bytes(b"#!/bin/sh\nexit 0\n")
-    code, result = gateseal(unfetched, "status")
-    assert (code, result["command"], result["code"]) == (0, "status", conflict)
-    (step,) = result["next_steps"]
-    assert "gateseal activate" in step
-    assert stored(unfetched) == []
-
-
-def test_doctor_of_an_unfetched_policy_names_the_missing_release(unfetched):
+def test_doctor_fetches_the_locked_policy_and_warns_about_a_hooks_path(unfetched):
+    success(["git", "config", "core.hooksPath", "custom-hooks"], unfetched)
     code, result = gateseal(unfetched, "doctor")
-    assert (code, result["command"], result["code"]) == (
-        3,
-        "doctor",
-        "policy_unavailable",
-    )
-    assert result["next_steps"] == ["gateseal activate"]
-    assert stored(unfetched) == []
+    assert (code, result["command"], result["code"]) == (3, "doctor", "unhealthy")
+    assert checks(result)["lock"] == "passed"
+    assert len(stored(unfetched)) == 1
+    [warning] = [e for e in result["diagnostics"] if e["severity"] == "warning"]
+    assert warning["category"] == "custom_hooks_path"
+    assert all(v in warning["message"] for v in ("core.hooksPath", "custom-hooks"))
+    assert result["next_steps"] == [
+        "gateseal setup",
+        "gateseal setup --refresh",
+        "Remove the core.hooksPath setting.",
+    ]
+
+
+def test_run_fetches_the_locked_policy_before_it_starts_pre_commit(unfetched):
+    code, result = gateseal(unfetched, "run")
+    assert (code, result["code"]) == (3, "needs_setup")
+    assert len(stored(unfetched)) == 1
 
 
 def test_check_fetches_the_locked_policy(unfetched):
     code, result = gateseal(unfetched, "check")
     assert (code, result["command"], result["code"]) == (0, "check", "consistent")
-    assert len(stored(unfetched)) == 1
-
-
-def test_activate_fetches_the_policy_before_it_checks_the_wheel(unfetched, tmp_path):
-    wheel = tmp_path / WHEEL
-    code, result = gateseal(unfetched, "activate", "--compiler-wheel", wheel)
-    assert (code, result["command"], result["code"]) == (
-        4,
-        "activate",
-        "missing_artifact",
-    )
     assert len(stored(unfetched)) == 1
