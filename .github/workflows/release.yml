@@ -173,11 +173,19 @@ jobs:
           uv pip install --python "$environment/bin/python" --require-hashes -r "$requirements"
           echo "$environment/bin" >> "$GITHUB_PATH"
           "$environment/bin/gateseal" --version
-      - name: Run the demo
+      - name: Stand in for the release tag with this commit
         env:
           VERSION: ${{ needs.version.outputs.version }}
-          SHA256: ${{ needs.build.outputs.wheel-sha256 }}
-        run: ci/demo.sh "$RUNNER_TEMP/served/gateseal-$VERSION-py3-none-any.whl" "$SHA256"
+        # configure pins gateseal by the commit of its release tag, which
+        # github-release creates only after PyPI publishes. Until then a local
+        # copy of this commit answers for gateseal's repository.
+        run: |
+          stand_in="$RUNNER_TEMP/gateseal.git"
+          git clone --quiet --bare "$GITHUB_WORKSPACE" "$stand_in"
+          git -C "$stand_in" tag "v$VERSION" "$GITHUB_SHA"
+          git config --global "url.file://$stand_in.insteadOf" https://github.com/karstenevers/gateseal
+      - name: Run the demo
+        run: ci/demo.sh
 
   pypi:
     name: Publish to PyPI

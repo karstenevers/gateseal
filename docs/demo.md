@@ -9,10 +9,6 @@ will try the bundled hygiene, Python, and secrets checks in a new repository.
 mise, and network access for the first commit. Git must have a name and
 email address to use for the demo commits.
 
-Copy the wheel's URL and SHA-256 for the same release from PyPI, as
-[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. You put them
-in the `configure` command below.
-
 ## Adopt the policy
 
 From a directory outside any repository, create a new repository:
@@ -26,8 +22,7 @@ printf 'def greet(name):\n    return f"Hello, {name}!"\n' > greet.py
 Select the three capabilities, and add the commit launcher to this clone:
 
 ```sh
-gateseal configure --capability hygiene --capability python --capability secrets \
-  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
+gateseal configure --capability hygiene --capability python --capability secrets
 gateseal setup --refresh
 ```
 

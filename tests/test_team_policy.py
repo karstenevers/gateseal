@@ -13,7 +13,8 @@ from pathlib import Path
 
 import pytest
 from conftest import TRACKED, git_path, on_machine
-from gateseal import sources
+from gateseal import __version__, sources
+from gateseal.compiler_release import REPOSITORY
 from gateseal.manifest import GitSource
 from installation import clone, success
 from team_policy import POLICY, URL, environment, git, publish
@@ -40,10 +41,6 @@ def configure(installed, root, env, *flags, code=0):
         root,
         "configure",
         *flags,
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         code=code,
         env=env,
     )
@@ -236,28 +233,28 @@ def test_status_reads_no_policy_and_doctor_fetches_it(
     assert tracked(fresh) == before
 
 
-def test_another_compilers_lock_is_named_before_any_fetch(installed, adopted, tmp_path):
+def test_another_releases_lock_is_named_before_any_fetch(installed, adopted, tmp_path):
     consumer, env = adopted
     fresh = tmp_path / "fresh"
     success(["git", "clone", consumer, fresh], tmp_path)
     lock = fresh / "gateseal.lock"
     document = json.loads(lock.read_bytes())
-    compiler = document["compiler"]
-    compiler["version"] = "0.1.1"
-    compiler["filename"] = "gateseal-0.1.1-py3-none-any.whl"
-    location = Path(compiler["source"]["location"])
-    compiler["source"]["location"] = str(location.with_name(compiler["filename"]))
+    document["gateseal"].update(version="0.1.1", commit="1" * 40)
     lock.write_text(json.dumps(document))
-    needed = "Use the locked gateseal 0.1.1 compiler."
+    needed = f"gateseal.lock pins gateseal 0.1.1 from {REPOSITORY} at commit "
+    step = (
+        "Install gateseal 0.1.1, or run gateseal upgrade to move gateseal.lock to "
+        f"gateseal {__version__}."
+    )
     for command, code in (("status", 0), ("doctor", 3)):
         unhealthy = installed.cli(fresh, command, env=env, code=code)
         assert lock_check(unhealthy)["status"] == "failed"
-        assert lock_check(unhealthy)["message"] == needed
-        assert unhealthy["next_steps"] == []
+        assert lock_check(unhealthy)["message"].startswith(needed)
+        assert unhealthy["next_steps"] == [step]
     for command in ("check", "run", "gate"):
         refused = installed.cli(fresh, command, env=env, code=2)
         assert refused["code"] == "selected_compiler_required"
-        assert needed in json.dumps(refused)
+        assert refused["next_steps"] == [step]
     assert stored_policies(fresh) == []
 
 

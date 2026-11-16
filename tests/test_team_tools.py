@@ -13,9 +13,9 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from conftest import PIN
 from gateseal import authoring, checks, upgrade
 from gateseal.ci import Scope
-from gateseal.compiler_release import CompilerArtifact
 from gateseal.diagnostics import GatesealError
 from gateseal.environments import pre_commit_environment
 from gateseal.hook_results import hook_results
@@ -201,13 +201,11 @@ def consumer(policy, capabilities, extra=""):
     """Return what configure compiles for capabilities: selection and Lock."""
     source = BundledSource(policy.release)
     manifest = render(capabilities, source) + extra.encode()
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
     selection = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, selection)
-    outputs = compile_outputs(selection, artifact, source)
+    lock = compile_lock(manifest, source, policy, PIN, selection)
+    outputs = compile_outputs(selection, PIN, source)
     snapshot = Snapshot(manifest, b"", outputs)
-    return Locked(Path(), policy, artifact, snapshot, source, selection), lock
+    return Locked(Path(), policy, PIN, snapshot, source, selection), lock
 
 
 def test_team_tools_lock_add_pin_and_check_like_built_in_tools(tmp_path, upstream):
@@ -613,7 +611,7 @@ def test_upgrade_targets_a_tool_that_the_new_release_adds(tmp_path, upstream):
     authoring.lock(old)
     authoring.lock(new)
     current, _ = consumer(load_policy_tree(old), ("hygiene",))
-    request = upgrade.Request(None, None, {"yamllint": None}, None, None)
+    request = upgrade.Request(None, {"yamllint": None}, None, None)
     assert upgrade._exception_changes(
         parse_manifest(current.snapshot.manifest),
         current,

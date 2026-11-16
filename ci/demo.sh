@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 # Run the steps of docs/demo.md with the gateseal command on PATH.
-# Usage: ci/demo.sh WHEEL SHA256
+# Usage: ci/demo.sh
 set -euo pipefail
-
-wheel="$1"
-sha256="$2"
 
 step() {
   printf '\n== %s\n' "$*"
@@ -38,8 +35,7 @@ git config user.email "demo@example.invalid"
 printf 'def greet(name):\n    return f"Hello, {name}!"\n' > greet.py
 
 step "Select the three capabilities and add the commit launcher to this clone"
-gateseal configure --capability hygiene --capability python --capability secrets \
-  --compiler-wheel "$wheel" --compiler-sha256 "$sha256"
+gateseal configure --capability hygiene --capability python --capability secrets
 gateseal setup --refresh
 
 step "Commit the configuration and the Python file"

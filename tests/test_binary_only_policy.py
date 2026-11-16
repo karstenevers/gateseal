@@ -56,10 +56,6 @@ def test_a_policy_without_a_hook_repository_checks_commits(installed, tmp_path):
         "policy",
         "--policy-tag",
         "v1",
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         env=env,
     )
     assert installed.cli(root, "doctor", env=env)["code"] == "healthy"

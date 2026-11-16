@@ -2,8 +2,8 @@
 
 Each kind is a module in this package, and KINDS maps its name to the parser of
 its [source] table. A Built-in Tool is a Tool Definition in the package's
-data/tools, <name>.tool.toml, so the compiler wheel's digest, which the Lock
-records, covers it. The suffix keeps every tool from reading a definition as its own
+data/tools, <name>.tool.toml, so the gateseal commit that the Lock pins
+covers it. The suffix keeps every tool from reading a definition as its own
 configuration, as Ruff reads any ruff.toml it walks past. Kind modules import
 gateseal.tools.model, never this package, so loading it cannot cycle.
 """

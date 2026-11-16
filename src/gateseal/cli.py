@@ -72,15 +72,15 @@ def _parser() -> Parser:
     commands = parser.add_subparsers(dest="command")
     examples = {
         "configure": (
-            "gateseal configure --capability hygiene --compiler-wheel "
-            "/absolute/gateseal-0.1.0-py3-none-any.whl --compiler-sha256 SHA256"
+            "gateseal configure --capability hygiene --capability secrets; "
+            "gateseal configure --capability python --ci github"
         ),
         "check": "gateseal check --json",
         "upgrade": (
             "gateseal upgrade --policy-tag v2026.12; gateseal upgrade "
             "betterleaks=1.8.0 --reason 'Upstream issue 123' --review-by "
-            "2026-12-31; gateseal upgrade betterleaks; gateseal upgrade "
-            "--compiler-source URL --compiler-sha256 SHA256"
+            "2026-12-31; gateseal upgrade betterleaks; gateseal upgrade, run "
+            "by a newer gateseal"
         ),
         "run": "gateseal run; gateseal --repo '/work/team repo' run --json",
         "gate": "gateseal gate; gateseal gate --base BASE_SHA --head HEAD_SHA; "
@@ -100,9 +100,6 @@ def _parser() -> Parser:
             child.add_argument("--policy-commit", help="Full commit ID of a Git policy")
             child.add_argument("--policy-path", help="Policy directory, default .")
             child.add_argument("--policy-tag", help="Tag that must name the commit")
-            child.add_argument("--compiler-wheel")
-            child.add_argument("--compiler-source")
-            child.add_argument("--compiler-sha256")
             child.add_argument(
                 "--ci", choices=["github"], help="Write the CI provider's workflow"
             )
@@ -128,9 +125,6 @@ def _parser() -> Parser:
             child.add_argument("--policy-commit", help="Commit the tag must name")
             child.add_argument("--policy-path", help="Policy directory")
             child.add_argument("--policy-tag", help="Release tag to adopt")
-            child.add_argument("--compiler-wheel")
-            child.add_argument("--compiler-source")
-            child.add_argument("--compiler-sha256")
             child.add_argument("--reason", help="Why a Version Exception is needed")
             child.add_argument(
                 "--review-by",
@@ -205,9 +199,6 @@ def _configure(worktree: Worktree, arguments: argparse.Namespace) -> Result:
                 arguments.policy_path,
                 arguments.policy_tag,
             ),
-            arguments.compiler_wheel,
-            arguments.compiler_source,
-            arguments.compiler_sha256,
             arguments.ci,
         )
     return Result(
@@ -254,16 +245,10 @@ def _upgrade(worktree: Worktree, arguments: argparse.Namespace) -> Result:
         arguments.policy_path,
         arguments.policy_tag,
     )
-    compiler = (
-        arguments.compiler_wheel,
-        arguments.compiler_source,
-        arguments.compiler_sha256,
-    )
     return upgrade.run(
         worktree,
         upgrade.Request(
             None if policy == lock.PolicyRequest() else policy,
-            compiler if any(compiler) else None,
             upgrade.components(cast(list[str], arguments.components)),
             arguments.reason,
             arguments.review_by,

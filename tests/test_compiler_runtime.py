@@ -5,9 +5,8 @@ from importlib.resources import files
 import pytest
 from conftest import TRACKED, preserved
 from gateseal import __version__
-from gateseal.compiler_release import CompilerArtifact, load_runtime, parse_runtime
+from gateseal.compiler_release import REPOSITORY, load_runtime, parse_runtime
 from gateseal.diagnostics import GatesealError
-from gateseal.lock import compile_lock
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.platforms import TARGETS
 from gateseal.policy import load_bundled_policy
@@ -17,13 +16,10 @@ from installation import (
     package_version,
     process,
     success,
+    tag_release,
     versioned_package,
 )
 
-RUNTIME_NOTE = (
-    f"gateseal {__version__} runs CPython 3.14.10 build 20261026 and pre-commit "
-    "4.7.0 with 10 pinned dependencies."
-)
 PRE_COMMIT_EXCEPTION = (
     '\n[exceptions.pre-commit]\nversion = "4.5.0"\nreason = "Upstream bug"\n'
     "review_by = 2026-12-31\n"
@@ -51,7 +47,6 @@ def test_committed_runtime_runs_every_target():
         [(key, record)] = runtime.interpreter(target).items()
         assert key == f"cpython-3.14.10-{target.python}"
         assert record["build"] == "20261026"
-    assert runtime.note().message == RUNTIME_NOTE
     lines = runtime.requirements().decode().splitlines()
     assert len(lines) == 11
     assert lines[7].startswith("pre-commit==4.7.0 --hash=sha256:")
@@ -172,24 +167,6 @@ def test_hooks_need_the_pre_commit_that_renders_them(monkeypatch):
     )
 
 
-def test_lock_records_the_compiler_runtime():
-    policy = load_bundled_policy()
-    source = BundledSource(policy.release)
-    manifest = render(("hygiene", "python", "secrets"), source)
-    artifact = CompilerArtifact(
-        "local-wheel",
-        f"/wheels/gateseal-{__version__}-py3-none-any.whl",
-        f"gateseal-{__version__}-py3-none-any.whl",
-        "a" * 64,
-        __version__,
-    )
-    selection = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, selection)
-    assert lock["runtime"] == load_runtime().document()
-    assert set(lock["components"]) == {"pre-commit-hooks", "ruff"}
-    assert "interpreter" not in lock
-
-
 def test_pre_commit_exception_names_the_compiler_runtime():
     policy = load_bundled_policy()
     text = render(("hygiene",), BundledSource(policy.release)).decode()
@@ -223,19 +200,6 @@ def test_pre_commit_exception_stops_configure_and_check(installed, prepared):
     assert success(["git", "status", "--porcelain"], prepared).stdout == ""
 
 
-@pytest.mark.integration
-def test_configure_keeps_another_builds_runtime(installed, prepared):
-    lock = prepared / "gateseal.lock"
-    with preserved(lock) as original:
-        other_build = json.loads(original)
-        other_build["runtime"]["pre_commit"]["version"] = "4.5.0"
-        lock.write_text(json.dumps(other_build))
-        refused = installed.cli(prepared, "configure", code=2)
-        assert refused["code"] == "selected_compiler_required"
-        assert json.loads(lock.read_bytes()) == other_build
-    assert success(["git", "status", "--porcelain"], prepared).stdout == ""
-
-
 def runtime_release(installed, directory, version, pre_commit):
     """Install a release at version whose runtime.lock pins pre_commit.
 
@@ -249,7 +213,7 @@ def runtime_release(installed, directory, version, pre_commit):
         if entry["name"] == "pre-commit":
             entry["version"] = pre_commit
     path.write_text(json.dumps(document))
-    return dataclasses.replace(
+    return package, dataclasses.replace(
         install(directory, package), environment=installed.environment
     )
 
@@ -257,64 +221,68 @@ def runtime_release(installed, directory, version, pre_commit):
 @pytest.fixture(scope="module")
 def old_runtime(installed, tmp_path_factory):
     directory = tmp_path_factory.mktemp("old runtime ü").resolve()
-    return runtime_release(installed, directory, package_version(), "4.3.0")
+    return runtime_release(installed, directory, package_version(), "4.3.0")[1]
 
 
 @pytest.fixture(scope="module")
-def next_runtime(installed, tmp_path_factory):
+def next_runtime(installed, gateseal_origin, tmp_path_factory):
+    """Install and tag a release three after this one, whose pre-commit is newer.
+
+    next_installed and the variant release in test_gateseal_upgrade hold the
+    two before it, and each version's tag names one commit.
+    """
     directory = tmp_path_factory.mktemp("next runtime ü").resolve()
-    return runtime_release(
-        installed, directory, next_release(package_version()), "4.8.0"
-    )
+    version = next_release(next_release(next_release(package_version())))
+    package, installation = runtime_release(installed, directory, version, "4.8.0")
+    tag_release(gateseal_origin, version, package)
+    return installation
 
 
 @pytest.mark.integration
 def test_move_to_a_release_with_another_pre_commit(installed, next_runtime, configured):
     """Follow the README's move to another release, whose pre-commit differs."""
-    flags = ["--compiler-wheel", next_runtime.wheel]
-    flags += ["--compiler-sha256", next_runtime.checksum]
     config = configured / ".pre-commit-config.yaml"
     assert installed.cli(configured, "check")["code"] == "consistent"
-    (configured / "gateseal.lock").unlink()
-    kept = next_runtime.cli(configured, "configure", *flags, code=2)
-    assert kept["code"] == "ownership_conflict"
-    config.unlink()
-    assert next_runtime.cli(configured, "configure", *flags)["code"] == "configured"
+    moved = next_runtime.cli(configured, "upgrade")
+    assert moved["code"] == "upgraded"
+    assert any("pre-commit 4.8.0" in step for step in moved["next_steps"])
     assert '"minimum_pre_commit_version": "4.8.0"' in config.read_text()
     assert next_runtime.cli(configured, "check")["code"] == "consistent"
 
 
 @pytest.mark.integration
 def test_compiler_refuses_hooks_its_pre_commit_cannot_run(old_runtime, consumer):
-    flags = ["--compiler-wheel", old_runtime.wheel]
-    flags += ["--compiler-sha256", old_runtime.checksum]
     secrets = ["--capability", "hygiene", "--capability", "secrets"]
-    refusal = old_runtime.cli(consumer, "configure", *secrets, *flags, code=2)
+    refusal = old_runtime.cli(consumer, "configure", *secrets, code=2)
     assert refusal["code"] == "incompatible_runtime"
     message = refusal["diagnostics"][0]["message"]
     assert "betterleaks hook needs pre-commit 4.4.0" in message
     assert "runs pre-commit 4.3.0" in message
     assert not (consumer / "gateseal.toml").exists()
-    configured = old_runtime.cli(
-        consumer, "configure", "--capability", "hygiene", *flags
-    )
+    configured = old_runtime.cli(consumer, "configure", "--capability", "hygiene")
     assert configured["code"] == "configured"
-    assert "and pre-commit 4.3.0 with" in json.dumps(configured["diagnostics"])
+    assert "with pre-commit 4.3.0." in json.dumps(configured["diagnostics"])
     config = (consumer / ".pre-commit-config.yaml").read_text()
     assert '"minimum_pre_commit_version": "4.3.0"' in config
 
 
 @pytest.mark.integration
-def test_status_and_doctor_name_the_runtime(installed, prepared):
+def test_status_and_doctor_name_the_locked_gateseal(
+    installed, gateseal_origin, prepared
+):
+    tag = f"v{__version__}^{{commit}}"
+    commit = success(["git", "rev-parse", tag], gateseal_origin).stdout.strip()
+    note = (
+        f"gateseal {__version__} from {REPOSITORY} at commit {commit}, with "
+        "pre-commit 4.7.0."
+    )
     status = installed.cli(prepared, "status")
-    notes = [d for d in status["diagnostics"] if d["category"] == "runtime"]
-    assert notes == [
-        {"severity": "info", "category": "runtime", "message": RUNTIME_NOTE}
-    ]
+    notes = [d for d in status["diagnostics"] if d["category"] == "gateseal"]
+    assert notes == [{"severity": "info", "category": "gateseal", "message": note}]
     doctor = process(
         [installed.command, "--repo", prepared, "doctor"],
         prepared,
         installed.environment,
     )
     assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert RUNTIME_NOTE in doctor.stdout.splitlines()
+    assert note in doctor.stdout.splitlines()

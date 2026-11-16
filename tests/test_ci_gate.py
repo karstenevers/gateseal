@@ -2,7 +2,7 @@ import json
 
 import pytest
 from conftest import on_machine, preserved
-from installation import clone, package_version, process, success
+from installation import clone, process, success
 
 pytestmark = pytest.mark.integration
 
@@ -20,14 +20,7 @@ TRACKED = (
 ZEROS = "0" * 40
 
 
-def source():
-    wheel = f"gateseal-{package_version()}-py3-none-any.whl"
-    return (
-        f"https://raw.githubusercontent.com/example/wheels/{'e' * 40}/artifacts/{wheel}"
-    )
-
-
-def configure(installed, root, code=0, *compiler):
+def configure(installed, root, code=0):
     return installed.cli(
         root,
         "configure",
@@ -37,9 +30,6 @@ def configure(installed, root, code=0, *compiler):
         "secrets",
         "--ci",
         "github",
-        *(compiler or ("--compiler-source", source())),
-        "--compiler-sha256",
-        installed.checksum,
         code=code,
     )
 
@@ -79,7 +69,7 @@ def test_configure_owns_the_workflow_and_check_guards_it(installed, consumer):
     assert WORKFLOW in configure(installed, consumer)["changed"]
     lock = json.loads((consumer / "gateseal.lock").read_bytes())
     assert WORKFLOW in lock["outputs"]
-    assert lock["compiler"]["source"] == {"kind": "https-wheel", "location": source()}
+    assert lock["gateseal"]["commit"] in (consumer / WORKFLOW).read_text()
     assert installed.cli(consumer, "check")["code"] == "consistent"
     with preserved(consumer / WORKFLOW) as original:
         (consumer / WORKFLOW).write_bytes(original.replace(b"read", b"write"))
@@ -107,38 +97,11 @@ def test_configure_owns_the_workflow_and_check_guards_it(installed, consumer):
         )
 
 
-def test_a_local_wheel_or_a_linked_github_directory_is_refused(
-    installed, consumer, tmp_path
-):
-    local = configure(installed, consumer, 2, "--compiler-wheel", installed.wheel)
-    assert (local["code"], local["next_steps"]) == (
-        "ci_needs_network_compiler",
-        [
-            "Run gateseal configure with --compiler-source and --compiler-sha256 "
-            "instead of --compiler-wheel."
-        ],
-    )
-    assert not (consumer / "gateseal.lock").exists()
+def test_a_linked_github_directory_is_refused(installed, consumer, tmp_path):
     (tmp_path / "elsewhere").mkdir()
     (consumer / ".github").symlink_to(tmp_path / "elsewhere")
     assert configure(installed, consumer, 2)["code"] == "unsafe_path"
     assert not list((tmp_path / "elsewhere").iterdir())
-
-
-def test_a_lock_that_pins_a_local_wheel_cannot_add_ci(installed, configured):
-    manifest = configured / "gateseal.toml"
-    manifest.write_bytes(
-        manifest.read_bytes()
-        + b'\n[ci]\nprovider = "github"\ndefault_branch = "main"\n'
-    )
-    refused = installed.cli(configured, "configure", code=2)
-    assert (refused["code"], refused["next_steps"]) == (
-        "ci_needs_network_compiler",
-        [
-            "Move gateseal.lock aside and run gateseal configure with "
-            "--compiler-source and --compiler-sha256."
-        ],
-    )
 
 
 def test_every_file_passes_in_the_ci_stage(installed, adopted):

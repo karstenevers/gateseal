@@ -64,8 +64,8 @@ To move to a newer gateseal, a Repository Maintainer installs it and runs
 Lock.
 
 From this record on, releases share only the Lock's ownership ledger: the Lock
-format, the gateseal pin, the Manifest's SHA-256, and each owned file's path
-and SHA-256. Every other field belongs to the release that wrote it.
+format, the gateseal pin, the Manifest's SHA-256, the Policy's content digest,
+and each owned file's path and SHA-256. Every other field belongs to the release that wrote it.
 
 - The hook and CI run the gateseal that the Lock pins, so they read only a Lock
   that their own release wrote.
@@ -73,11 +73,12 @@ and SHA-256. Every other field belongs to the release that wrote it.
   names that gateseal and `gateseal upgrade`.
 - `gateseal upgrade` accepts another release's Lock. It compiles from the
   Manifest and the Policy alone, and it reads the old ledger only to decide
-  which files it may replace or delete. As under design record 0009, a gateseal
-  move never moves the Policy or a tool to fit.
+  which files it may replace or delete, and whether a bundled Policy moves. A
+  release can bundle other content under the same label, so the digest
+  decides with the label. As under design record 0009, a gateseal move never
+  moves the Policy or a tool to fit.
 - The Lock format changes only when the ledger changes. gateseal refuses a
-  format that it does not know. It also knows the Lock format of gateseal
-  0.1.0, so a move from 0.1.0 is an ordinary `gateseal upgrade`.
+  format that it does not know.
 
 Between releases that follow this record, a rollback is `git revert` of the
 upgrade commit. The upgrade writes only tracked files, and the hook and CI take
@@ -86,11 +87,6 @@ install, and works across a format change. When later commits make the revert
 conflict, an older gateseal moves the repository back with `gateseal upgrade`
 while the Lock format is the same. Across a format change, it refuses and names
 `git revert`.
-
-gateseal 0.1.0 predates this contract. Reverting a move from 0.1.0 brings back
-its wheel pin and its activation, so every developer installs 0.1.0 and runs
-`gateseal activate` again. 0.1.0 refuses a Lock that another release wrote, so
-it cannot move a repository back with `gateseal upgrade`.
 
 ## What a developer gives up
 

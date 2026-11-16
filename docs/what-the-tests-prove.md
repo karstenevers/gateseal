@@ -31,15 +31,17 @@ path contains shell characters.
 
 ## Upgrades
 
-Tests upgrade and roll back both policy and compiler releases. An exact
+Tests upgrade and roll back both policy and gateseal releases. An exact
 rollback restores the tracked bytes. A policy upgrade keeps choices and
 compatible version exceptions. An incompatible exception or edited generated
 output stops the upgrade before any write. Running the same upgrade twice
 leaves the second run with nothing to change.
 
-Compiler upgrade tests use a second wheel. A missing or corrupt wheel, or a
-candidate compiler that cannot accept the selected policy, leaves the
-tracked files in place. See [Upgrade and roll back](upgrade.md).
+gateseal move tests install a second release and tag both in a local stand-in
+for gateseal's repository. Two repositories move up and back on their own. A
+move reads only the old Lock's ownership ledger, refuses to drop below the
+policy's minimum gateseal, and moves the bundled policy only when asked. See
+[Upgrade and roll back](upgrade.md).
 
 See [Tests for policies and tools](what-the-tool-tests-prove.md) for Ruff and
 Betterleaks behavior, and [Tested platforms](tested-platforms.md) for the

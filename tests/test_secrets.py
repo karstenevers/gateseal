@@ -27,10 +27,6 @@ def configure(installed, root, *capabilities, code=0):
         root,
         "configure",
         *flags,
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         code=code,
     )
 

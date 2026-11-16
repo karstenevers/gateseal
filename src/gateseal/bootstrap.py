@@ -21,6 +21,8 @@ from typing import NoReturn, Self, cast
 
 MANIFEST = "gateseal.toml"
 LOCK = "gateseal.lock"
+LOCK_FORMAT = 2
+"""The Lock format, which changes only when the ownership ledger changes."""
 CONFIG = ".pre-commit-config.yaml"
 
 PREPARATION = "gateseal"
@@ -684,7 +686,8 @@ def _check_staged_lock(data: bytes) -> None:
             f"Staged {LOCK} is not a valid Lock: {exc}", CHECK
         ) from exc
     document = cast(dict[str, object], lock) if isinstance(lock, dict) else {}
-    if type(document.get("schema")) is not int or document["schema"] != 1:
+    found = document.get("schema")
+    if type(found) is not int or found != LOCK_FORMAT:
         raise BootstrapError(f"Staged {LOCK} has an unsupported schema.", CHECK)
 
 

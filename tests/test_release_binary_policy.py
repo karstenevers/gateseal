@@ -13,7 +13,7 @@ import shutil
 from dataclasses import replace
 
 import pytest
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
@@ -130,11 +130,9 @@ def compiled(policy, capabilities, extra=""):
     """Return the Lock and the outputs that configure compiles for capabilities."""
     source = BundledSource(policy.release)
     manifest = render(capabilities, source) + extra.encode()
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
     selection = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, selection)
-    return lock, compile_outputs(selection, artifact, source)
+    lock = compile_lock(manifest, source, policy, PIN, selection)
+    return lock, compile_outputs(selection, PIN, source)
 
 
 def entries(outputs):

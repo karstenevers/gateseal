@@ -69,10 +69,10 @@ A hook for a release binary, such as Betterleaks, starts through mise. See
 ## The Manifest was edited or the Lock is lost
 
 After editing `gateseal.toml`, run `gateseal configure` to regenerate the
-Lock and generated files. It keeps the existing compiler pin.
+Lock and generated files. It keeps the existing gateseal pin.
 
-If `gateseal.lock` was deleted by mistake, restore it from Git. To create a
-new Lock, [supply the wheel details](install.md#pin-the-release-in-a-repository)
+If `gateseal.lock` was deleted by mistake, restore it from Git. Otherwise run
+`gateseal configure`, which [pins the running gateseal](install.md#pin-the-release-in-a-repository)
 again. Run `gateseal check` to confirm that the files agree.
 
 ## A hook changed a file

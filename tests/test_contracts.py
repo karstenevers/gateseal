@@ -3,8 +3,8 @@ import json
 import shutil
 
 import pytest
+from conftest import PIN
 from gateseal import bootstrap
-from gateseal.compiler_release import CompilerArtifact
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
 from gateseal.lock import compile_outputs
@@ -385,10 +385,8 @@ def ruff_toml(policy, extra=""):
     manifest = parse_manifest(
         render(("hygiene", "python"), BundledSource(policy.release)) + extra.encode()
     )
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
     outputs = compile_outputs(
-        resolve(manifest, policy), artifact, BundledSource(policy.release)
+        resolve(manifest, policy), PIN, BundledSource(policy.release)
     )
     return outputs[".gateseal/ruff.toml"]
 

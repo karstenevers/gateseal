@@ -29,14 +29,7 @@ def test_configure_recovers_a_lost_lock_and_manifest_edits(installed, configured
     lock = configured / "gateseal.lock"
     original = lock.read_bytes()
     lock.unlink()
-    assert installed.cli(configured, "configure", code=2)["code"] == "missing_artifact"
-    flags = (
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
-    )
-    assert installed.cli(configured, "configure", *flags)["changed"] == [lock.name]
+    assert installed.cli(configured, "configure")["changed"] == [lock.name]
     assert lock.read_bytes() == original
     manifest = configured / "gateseal.toml"
     comment = b"# Reviewed hygiene selection\n"
@@ -150,10 +143,6 @@ def test_unmanaged_config_is_preserved(installed, consumer):
         "configure",
         "--capability",
         "hygiene",
-        "--compiler-wheel",
-        str(installed.wheel),
-        "--compiler-sha256",
-        installed.checksum,
         code=2,
     )
     assert not (consumer / "gateseal.lock").exists()
@@ -309,19 +298,13 @@ def test_outside_git_is_a_clear_error(installed, tmp_path):
     assert result["code"] == "not_a_repository"
 
 
-def test_malformed_lock_url_is_structured(installed, configured):
-    url = (
-        "https://[x/example/wheels/"
-        + "0" * 40
-        + "/artifacts/gateseal-0.1.0-py3-none-any.whl"
-    )
+def test_a_malformed_gateseal_pin_is_structured(installed, configured):
     lock = configured / "gateseal.lock"
     document = json.loads(lock.read_bytes())
-    document["compiler"]["source"] = {"kind": "https-wheel", "location": url}
+    document["gateseal"]["commit"] = "main"
     lock.write_text(json.dumps(document))
-    assert installed.cli(configured, "check", code=2)["code"] == "invalid_field"
-    lock.unlink()
-    flags = ("--compiler-source", url, "--compiler-sha256", installed.checksum)
-    assert installed.cli(configured, "configure", *flags, code=2)["code"] == (
-        "invalid_field"
-    )
+    for command in ("check", "configure"):
+        result = installed.cli(configured, command, code=2)
+        assert result["code"] == "invalid_field"
+        assert "gateseal.commit" in result["diagnostics"][0]["message"]
+        assert "Restore gateseal.lock from Git" in result["next_steps"][0]

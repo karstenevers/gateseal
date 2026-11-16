@@ -18,7 +18,7 @@ later. Release 0.1.0 needs CPython 3.14.10 or a later 3.14 release, which the
 `uv tool update-shell` and open a new shell.
 
 If the repository already has a `gateseal.lock` file, install the version in
-its `compiler.version` field. For example, for version `0.1.0`, run:
+its `gateseal.version` field. For example, for version `0.1.0`, run:
 
 ```sh
 uv tool install --python 3.14.10 gateseal==0.1.0
@@ -88,68 +88,38 @@ In those clones, run `pre-commit uninstall` or delete
 
 ## Pin the release in a repository
 
-When you first configure a repository, you record which gateseal wheel each
-clone must use. The wheel is the release file whose name ends in `.whl`.
-Use the version printed by `gateseal --version`. Once you commit
-`gateseal.lock`, contributors need no wheel details.
-
-### Pin the wheel on PyPI
-
-On the **Download files** page of your release on PyPI, such as
-`https://pypi.org/project/gateseal/0.1.0/#files`, copy the link of the `.whl`
-file, and copy its SHA-256 from the file details. From the root of the
-repository, run this command with the two values in place of `PYPI_WHEEL_URL`
-and `WHEEL_SHA256`:
+When you first configure a repository, `gateseal configure` pins the gateseal
+that runs it: gateseal's repository, `https://github.com/karstenevers/gateseal`,
+the version printed by `gateseal --version`, and the commit that the version's
+release tag names. configure reads the tag with your Git, so Git's credentials
+and `url.<base>.insteadOf` settings apply. From the root of the repository,
+run:
 
 ```sh
-gateseal configure --capability hygiene \
-  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
+gateseal configure --capability hygiene
 ```
 
 You can add `--capability python`, `--capability secrets`, or `--ci github`.
-PyPI never changes a file after upload, so every clone and every GitHub
-Actions run gets the same wheel. The generated workflow checks its SHA-256
-before it installs it. [Configure and commit](configure-a-repository.md#configure-and-commit)
-the generated files.
+The generated workflow installs gateseal from the pinned commit, so every
+GitHub Actions run gets the same code.
+[Configure and commit](configure-a-repository.md#configure-and-commit) the
+generated files.
 
-### Pin a copy on GitHub
+Once you commit `gateseal.lock`, later commands keep its pin. To move the
+repository to another release, install that release and run
+`gateseal upgrade`, as
+[Move to another gateseal release](upgrade.md#move-to-another-gateseal-release)
+shows.
 
-If your team hosts its own copy of the wheel, commit it with its filename to a
-GitHub repository that your contributors can read. GitHub Actions needs a
-publicly readable copy. In the same command, use the wheel's raw GitHub URL at
-the full 40-character commit ID in place of `PYPI_WHEEL_URL`:
+## Install the pinned commit
 
-```text
-https://raw.githubusercontent.com/OWNER/REPO/FULL_COMMIT/path/gateseal-0.1.0-py3-none-any.whl
-```
-
-The Lock accepts only these two kinds of URL. Other hosts, and links to GitHub
-branches or tags, are unsupported.
-
-### Pin a wheel file on this machine
-
-Download the wheel for your gateseal version from PyPI's **Download files**
-page, and copy its SHA-256 from the file details. Keep the wheel outside your
-repository. In the repository, run this command with the wheel's absolute path
-and its SHA-256 in place of the example path and `WHEEL_SHA256`:
+To run exactly the code that a Lock pins, install gateseal from the commit in
+its `gateseal.commit` field, as the generated workflow does:
 
 ```sh
-gateseal configure --capability hygiene \
-  --compiler-wheel '/absolute/path/gateseal-0.1.0-py3-none-any.whl' \
-  --compiler-sha256 WHEEL_SHA256
+uv tool install --python 3.14.10 \
+  "gateseal @ git+https://github.com/karstenevers/gateseal@FULL_COMMIT"
 ```
 
-The Lock records the local path.
-
-## Install a reviewed wheel
-
-If your team supplies a wheel, check it against the SHA-256 in the team's
-release record before you install it. In the wheel's directory, replace the
-example digest and run:
-
-```sh
-echo "REVIEWED_SHA256  gateseal-0.1.0-py3-none-any.whl" | shasum -a 256 -c - &&
-  uv tool install --python 3.14.10 ./gateseal-0.1.0-py3-none-any.whl
-```
-
-uv installs the wheel only if the digest matches.
+uv builds gateseal from that commit. The build tool comes from PyPI by
+version.

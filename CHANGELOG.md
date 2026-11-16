@@ -36,6 +36,19 @@ change the manifest, policy or lock format, and its entry says how to move.
   it names. It needed Python 3.14.10 or a later 3.14 release before.
 - `hygiene` is optional. A policy defines at least one capability of any name,
   and a Manifest selects at least one of them, such as `secrets` alone.
+- The Lock pins gateseal by its repository, its version and the commit of its
+  release tag, which `gateseal configure` reads with the user's Git. The
+  generated workflow installs gateseal from that commit. This is Lock format 2,
+  and every command refuses a Lock of another format with
+  `unsupported_schema`. To move a repository from 0.1.0, delete
+  `gateseal.lock`, `.pre-commit-config.yaml`, `.gateseal/` and
+  `.github/workflows/gateseal.yml`, then run `gateseal configure`.
+- `gateseal upgrade` run by another gateseal release moves the Lock to that
+  release, newer or older. It reads only the old Lock's ownership ledger: its
+  format, its gateseal pin, the Manifest's SHA-256, the policy's digest and
+  the files it lists. A listed file that the release never writes stops the
+  move, and so does a bundled policy with other content under the same label.
+- The Lock no longer records the CPython and pre-commit that gateseal runs.
 
 ### Removed
 
@@ -43,6 +56,9 @@ change the manifest, policy or lock format, and its entry says how to move.
   preparation after `gateseal setup`.
 - Hook Python, the `[components.python]` table of a policy. A Python hook runs
   on the Python that `gateseal setup` installed pre-commit with.
+- `--compiler-wheel`, `--compiler-source` and `--compiler-sha256` of
+  `gateseal configure` and `gateseal upgrade`, and the candidate compiler that
+  an upgrade installed to render a compiler move.
 
 ## [0.1.0] - 2026-11-11
 

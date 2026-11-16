@@ -234,23 +234,8 @@ def test_private_source_runs_complete_workflow(installed, tmp_path, consumer):
     result = install(python, env, tmp_path, artifact["url"], artifact["sha256"])
     assert result.returncode == 0, result.stdout + result.stderr
     command = [python, "-I", "-B", "-m", "gateseal", "--repo", consumer, "--json"]
-    success(
-        [
-            *command,
-            "configure",
-            "--capability",
-            "hygiene",
-            "--compiler-source",
-            artifact["url"],
-            "--compiler-sha256",
-            artifact["sha256"],
-        ],
-        consumer,
-        env,
-    )
+    success([*command, "configure", "--capability", "hygiene"], consumer, env)
     success(["git", "add", *TRACKED], consumer)
-    committed = success(
-        ["git", "commit", "-m", "Use verified private compiler"], consumer
-    )
+    committed = success(["git", "commit", "-m", "Use the private wheel"], consumer)
     assert "Passed" in committed.stdout + committed.stderr
     success([*command, "run"], consumer, env)

@@ -211,6 +211,37 @@ def versioned_package(destination, version, package=PACKAGE):
     return destination
 
 
+BUILD_INPUTS = ("src", "README.md", "pyproject.toml", "LICENSE")
+"""The files of a package that its wheel is built from."""
+
+
+def tag_release(origin, version, package=PACKAGE):
+    """Commit package's build inputs in origin, tag them v<version>, return the commit.
+
+    origin stands in for gateseal's repository, which a test's Git reaches
+    through url.<base>.insteadOf, so configure reads the release's commit from
+    its tag there and pre-commit and CI can build gateseal at that commit.
+    """
+    if not origin.exists():
+        origin.mkdir(parents=True)
+        success(["git", "init", "--initial-branch=main"], origin)
+    for name in BUILD_INPUTS:
+        target = origin / name
+        if target.is_dir():
+            shutil.rmtree(target)
+        if (package / name).is_dir():
+            shutil.copytree(
+                package / name, target, ignore=shutil.ignore_patterns("__pycache__")
+            )
+        elif (package / name).exists():
+            shutil.copy(package / name, target)
+    identity = ["-c", "user.name=Release", "-c", "user.email=r@example.invalid"]
+    success(["git", "add", "-A"], origin)
+    success(["git", *identity, "commit", "-q", "-m", f"Release {version}"], origin)
+    success(["git", "tag", f"v{version}"], origin)
+    return success(["git", "rev-parse", "HEAD"], origin).stdout.strip()
+
+
 def clone(origin, root):
     """Clone a new empty origin to root, with a commit identity."""
     origin.mkdir(parents=True)

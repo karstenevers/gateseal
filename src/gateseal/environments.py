@@ -7,10 +7,8 @@ they run in the caller's environment, as they do at git commit.
 
 import os
 from collections.abc import Iterable
-from pathlib import Path
 
 from gateseal import bootstrap
-from gateseal.processes import execute, find_python
 from gateseal.tools import removed_prefixes
 from gateseal.tools.model import Tool
 
@@ -49,51 +47,6 @@ def uv_environment() -> dict[str, str]:
         }
     )
     return env
-
-
-def package_environment(
-    uv: str,
-    root: Path,
-    env: dict[str, str],
-    interpreter: str,
-    destination: Path,
-    requirements: Path,
-) -> str:
-    execute(
-        [
-            uv,
-            "venv",
-            "--no-config",
-            "--no-python-downloads",
-            "--python",
-            interpreter,
-            str(destination),
-        ],
-        root,
-        env,
-    )
-    python = find_python(uv, root, env, str(destination))
-    execute(
-        [
-            uv,
-            "pip",
-            "install",
-            "--no-config",
-            "--no-python-downloads",
-            "--python",
-            python,
-            "--require-hashes",
-            "--only-binary",
-            ":all:",
-            "--index-url",
-            "https://pypi.org/simple",
-            "-r",
-            str(requirements),
-        ],
-        root,
-        env,
-    )
-    return python
 
 
 def pre_commit_environment(

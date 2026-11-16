@@ -7,29 +7,25 @@ import json
 from datetime import date
 
 import pytest
-from gateseal import __version__, lock
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
+from gateseal import lock
 from gateseal.manifest import BundledSource
 from gateseal.validation import canonical
 from test_lock_configure import (
-    CHECKSUM,
     CONFIG,
     LOCK,
     MANIFEST,
     OTHER_RELEASE,
     POLICY,
-    SOURCE,
-    WHEEL,
     check_policy_note,
     configure,
     configured,
     edit,
-    other_compiler,
+    other_gateseal,
     preparation,
     refused,
 )
 
-ARTIFACT = CompilerArtifact("https-wheel", SOURCE, WHEEL, CHECKSUM, __version__)
 EXCEPTION = (
     '\n[exceptions.pre-commit-hooks]\nversion = "5.0.0"\n'
     'reason = "the next release rejects our generated YAML"\nreview_by = 2098-12-31\n'
@@ -50,10 +46,10 @@ def files(root, *names):
 def test_load_returns_the_checked_worktree(tmp_path):
     root = configured(tmp_path)
     locked = lock.load(root, preparation(root))
-    assert (locked.root, locked.policy, locked.artifact, locked.source) == (
+    assert (locked.root, locked.policy, locked.pin, locked.source) == (
         root,
         POLICY,
-        ARTIFACT,
+        PIN,
         BundledSource(POLICY.release),
     )
     assert locked.snapshot == lock.Snapshot(
@@ -128,22 +124,21 @@ def manifest_edit(locked):
 
 FIELDS = (
     "choices",
-    "compiler",
     "components",
     "exceptions",
+    "gateseal",
     "inputs_fingerprint",
     "manifest_sha256",
     "native_artifacts",
     "outputs",
     "policy",
-    "runtime",
     "schema",
 )
 CONFIGURE = "gateseal configure"
 
 
-def surprise_from_another_compiler(document):
-    other_compiler(document)
+def surprise_from_another_gateseal(document):
+    other_gateseal(document)
     document["surprise"] = 1
 
 
@@ -163,13 +158,29 @@ def surprise_from_another_compiler(document):
             "",
             (CONFIG,),
         ),
-        (lock_edit(lambda d: d.update(schema=2)), "unsupported_schema", "", ("1",)),
-        (lock_edit(lambda d: d.update(schema=True)), "invalid_field", "", ("schema",)),
+        (
+            lock_edit(lambda d: d.update(schema=1)),
+            "unsupported_schema",
+            "Delete gateseal.lock",
+            ("1", "2"),
+        ),
+        (
+            lock_edit(lambda d: d.update(schema=3)),
+            "unsupported_schema",
+            "Install the newer gateseal",
+            ("3", "2"),
+        ),
+        (
+            lock_edit(lambda d: d.update(schema=True)),
+            "unsupported_schema",
+            "Delete gateseal.lock",
+            ("True",),
+        ),
         (lock_edit(lambda d: d.update(surprise=1)), "invalid_field", "", FIELDS),
         (
-            lock_edit(surprise_from_another_compiler),
+            lock_edit(surprise_from_another_gateseal),
             "selected_compiler_required",
-            "",
+            "gateseal upgrade",
             (OTHER_RELEASE,),
         ),
     ],
@@ -177,10 +188,11 @@ def surprise_from_another_compiler(document):
         "lock choices",
         "manifest choices",
         "edited output",
-        "schema 2",
+        "format 1",
+        "format 3",
         "boolean schema",
         "unknown field",
-        "another compiler first",
+        "another gateseal first",
     ],
 )
 def test_load_refuses_disagreement(tmp_path, change, code, step, named):
@@ -191,7 +203,8 @@ def test_load_refuses_disagreement(tmp_path, change, code, step, named):
     for name, content in snapshot.outputs.items():
         (root / name).write_bytes(content)
     error = refused(lock.load, root, preparation(root))
-    assert (error.code, error.next_step) == (code, step)
+    assert error.code == code
+    assert step in error.next_step if step else error.next_step == ""
     assert all(value in str(error) for value in named)
 
 
@@ -202,16 +215,18 @@ def with_exception(tmp_path):
     return lock.load(root, preparation(root))
 
 
-def test_describe_names_the_policy_runtime_tools_and_choices(tmp_path):
+def test_describe_names_the_policy_gateseal_tools_and_choices(tmp_path):
     root = configured(tmp_path)
     notes = lock.describe(lock.load(root, preparation(root)))
     check_policy_note(notes[0])
     assert [note.category for note in notes] == [
         "policy",
-        "runtime",
+        "gateseal",
         "tool",
         "policy_choice",
     ]
+    named = (PIN.version, PIN.repository, PIN.commit)
+    assert all(value in notes[1].message for value in named)
     assert lock.review_steps(notes) == ()
 
 

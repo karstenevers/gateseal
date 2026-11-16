@@ -84,7 +84,7 @@ they can read it.
 | Category | Information |
 | --- | --- |
 | `policy`, `policy_tag` | Release, source, digest, and the tag check at adoption for a Git policy. |
-| `runtime` | The CPython and pre-commit versions that the Lock records. |
+| `gateseal` | The gateseal release, repository, and commit that the Lock pins, and the pre-commit version it runs. |
 | `tool`, `policy_choice` | Each tool's version, capability, kind, and origin, and each selected choice. |
 | `version_exception` | Component, selected version, policy pin, review date, and reason. |
 | `overdue_exception`, `redundant_exception` | The local date is past the review date, or the selected version equals the pin. Review the exception in the Manifest. |

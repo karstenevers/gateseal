@@ -12,7 +12,6 @@ import pytest
 from conftest import named_flags
 from gateseal.cli import main
 from installation import clone, success
-from test_cli_commands import SHA, SOURCE
 
 ZEROS = "0" * 40
 
@@ -39,7 +38,6 @@ def commits(tmp_path_factory):
     with contextlib.redirect_stdout(output):
         configured = main(
             ["--repo", str(consumer), "configure", "--capability", "hygiene"]
-            + ["--compiler-source", SOURCE, "--compiler-sha256", SHA]
         )
     assert configured == 0, output.getvalue()
     success(["git", "add", "-A"], consumer)

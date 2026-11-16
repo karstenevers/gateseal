@@ -83,8 +83,7 @@ both report templates under `.gateseal`.
 
 ## Check in GitHub CI
 
-For a new repository, select a shared wheel and add `--ci github` to the
-first `configure` command. For an existing repository, follow [Turn it
+For a new repository, add `--ci github` to the first `configure` command. For an existing repository, follow [Turn it
 on](github-ci.md#turn-it-on). Commit the generated
 `.github/workflows/gateseal.yml` along with the Lock.
 

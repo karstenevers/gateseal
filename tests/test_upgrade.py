@@ -109,10 +109,6 @@ def consumer_at(installed, team, root, tag, *capabilities):
         "policy",
         "--policy-tag",
         tag,
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         env=env,
     )
     return consumer, env
@@ -149,7 +145,6 @@ def test_policy_upgrade_and_rollback_keep_choices_and_exceptions(
     )
     assert targets(moved)["pre-commit-hooks"] == ("5.0.0", "6.0.0", "upgrade")
     assert targets(moved)["betterleaks"] == ("1.9.0", "1.9.0", "unchanged")
-    assert targets(moved)["pre-commit"][2] == "unchanged"
     assert exceptions(moved) == {"betterleaks": ("1.9.0", "redundant")}
     assert found["redundant_exception"]["severity"] == "warning"
     after = manifest.read_text()
