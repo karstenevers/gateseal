@@ -11,6 +11,7 @@ import json
 
 import pytest
 from conftest import TRACKED, adopt, commit_hygiene
+from gateseal.compiler_release import REPOSITORY
 from installation import (
     clone,
     install,
@@ -51,6 +52,14 @@ def committed_pin(root):
     return json.loads(lock)["gateseal"]
 
 
+def hook_commit(root):
+    """Return the commit at which the native configuration runs gateseal's hook."""
+    config = json.loads((root / ".pre-commit-config.yaml").read_bytes())
+    first = config["repos"][0]
+    assert (first["repo"], first["hooks"]) == (REPOSITORY, [{"id": "gateseal-check"}])
+    return first["rev"]
+
+
 def test_two_repositories_upgrade_and_roll_back_independently(
     installed, next_installed, gateseal_origin, tmp_path
 ):
@@ -76,6 +85,7 @@ def test_two_repositories_upgrade_and_roll_back_independently(
     success(["git", "add", *TRACKED], first)
     commit_hygiene(first)
     assert committed_pin(first)["version"] == NEXT
+    assert hook_commit(first) == committed_pin(first)["commit"] == upcoming[-40:]
     assert next_installed.cli(first, "doctor")["code"] == "healthy"
     refused = installed.cli(first, "check", code=2)
     assert refused["code"] == "selected_compiler_required"
@@ -87,6 +97,7 @@ def test_two_repositories_upgrade_and_roll_back_independently(
     success(["git", "add", *TRACKED], first)
     commit_hygiene(first)
     assert committed_pin(first)["version"] == CURRENT
+    assert hook_commit(first) == committed_pin(first)["commit"] == current[-40:]
     assert installed.cli(first, "status")["code"] == "healthy"
     assert tracked(second) == other
     commit_hygiene(second)
@@ -119,7 +130,11 @@ def test_the_bundled_policy_moves_only_when_asked(installed, variant, consumer):
     assert combined["code"] == "invalid_invocation"
 
     moved = variant.cli(consumer, "upgrade", "--policy", "bundled")
-    assert sorted(moved["changed"]) == ["gateseal.lock", "gateseal.toml"]
+    assert sorted(moved["changed"]) == [
+        ".pre-commit-config.yaml",
+        "gateseal.lock",
+        "gateseal.toml",
+    ]
     assert list(targets(moved)) == ["gateseal"]
     assert 'release = "variant-' in (consumer / "gateseal.toml").read_text()
     assert variant.cli(consumer, "check")["code"] == "consistent"

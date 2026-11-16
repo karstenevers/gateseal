@@ -132,4 +132,7 @@ redacts its own findings.
 
 During a commit, pre-commit streams output to Git's terminal. A finding
 appears below its hook name, usually as `file:line:column: rule message`.
-Git receives pre-commit's exit status. gateseal does not run during a commit.
+Git receives pre-commit's exit status. The installed gateseal command does
+not run during a commit. The `gateseal-check` hook runs the gateseal that the
+Lock pins. When it stops a commit, it prints a `gateseal:` line and a `Next:`
+line.

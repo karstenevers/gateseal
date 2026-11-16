@@ -146,7 +146,7 @@ def test_configure_selects_secrets_alone(tmp_path):
     assert outputs and all(name.startswith(".gateseal/betterleaks") for name in outputs)
     config = json.loads((root / CONFIG).read_bytes())
     hooks = [hook["id"] for repo in config["repos"] for hook in repo["hooks"]]
-    assert hooks == ["betterleaks"]
+    assert hooks == ["gateseal-check", "betterleaks"]
 
 
 def test_a_rerun_changes_nothing(tmp_path):

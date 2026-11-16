@@ -11,6 +11,7 @@ import subprocess
 
 from gateseal import ci, lock, runtime, setup
 from gateseal.ci import OFFLINE, Scope
+from gateseal.compiler_release import CHECK_HOOK
 from gateseal.diagnostics import Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.processes import execute, pre_commit_command
@@ -29,14 +30,21 @@ SCAN_MESSAGES = {
 
 
 def run(locked: lock.Locked) -> Result:
-    """Run the hooks of a commit on every file."""
+    """Run the hooks of a commit on every file.
+
+    The check hook reads the index that a commit records. gateseal run checks
+    the working tree, whose files lock.load compared with the Lock, so pre-commit
+    skips that hook here.
+    """
+    environment = dict(os.environ)
+    environment["SKIP"] = ",".join(filter(None, (environment.get("SKIP"), CHECK_HOOK)))
     process = execute(
         pre_commit_command(
             setup.require_pre_commit(),
             [*runtime.hook_run(Stage.RUN), "--all-files", "--color", "never"],
         ),
         locked.root,
-        dict(os.environ),
+        environment,
         allow_failure=True,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")

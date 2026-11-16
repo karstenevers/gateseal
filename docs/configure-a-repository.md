@@ -90,5 +90,10 @@ on](github-ci.md#turn-it-on). Commit the generated
 ## What a commit checks
 
 A commit checks the files you staged, with the hooks in
-`.pre-commit-config.yaml`. [Which files run](how-a-commit-runs.md#which-files-run) covers
-`git commit -a` and the other ways Git chooses the files.
+`.pre-commit-config.yaml`. The first hook, `gateseal-check`, runs the gateseal
+that the Lock pins. It stops a commit whose staged `gateseal.toml` or
+generated files differ from what the staged Lock records, such as a
+hand-edited `.pre-commit-config.yaml`. It needs no network. [Which files run](how-a-commit-runs.md#which-files-run) covers
+`git commit -a` and the other ways Git chooses the files. `gateseal run`
+skips `gateseal-check`, because it checks the working tree and compares the
+generated files there with the Lock first.

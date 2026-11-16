@@ -27,10 +27,12 @@ install the commit that the Lock pins.
 ## Commit
 
 Commits from your terminal or Git client check the files you stage. A commit
-runs pre-commit, not gateseal.
+runs pre-commit, and pre-commit runs the gateseal that the Lock pins as its
+first hook. The installed gateseal command plays no part.
 
 The first commit that needs a tool downloads it, so it needs network access
-and takes longer. pre-commit builds the environment of each hook repository.
+and takes longer. pre-commit builds the environment of each hook repository,
+gateseal's own among them.
 mise installs each release binary and checks its SHA-256 against the value in
 `.pre-commit-config.yaml`. Later commits reuse both, and all clones on the
 machine share them. After you pull a changed Lock, the next commit installs
@@ -46,6 +48,9 @@ release or build that the Lock pins.
 - If a hook changes a file, review the fix with `git diff`, stage it, and commit again.
 - If a hook reports a finding, fix the reported line and stage the change.
 - If Betterleaks reports a secret, remove it. Rotate any real credential before you retry.
+- If `gateseal-check` reports that a staged file differs from the file gateseal
+  wrote, undo the edit. To change a check, change `gateseal.toml` and run
+  `gateseal configure` instead.
 - If a hook cannot start, run `gateseal doctor` and follow its next steps.
 
 You can stage part of an ordinary source file. Stage

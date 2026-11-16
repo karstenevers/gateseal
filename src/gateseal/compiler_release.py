@@ -34,6 +34,9 @@ REPOSITORY = "https://github.com/karstenevers/gateseal"
 
 COMMIT = re.compile(r"[0-9a-f]{40}")
 
+CHECK_HOOK = "gateseal-check"
+"""The hook that gateseal's repository defines in .pre-commit-hooks.yaml."""
+
 
 @dataclass(frozen=True)
 class GatesealPin:
@@ -72,6 +75,14 @@ class GatesealPin:
     def running(self) -> bool:
         """Tell whether this is the gateseal that runs, from its repository."""
         return (self.repository, self.version) == (REPOSITORY, __version__)
+
+    def hook_repository(self) -> dict[str, object]:
+        """Return the native configuration's repository of the check hook."""
+        return {
+            "repo": self.repository,
+            "rev": self.commit,
+            "hooks": [{"id": CHECK_HOOK}],
+        }
 
 
 @dataclass(frozen=True)

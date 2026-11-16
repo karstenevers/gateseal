@@ -119,7 +119,9 @@ def unstaged_names(root):
         ("all", "linked"),
     ],
 )
-def test_commit_modes_check_the_index_they_commit(request, tmp_path, mode, where):
+def test_commit_modes_check_the_index_they_commit(
+    installed, request, tmp_path, mode, where
+):
     root = request.getfixturevalue(where)
     modes, other, notes = (
         root / f"{mode}-{name}.txt" for name in ("modes", "other", "notes")

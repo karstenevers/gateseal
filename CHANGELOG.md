@@ -14,14 +14,21 @@ change the manifest, policy or lock format, and its entry says how to move.
   global `init.templateDir`, so every new clone runs pre-commit at
   `git commit`. `gateseal setup --refresh` adds the launcher to an existing
   clone.
+- The `gateseal-check` hook. `.pre-commit-config.yaml` lists gateseal's
+  repository first, at the commit that the Lock pins, so pre-commit builds
+  that gateseal and runs its hook before the tools. The hook compares the
+  staged `gateseal.toml` and each staged generated file with the SHA-256 that
+  the staged Lock records, with no network and no policy. A commit that stages
+  an edited generated file stops and names `gateseal configure`. `gateseal
+  run` skips the hook.
 
 ### Changed
 
-- A commit runs pre-commit, not gateseal. pre-commit builds the environment of
-  each hook repository, and mise installs each release binary at its first use
-  and checks its SHA-256. A hook that starts a release binary names its mise
-  request in `.pre-commit-config.yaml`, so `.gateseal/mise.toml` is no longer
-  written.
+- A commit runs pre-commit, not the installed gateseal command. pre-commit
+  builds the environment of each hook repository, and mise installs each
+  release binary at its first use and checks its SHA-256. A hook that starts a
+  release binary names its mise request in `.pre-commit-config.yaml`, so
+  `.gateseal/mise.toml` is no longer written.
 - `gateseal run` and `gateseal gate` start the pre-commit that `gateseal setup`
   installed, with the caller's environment. Without it they stop with
   `needs_setup`.
