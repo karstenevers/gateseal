@@ -10,7 +10,6 @@ from gateseal import __version__
 from gateseal.bootstrap import MANIFEST
 from gateseal.compiler_release import load_runtime
 from gateseal.diagnostics import GatesealError, Note
-from gateseal.hook_python import HookPython
 from gateseal.managed_files import relative_name
 from gateseal.policy import (
     ChoiceValue,
@@ -330,14 +329,12 @@ class Selection:
 
     tools holds every tool the capabilities use, in capability order, each at
     its selected version with exceptions applied and running only the chosen
-    alternatives. python is the policy's Hook Python when a selected tool
-    runs on Python. ci is the Manifest's.
+    alternatives. ci is the Manifest's.
     """
 
     choices: Mapping[str, Mapping[str, ChoiceValue]]
     exceptions: Mapping[str, VersionException]
     tools: tuple[Tool, ...]
-    python: HookPython | None
     ci: CI | None
 
     @property
@@ -382,14 +379,7 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
         load_runtime().pre_commit,
     )
     _require_accepted(tools, choices)
-    python = policy.hook_python
-    if python is not None and (
-        python.on_runtime or not any(tool.definition.source.python for tool in tools)
-    ):
-        python = None
-    return Selection(
-        choices, dict(sorted(exceptions.items())), tools, python, manifest.ci
-    )
+    return Selection(choices, dict(sorted(exceptions.items())), tools, manifest.ci)
 
 
 def _require_offered(manifest: Manifest, policy: Policy) -> None:

@@ -26,7 +26,7 @@ from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment, uv_environment
 from gateseal.managed_files import read_optional, write_atomic
 from gateseal.processes import execute, find_git, find_tool
-from gateseal.tools.release_binary import MINIMUM_MISE, require_mise
+from gateseal.tools.release_binary import mise_problem, require_mise
 from gateseal.validation import version_key
 from gateseal.worktree import Worktree, locate_worktree
 
@@ -168,19 +168,12 @@ def _require(home: Path, name: str, minimum: str, find: Callable[[Path], str]) -
 
 
 def _mise_notes() -> tuple[Note, ...]:
-    """Warn about a missing or old mise, which only some Policies need."""
+    """Warn about a missing, old or broken mise, which only some Policies need."""
     try:
         require_mise(tool_environment())
     except GatesealError as exc:
-        found = "none is" if exc.code == "missing_prerequisite" else "an older one is"
-        return (
-            Note(
-                "warning",
-                exc.code,
-                f"A Policy with a release binary, such as Betterleaks, needs mise "
-                f"{MINIMUM_MISE} or later, and {found} on PATH.",
-            ),
-        )
+        need = "A Policy with a release binary, such as Betterleaks, needs"
+        return (Note("warning", exc.code, mise_problem(need, exc)),)
     return ()
 
 
@@ -195,7 +188,7 @@ def _template_configured(git: str, template: Path) -> bool:
             next_step="Unset GIT_TEMPLATE_DIR where your shell sets it, then run "
             "gateseal setup again.",
         )
-    found = _git_setting(
+    found = git_setting(
         git, Path("/"), "--show-origin", "-z", "--type=path", TEMPLATE_SETTING
     )
     if found is None:
@@ -234,7 +227,7 @@ def _refuse_hooks_path(git: str, root: Path) -> None:
 
     root is the filesystem root for new clones and the clone itself for --refresh.
     """
-    folder = _git_setting(git, root, "core.hooksPath")
+    folder = git_setting(git, root, "core.hooksPath")
     if folder is not None:
         raise GatesealError(
             "custom_hooks_path",
@@ -245,7 +238,7 @@ def _refuse_hooks_path(git: str, root: Path) -> None:
         )
 
 
-def _git_setting(git: str, root: Path, *options: str) -> str | None:
+def git_setting(git: str, root: Path, *options: str) -> str | None:
     """Return a setting as Git reads it from root, or None when it is unset.
 
     The setting's name comes last in options. Any failure but Git's exit code 1
@@ -268,6 +261,23 @@ def _git_setting(git: str, root: Path, *options: str) -> str | None:
             "Fix what Git reports, then run gateseal setup again.",
         )
     return found.stdout.decode().removesuffix("\n")
+
+
+def require_pre_commit() -> str:
+    """Return the Python of the owned pre-commit, which must start.
+
+    A file that exists is not enough, so the install reports its versions.
+    """
+    layout = Layout(data_root())
+    if not _installed(layout, load_runtime().pre_commit, Path.home()):
+        raise GatesealError(
+            "needs_setup",
+            f"The pre-commit that gateseal setup installs under {layout.tools} is "
+            "missing or does not start.",
+            3,
+            "gateseal setup",
+        )
+    return str(layout.python)
 
 
 def _installed(layout: Layout, pre_commit: str, home: Path) -> bool:

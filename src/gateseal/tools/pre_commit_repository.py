@@ -5,15 +5,11 @@ Guarantees this module owns, whatever a definition says:
 - Exact pin: the Policy Lock records each reviewed version's full commit,
   which gateseal policy lock read from its release tag. The Lock records the
   selected one, and pre-commit clones exactly it.
-- Version proof: when a definition names an executable, activation and
-  doctor refuse any other version. Ruff's names one, because ruff-pre-commit
-  installs Ruff from an index by version and without a hash. A definition
-  whose hooks are the repository's own code, as pre-commit-hooks' are, names
-  none, and the commit alone proves its version.
-- No host fallback: every hook environment is attributed to a locked tool by
-  repository and revision, every probe and recorded executable is resolved
-  inside that environment, and commits refuse a missing one.
-- Closed failure: every refusal names gateseal activate.
+
+pre-commit builds the repository's hook environment at its first use, on the
+Python that pre-commit runs on, and installs what the repository's commit
+names. A dependency that the commit names without a hash, as ruff-pre-commit
+names Ruff by version, is not pinned further.
 
 Each version's Policy Lock record is its revision. The Lock records each
 tool in components under its name.
@@ -23,7 +19,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar
@@ -56,7 +52,6 @@ class PreCommitRepository:
 
     kind: ClassVar[str] = "pre-commit-repository"
     local: ClassVar[bool] = False
-    python: ClassVar[bool] = True
     repository: str
     tag: str
 
@@ -139,14 +134,15 @@ class RepositoryTool:
     def using(self, hooks: tuple[Hook, ...]) -> RepositoryTool:
         return replace(self, use=replace(self.use, hooks=hooks))
 
-    def entry(self, exclude: str | None, python: str | None) -> dict[str, object]:
+    def program(self, variables: Collection[str] = ()) -> None:
+        return None
+
+    def entry(self, exclude: str | None) -> dict[str, object]:
         hooks: list[object] = []
         for hook in self.use.hooks:
-            entry = hook.base_entry(exclude)
+            entry = hook.base_entry(exclude, self.definition.stages)
             if hook.args:
                 entry["args"] = list(hook.args)
-            if python is not None:
-                entry["language_version"] = python
             hooks.append(entry)
         return {
             "repo": self.source.repository,

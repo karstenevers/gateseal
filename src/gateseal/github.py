@@ -1,4 +1,4 @@
-"""The GitHub Actions workflow that prepares the Lock and runs the CI gate.
+"""The GitHub Actions workflow that checks the Lock and runs the CI gate.
 
 The workflow is an owned output, so a reviewer reads it in a pull request's
 diff and check refuses an edited one. The gate checks the commit GitHub runs
@@ -52,7 +52,8 @@ uv venv --no-config --managed-python --python "$GATESEAL_PYTHON" "$command"
 printf '%s\\n' "$GATESEAL_COMPILER" > "$RUNNER_TEMP/gateseal-compiler.txt"
 uv pip install --no-config --python "$command/bin/python" --require-hashes \\
   --no-deps --only-binary :all: -r "$RUNNER_TEMP/gateseal-compiler.txt"
-"$command/bin/gateseal" activate
+"$command/bin/gateseal" setup
+"$command/bin/gateseal" check
 """
 
 GATE = """\
@@ -154,7 +155,7 @@ def workflow(ci: CI, artifact: CompilerArtifact, source: Source) -> bytes:
         "        with:",
         "          fetch-depth: 0",
         "          persist-credentials: false",
-        *_step("Prepare the locked compiler, policy and checks", env, PREPARE),
+        *_step("Set up the locked compiler, pre-commit and the policy", env, PREPARE),
         *_step("Run the gateseal gate", GATE_ENV, GATE),
     ]
     return ("\n".join(lines) + "\n").encode()

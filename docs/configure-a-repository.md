@@ -20,12 +20,12 @@ Review the three files that `configure` creates for `hygiene`:
 | `gateseal.lock` | The Lock records the exact compiler and policy, tool versions, and generated files. |
 | `.pre-commit-config.yaml` | The pre-commit hooks that gateseal generated from your selection. |
 
-From the repository root, check that these files agree and prepare the tools
-for this worktree:
+From the repository root, check that these files agree, and add the commit
+launcher to this clone:
 
 ```sh
 gateseal check
-gateseal activate
+gateseal setup --refresh
 ```
 
 Stage the files. If you enabled Python, secrets, or CI, also stage the files
@@ -51,11 +51,11 @@ select `["hygiene", "python"]` to add Python checks. Run:
 
 ```sh
 gateseal configure
-gateseal activate
 git add gateseal.toml gateseal.lock .pre-commit-config.yaml .gateseal
 ```
 
-Review the staged changes and commit. Keep each generated file fully staged.
+Review the staged changes and commit. Stage `.pre-commit-config.yaml` in
+full, because pre-commit stops a commit while it has unstaged changes.
 
 ### Check Python with Ruff
 
@@ -67,8 +67,7 @@ come from `.gateseal/ruff.toml`. Stage this file with the Lock.
 Ruff applies safe fixes. For other findings, it reports the file, line,
 column, and rule. Fix the reported line, review any automatic changes, then
 stage and commit again. To see findings across all tracked files, run
-`gateseal run --json`. To check the prepared Ruff version, run
-`gateseal doctor`.
+`gateseal run --json`. `gateseal status` names the selected Ruff version.
 
 ### Detect secrets
 
@@ -77,9 +76,9 @@ finding identifies the file, line, column, and rule. The output hides the
 secret. Remove the secret, rotate a real credential, then stage and commit
 the fix. A false positive needs a change to the reviewed policy rules.
 
-Activation uses mise to install Betterleaks. Stage the generated Betterleaks
-rules, both report templates, and the mise configuration under `.gateseal`.
-After activation, commits and `gateseal run` use the prepared binary directly.
+Each Betterleaks hook starts through mise, which installs Betterleaks at the
+first use and checks its SHA-256. Stage the generated Betterleaks rules and
+both report templates under `.gateseal`.
 
 ## Check in GitHub CI
 
@@ -90,7 +89,6 @@ on](github-ci.md#turn-it-on). Commit the generated
 
 ## What a commit checks
 
-A commit checks the files you staged. The staged `gateseal.lock` selects the
-gateseal version and the checks, even if you change the Lock again after you
-stage it. [Which files run](how-a-commit-runs.md#which-files-run) covers
+A commit checks the files you staged, with the hooks in
+`.pre-commit-config.yaml`. [Which files run](how-a-commit-runs.md#which-files-run) covers
 `git commit -a` and the other ways Git chooses the files.

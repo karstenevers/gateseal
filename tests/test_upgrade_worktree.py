@@ -114,7 +114,7 @@ def team_commits(team, monkeypatch):
 def configure(root, *capabilities, policy=BUNDLED, ci=None):
     """Configure root as gateseal configure does; return its worktree."""
     worktree = locate_worktree(root)
-    with runtime.operation_lock(runtime.preparation_directory(worktree, create=True)):
+    with runtime.operation_lock(runtime.preparation_directory(worktree)):
         lock.configure(
             worktree.root,
             worktree.git,
@@ -138,8 +138,8 @@ def adopted(root, tag, *capabilities):
     )
 
 
-def request(policy=None, components=None, flags=(None, None), *, activate=False):
-    return upgrade.Request(policy, None, components or {}, *flags, activate)
+def request(policy=None, components=None, flags=(None, None)):
+    return upgrade.Request(policy, None, components or {}, *flags)
 
 
 def tracked(root):
@@ -167,7 +167,7 @@ def test_an_upgrade_without_targets_writes_nothing(consumer):
     before = tracked(consumer)
     policy = load_bundled_policy()
     same = (None, SOURCE, CHECKSUM)
-    for asked in (request(), upgrade.Request(None, same, {}, None, None, False)):
+    for asked in (request(), upgrade.Request(None, same, {}, None, None)):
         result = upgrade.run(worktree, asked)
         assert (result.code, result.changed) == ("unchanged", ())
         assert result.next_steps == ()
@@ -186,7 +186,7 @@ def test_an_upgrade_moves_the_compiler_pin_to_another_url_of_its_wheel(consumer)
     worktree = configure(consumer, "hygiene", ci="github")
     pypi = f"https://files.pythonhosted.org/packages/5b/a5/{'c' * 60}/{WHEEL}"
     flags = (None, pypi, CHECKSUM)
-    result = upgrade.run(worktree, upgrade.Request(None, flags, {}, None, None, False))
+    result = upgrade.run(worktree, upgrade.Request(None, flags, {}, None, None))
     assert set(result.changed) == {"gateseal.lock", ".github/workflows/gateseal.yml"}
     document = json.loads((consumer / "gateseal.lock").read_bytes())
     assert document["compiler"]["source"] == {"kind": "https-wheel", "location": pypi}
@@ -202,13 +202,11 @@ def test_a_policy_move_fetches_writes_and_stores_the_new_release(
     result = upgrade.run(worktree, request(lock.PolicyRequest(tag="v2")))
     assert result.code == "upgraded"
     assert sorted(result.changed) == [
-        ".gateseal/mise.toml",
         ".pre-commit-config.yaml",
         "gateseal.lock",
         "gateseal.toml",
     ]
-    activate, review = result.next_steps
-    assert activate == "gateseal activate"
+    (review,) = result.next_steps
     assert "git diff" in review
     moved = moves(result)
     assert moved["pre-commit-hooks"] == ("5.0.0", "6.0.0", "upgrade")
@@ -279,30 +277,3 @@ def test_an_edited_output_is_refused_before_any_write(consumer):
     # Loading the Lock with its outputs refuses with the same code. Only the
     # write check says preserve, so upgrade must leave outputs unread at load.
     assert "preserve" in str(error)
-
-
-def test_a_failed_activation_keeps_the_upgraded_files(consumer):
-    worktree = configure(consumer, "hygiene")
-    hook = worktree.hook
-    hook.parent.mkdir(exist_ok=True)
-    hook.write_text("#!/bin/sh\nexit 0\n")
-    older = request(
-        components={"pre-commit-hooks": "5.0.0"},
-        flags=(REASON, REVIEW_BY),
-        activate=True,
-    )
-    result = upgrade.run(worktree, older)
-    assert (result.code, result.exit_code) == ("activation_failed", 2)
-    assert all(value in result.message for value in ("unmanaged_hook", str(hook)))
-    preserve, review = result.next_steps
-    assert str(hook) in preserve
-    assert "git diff" in review
-    assert sorted(result.changed) == sorted(TRACKED)
-    assert 'version = "5.0.0"' in (consumer / "gateseal.toml").read_text()
-
-    shutil.rmtree(hook.parent)
-    hook.parent.write_bytes(b"")
-    again = upgrade.run(worktree, request(activate=True))
-    assert (again.code, again.exit_code) == ("activation_failed", 4)
-    assert "filesystem_error" in again.message
-    assert again.next_steps == ("gateseal activate",)

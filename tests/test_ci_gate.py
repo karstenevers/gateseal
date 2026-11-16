@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from conftest import preserved
+from conftest import on_machine, preserved
 from installation import clone, package_version, process, success
 
 pytestmark = pytest.mark.integration
@@ -15,7 +15,6 @@ TRACKED = (
     ".gateseal/betterleaks-history-report.tmpl",
     ".gateseal/betterleaks-report.tmpl",
     ".gateseal/betterleaks.toml",
-    ".gateseal/mise.toml",
     WORKFLOW,
 )
 ZEROS = "0" * 40
@@ -60,12 +59,11 @@ def unchecked(root, name, text, message):
 @pytest.fixture(scope="module")
 def gated(installed, tmp_path_factory):
     root = tmp_path_factory.mktemp("gated consumer ü").resolve()
-    consumer = clone(root / "origin", root / "consumer space ü ")
-    configure(installed, consumer)
-    activated = installed.cli(consumer, "activate", "--compiler-wheel", installed.wheel)
-    assert activated["code"] == "prepared"
-    success(["git", "add", *TRACKED], consumer)
-    committed = process(["git", "commit", "-m", "Adopt the CI gate"], consumer)
+    with on_machine(installed):
+        consumer = clone(root / "origin", root / "consumer space ü ")
+        configure(installed, consumer)
+        success(["git", "add", *TRACKED], consumer)
+        committed = process(["git", "commit", "-m", "Adopt the CI gate"], consumer)
     assert committed.returncode == 0, committed.stdout + committed.stderr
     return consumer
 
@@ -83,8 +81,6 @@ def test_configure_owns_the_workflow_and_check_guards_it(installed, consumer):
     assert WORKFLOW in lock["outputs"]
     assert lock["compiler"]["source"] == {"kind": "https-wheel", "location": source()}
     assert installed.cli(consumer, "check")["code"] == "consistent"
-    unprepared = installed.cli(consumer, "gate", code=3)
-    assert unprepared["code"] == "needs_activation"
     with preserved(consumer / WORKFLOW) as original:
         (consumer / WORKFLOW).write_bytes(original.replace(b"read", b"write"))
         edited = installed.cli(consumer, "check", code=2)

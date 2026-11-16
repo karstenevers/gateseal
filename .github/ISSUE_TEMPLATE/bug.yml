@@ -16,7 +16,7 @@ body:
       description: The shortest steps from a fresh clone, such as a scratch repository from the demo.
       placeholder: |
         1. gateseal configure --capability hygiene ...
-        2. gateseal activate
+        2. gateseal setup --refresh
         3. git commit ...
     validations:
       required: true

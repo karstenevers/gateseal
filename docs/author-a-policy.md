@@ -160,9 +160,8 @@ the candidate tag and the consumer repository on your machine.
     local tag, commit, and policy lock. The consumer manifest records the
     real URL with the local candidate tag.
 
-3. In the consumer repository, run `gateseal activate`. Review and stage
-   the generated files with a sample change. Run `git commit` to test the
-   checks a contributor will run.
+3. In the consumer repository, review and stage the generated files with a
+   sample change. Run `git commit` to test the checks a contributor will run.
 
 4. Remove the disposable consumer repository. In the policy repository, run
    `git tag -d candidate-team-2026.11` to remove the local test tag.

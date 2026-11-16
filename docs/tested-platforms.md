@@ -7,12 +7,12 @@ Use [Install gateseal](install.md) to set up a supported machine.
 
 | Tool | Version | When you need it |
 | --- | --- | --- |
-| Git | 2.54.0 or later | Repository commands and commits. gateseal uses `git hook list` to detect other configured hooks. |
-| uv | 0.13.6 or later is tested. Activation accepts 0.13.5. | Install and prepare gateseal. A prepared commit can run after you remove uv. |
-| mise | 2026.10.19 or later | Prepare release binaries such as Betterleaks. The bundled policy requires mise when you select `secrets`. |
+| Git | 2.54.0 or later | Repository commands and commits. |
+| uv | 0.13.6 or later is tested. gateseal accepts 0.13.5. | Install gateseal and run `gateseal setup`. A commit does not start uv. |
+| mise | 2026.10.19 or later | Start release binaries such as Betterleaks. The bundled policy requires mise when you select `secrets`. |
 
-Activation prepares CPython and pre-commit. You do not need to install either
-separately. An older Git, uv, or mise produces `git_version_mismatch`,
+`gateseal setup` installs pre-commit and the Python it runs on. You do not
+need to install either separately. An older Git, uv, or mise produces `git_version_mismatch`,
 `uv_version_mismatch`, or `mise_version_mismatch`, respectively.
 
 ## Recorded test environments

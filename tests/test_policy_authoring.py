@@ -347,7 +347,7 @@ def test_a_started_policy_is_adopted_and_a_stale_release_is_refused(
 ):
     """Adoption loads the release through the same check as policy check.
 
-    Configure, activation and check load every policy through that check, so
+    Configure and check load every policy through that check, so
     a release whose lock disagrees never reaches a Lock.
     """
     team = started.parent

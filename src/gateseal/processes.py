@@ -14,7 +14,7 @@ def execute(
     env: dict[str, str],
     *,
     allow_failure: bool = False,
-    next_step: str = "gateseal activate",
+    next_step: str = "",
     stdin: bytes | None = None,
     inherit: tuple[int, ...] = (),
 ) -> subprocess.CompletedProcess[bytes]:

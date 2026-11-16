@@ -42,7 +42,6 @@ pin = "6.0.0"
 | `choices.<capability>.<name>.default` | Exposes a choice. Use the compiler's `hygiene.exclude`, a tool's declared choice, or a capability's alternatives. Use an empty `[choices]` table if you expose none. |
 | `components.<name>.pin` | The default version. It must be one of the reviewed versions. |
 | `components.<name>.versions.<version>` | A reviewed version and its optional minimum requirements for other tools. |
-| `components.python` | Optional. A [Hook Python](#hook-python) pin and reviewed CPython versions. These versions cannot require other tools. |
 
 ## Capabilities
 
@@ -75,7 +74,7 @@ default = "ruff-format"
 ```
 
 Only the selected formatter runs. If the choice leaves a tool with no hooks,
-gateseal skips its preparation, configuration, and Lock entry. A Version
+gateseal skips its configuration and Lock entry. A Version
 Exception for that tool gives `unused_exception`. To see which formatter a
 repository selected, run `gateseal status` or `gateseal doctor`.
 
@@ -107,7 +106,7 @@ reserves `exclude` in `hygiene`.
 
 ## Components
 
-List exactly one component for each tool and, optionally, a Hook Python.
+List exactly one component for each tool.
 A different set of components gives `unsupported_component`. Each component
 has a pin and the versions that policy authors reviewed with the rules and
 other tools. For Ruff, the version is the Ruff release installed by the
@@ -126,31 +125,6 @@ gateseal checks whether its own pre-commit supports the selected hooks.
 For example, a release binary uses pre-commit's `unsupported` language,
 introduced in pre-commit 4.4.0. An incompatible selection gives
 `incompatible_runtime`.
-
-### Hook Python
-
-To select a CPython for all Python-language pre-commit repositories, add
-`components.python`. If there is no pin yet, `gateseal policy add python
-<version>` creates it. Use `gateseal policy pin python <version>` to choose
-another reviewed version.
-
-```toml
-[components.python]
-pin = "3.15.2"
-
-[components.python.versions."3.15.2"]
-```
-
-The compiler sets the hooks' `language_version` to the pin, for example
-`python3.15.2`. Activation installs that CPython from python-build-standalone
-in the [Interpreter Store](interpreter-store.md). When the policy omits the
-pin or selects the compiler runtime's own CPython, the hooks use the runtime
-interpreter. `status` and `doctor` identify the interpreter. Release
-binaries run independently of Python.
-
-Only the policy author sets the Hook Python. If a
-[repository maintainer](../GLOSSARY.md#repository-maintainer) adds a Version
-Exception for `python`, gateseal reports `unsupported_component`.
 
 ## Rule files
 
@@ -177,7 +151,7 @@ If the policy omits the choice, gateseal adds no target version of its own.
 
 - Ruff enables `E4`, `E7`, `E9`, `F`, and `I`, sets an 88-character
   line length, and targets `py311`. The hook repository installs Ruff from
-  PyPI by version. Activation checks the installed executable's version.
+  PyPI by version.
 - Betterleaks checks for AWS access key identifiers, classic and fine-grained
   GitHub tokens, and generic API key assignments. Assignment keys can be
   quoted, as in JSON.
@@ -189,8 +163,8 @@ its own. The top-level keys `extends`, `extend`, `inherit`, `include`, and
 `base` give `policy_inheritance`.
 
 Loading reads a snapshot of the files without running tools. Later edits
-cannot change that snapshot. Preparing the selected tools checks whether
-they work together.
+cannot change that snapshot. Running the selected tools shows whether they
+work together.
 
 ## Policy Lock
 

@@ -62,7 +62,7 @@ def test_a_changed_release_is_damaged_preparation(preparation):
     release, error = damaged(preparation, lambda path: path.write_bytes(b"edited"))
     assert (error.code, error.exit_code) == ("policy_content_mismatch", 3)
     assert f"policies/{release.name}" in str(error)
-    assert error.next_step == "gateseal activate"
+    assert error.next_step == "gateseal check"
 
 
 def test_an_executable_release_is_refused(preparation):

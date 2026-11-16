@@ -7,7 +7,7 @@ place, drop a blank line or change the line endings.
 
 import pytest
 from gateseal.diagnostics import GatesealError
-from gateseal.policy_toml import component, pinned, reviewed
+from gateseal.policy_toml import pinned, reviewed
 
 NEWEST_FIRST = """\
 schema = 4
@@ -168,56 +168,3 @@ def test_pin_finds_a_dotted_key_under_the_components_table():
     assert pinned(policy.encode(), "ruff", "0.18.0").decode() == policy.replace(
         '"0.17.1"\nruff', '"0.18.0"\nruff'
     )
-
-
-ADDED = """\
-[components.black]
-pin = "26.10.1"
-
-[components.black.versions."26.10.1"]
-"""
-
-
-def test_a_component_goes_after_the_last_components_table():
-    policy = """\
-[components.ruff]
-pin = "0.17.1"
-
-[components.ruff.versions."0.17.1"]
-
-
-[choices.python]
-formatter = "ruff"
-"""
-    result = component(policy.encode(), "black", "26.10.1").decode()
-    assert result == policy.replace('"0.17.1"]\n\n', '"0.17.1"]\n\n' + ADDED + "\n", 1)
-
-
-def test_an_array_of_tables_ends_the_components_tables():
-    policy = """\
-[components.ruff]
-pin = "0.17.1"
-
-[components.ruff.versions."0.17.1"]
-
-[[notes]]
-text = "reviewed"
-"""
-    result = component(policy.encode(), "black", "26.10.1").decode()
-    assert result == policy.replace("[[notes]]", ADDED + "\n[[notes]]")
-
-
-@pytest.mark.parametrize(
-    ("policy", "expected"),
-    [
-        ("", ADDED),
-        ("schema = 4\n", "schema = 4\n\n" + ADDED),
-        (
-            'schema = 4\r\n\r\n[components.ruff]\r\npin = "0.17.1"',
-            'schema = 4\r\n\r\n[components.ruff]\r\npin = "0.17.1"\r\n\r\n'
-            + ADDED.replace("\n", "\r\n"),
-        ),
-    ],
-)
-def test_a_component_keeps_the_files_line_endings(policy, expected):
-    assert component(policy.encode(), "black", "26.10.1").decode() == expected

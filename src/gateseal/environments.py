@@ -1,8 +1,8 @@
-"""The cleaned process environments that activation and hooks run in.
+"""The cleaned process environments that gateseal starts Git, uv and mise in.
 
-Every process gateseal starts for a tool gets one of them, so a variable of
-the user's shell, such as a RUFF_ or BETTERLEAKS_ setting or a uv override,
-cannot change what activation installs or what a hook checks.
+A variable of the user's shell, such as a uv override, then cannot change
+what gateseal reads or installs. pre-commit and its hooks do not get one:
+they run in the caller's environment, as they do at git commit.
 """
 
 import os
@@ -18,10 +18,8 @@ from gateseal.tools.model import Tool
 def tool_environment(tools: Iterable[Tool] = ()) -> dict[str, str]:
     """Return the cleaned environment without the settings of built-ins or tools.
 
-    Every process that activation and the hooks start gets it, so a RUFF_ or
-    BETTERLEAKS_ variable cannot change what activation probes or what a hook
-    checks. GIT_CONFIG makes git config, and no other command, read only the
-    file it names, so with it gateseal would miss settings that a commit obeys.
+    GIT_CONFIG makes git config, and no other command, read only the file it
+    names, so with it gateseal would miss settings that a commit obeys.
     """
     prefixes = (
         *removed_prefixes(),
@@ -34,8 +32,8 @@ def tool_environment(tools: Iterable[Tool] = ()) -> dict[str, str]:
     }
 
 
-def uv_environment(tools: Iterable[Tool] = ()) -> dict[str, str]:
-    env = tool_environment(tools)
+def uv_environment() -> dict[str, str]:
+    env = tool_environment()
     env.pop("UV_OFFLINE", None)
     env.pop("UV_PYTHON_DOWNLOADS", None)
     for name in ("UV_CACHE_DIR", "UV_PYTHON_CACHE_DIR"):

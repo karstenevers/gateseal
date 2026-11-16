@@ -1,38 +1,60 @@
 # Troubleshoot gateseal
 
-When gateseal stops a command or a commit, read its error and the `Next:`
-instruction. If a hook stopped the commit, look for the filename and rule in
-the hook's output.
+When a gateseal command stops, read its error and the `Next:` instruction.
+If a hook stopped a commit, look for the filename and rule in the hook's
+output.
 
-## Inspect a worktree
+## Inspect a clone
 
-From the affected worktree, check its preparation:
+From the affected worktree, run:
 
 ```sh
 gateseal status --json
 gateseal doctor --verbose
 ```
 
-`status` reads local records. `doctor` checks the prepared runtime and tools
-and reports their versions. If either command asks you to repair the
-preparation, run `gateseal activate`.
+Both report [four checks](commands-and-results.md#reading-status-and-doctor):
+the Lock, the pre-commit that `gateseal setup` installed, the commit launcher,
+and mise. Follow the next step of each failed check. `doctor` also warns about
+settings that keep a hook from running.
 
-## A commit or doctor names activation
+## A commit runs no checks
 
-Run `gateseal activate` in the affected worktree. It repairs missing or
-damaged tools. If the preparation is already healthy, it keeps the installed
-tools.
+Run `gateseal doctor` in the clone.
 
-If activation stops partway through, the previous preparation stays selected.
-On a first activation, Git starts using gateseal only after the hook is
-installed. If the hook was installed before activation stopped, it blocks
-commits until you finish activation.
+- **The launcher check failed.** The clone has no commit launcher, or another
+  hook is in its place. Run `gateseal setup --refresh`. A hook that the clone
+  already has stays as `.git/hooks/pre-commit.legacy`, and the launcher runs
+  it first.
+- **`custom_hooks_path`.** Git's `core.hooksPath` is set, so Git skips the
+  launcher. Run `git config --show-origin core.hooksPath` to find the file
+  that sets it, and remove the setting.
+
+## A command reports needs_setup
+
+`gateseal run` and `gateseal gate` start the pre-commit that `gateseal setup`
+installed. Run `gateseal setup`, then run the command again.
+
+## The first commit is slow or fails
+
+The first commit that needs a tool downloads it. pre-commit clones each hook
+repository and builds its environment, and mise downloads each release
+binary. Later commits reuse them.
+
+- **No network access.** Restore network access and commit again.
+- **A checksum does not match.** mise stops the hook when an archive does not
+  have the SHA-256 in `.pre-commit-config.yaml`. Commit again. If the error
+  repeats, tell the policy author, because the upstream file changed.
+- **pre-commit cannot find `mise`.** Install mise 2026.10.19 or later and
+  check that your shell finds it on `PATH`.
+
+A commit does not fetch a team's Git policy. gateseal commands fetch it. See
+[which commands fetch a policy](policy-acquisition.md#which-commands-fetch).
 
 ## A command names a missing or old prerequisite
 
 Install a supported version of the named tool and check that your shell
-finds it first on `PATH`. Run the command again. If a commit reports an old
-Git version, run `gateseal activate` after updating Git.
+finds it first on `PATH`. Run the command again.
 
 | Error (exit 4) | What to check |
 | --- | --- |
@@ -41,14 +63,8 @@ Git version, run `gateseal activate` after updating Git.
 | `uv_version_mismatch` | `uv --version` reports 0.13.5 or later. Version 0.13.6 is tested. |
 | `mise_version_mismatch` | `mise --version` reports 2026.10.19 or later. |
 
-Activation needs mise for release binaries such as Betterleaks. See
+A hook for a release binary, such as Betterleaks, starts through mise. See
 [prerequisite floors](tested-platforms.md#prerequisite-floors).
-
-## A commit names where the worktree was prepared
-
-If you moved a worktree or copied a clone, run `gateseal activate` in its new
-location. Preparation records the worktree it belongs to. Copies that followed
-symbolic links may also need a new preparation.
 
 ## The Manifest was edited or the Lock is lost
 
@@ -57,8 +73,7 @@ Lock and generated files. It keeps the existing compiler pin.
 
 If `gateseal.lock` was deleted by mistake, restore it from Git. To create a
 new Lock, [supply the wheel details](install.md#pin-the-release-in-a-repository)
-again. Run `gateseal check` to confirm that the files agree, then
-`gateseal activate` if the Lock changed.
+again. Run `gateseal check` to confirm that the files agree.
 
 ## A hook changed a file
 
@@ -79,23 +94,6 @@ any changes you need to keep. If the file is a generated output you edited,
 restore its generated contents and make the intended change in the Manifest
 or policy. If another tool owns the file, move it before you run
 `gateseal configure` again.
-
-If activation reports `unmanaged_hook`, it found an existing Git hook. Move
-that hook out of the directory named in the message. Keep it for review,
-then run `gateseal activate` again.
-
-## Activation reports configured hooks
-
-The `configured_hooks` error lists pre-commit hooks enabled through Git
-configuration, including the scope where each is defined. Git runs these
-before the gateseal hook. If you want gateseal to manage this repository's
-commit checks, disable each listed hook for this repository. Replace
-`HOOK_NAME` with the name in the error, then retry activation:
-
-```sh
-git config --local --replace-all hook.HOOK_NAME.enabled false
-gateseal activate
-```
 
 ## A command reports alternate_index
 
@@ -118,39 +116,6 @@ their only copy.
 
 ### When the commit's output is gone
 
-Run `git rev-parse --git-path gateseal` to find the preparation directory.
-Check the `patches` directory there. If the attempt that ran the commit
-still exists, also check its `pre-commit-home`. Activation shows a
-`git apply` command for each patch in `patches` until you delete it.
-[Patches of unstaged edits](local-preparation.md#patches-of-unstaged-edits)
-says when cleanup keeps or deletes a patch.
-
-## Activation reports a hash mismatch for a Python archive
-
-Delete the cached archive directory named in the error and run
-`gateseal activate` again. This downloads a fresh copy. uv checks an
-archive's SHA-256 on reuse and reports a mismatch if the cached copy is
-damaged.
-
-Wheel downloads use the uv cache, which you can set with `UV_CACHE_DIR`.
-Python archives use `UV_PYTHON_CACHE_DIR` if set, or
-`gateseal-python-archives` under the uv cache. Activation unpacks the
-archive when its [interpreter store](interpreter-store.md) entry needs repair
-or installation.
-
-## Activation fails without network access
-
-Restore network access and run `gateseal activate` again. For a first
-activation with the bundled hygiene checks, the machine needs the locked
-wheel, Python archive, pre-commit packages, and hygiene hook repository.
-Python checks also need the Ruff hook repository and package. Secret checks
-need the Betterleaks archive. Later activations reuse cached downloads.
-
-If the compiler wheel is already on the machine, pass its path with
-`gateseal activate --compiler-wheel /path/to/wheel`. For a team Git policy,
-each worktree needs its own copy of the locked policy. See [which commands
-fetch a policy](policy-acquisition.md#which-commands-fetch).
-
-A prepared commit normally uses local tools. If a hook environment is
-missing, pre-commit can try to download a dependency. See the
-[cache-loss test](what-the-tests-prove.md#cache-loss) for this case.
+Look in pre-commit's cache folder for files whose names start with `patch`.
+The folder is `~/.cache/pre-commit`, unless `PRE_COMMIT_HOME` or
+`XDG_CACHE_HOME` names another place.

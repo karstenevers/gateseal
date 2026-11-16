@@ -6,9 +6,8 @@ from importlib.resources import files
 from pathlib import Path
 from typing import cast
 
-from gateseal import __version__, hook_python
+from gateseal import __version__
 from gateseal.diagnostics import GatesealError
-from gateseal.hook_python import HookPython
 from gateseal.managed_files import read
 from gateseal.paths import resolved
 from gateseal.policy_tools import Alternatives, Toolset, read_toolset
@@ -163,8 +162,7 @@ class Policy:
     compiles them. tools holds every tool of every capability by name, in
     capability then tool order, at the policy's pin: its reviewed versions,
     the hooks the policy runs and the configuration it copies into the tool's
-    owned output. hook_python is the pinned Hook Python, or None to run every
-    hook on the runtime's CPython.
+    owned output.
     """
 
     release: str
@@ -173,7 +171,6 @@ class Policy:
     tools: Mapping[str, Tool]
     alternatives: Mapping[tuple[str, str], Alternatives]
     choices: Mapping[tuple[str, str], ChoiceValue]
-    hook_python: HookPython | None
     assets: tuple[Asset, ...]
     content_digest: str
 
@@ -192,8 +189,8 @@ class Review:
 
     definitions holds every tool the capabilities name, uses how the policy
     uses it, and catalogs its pin and reviewed versions, each by tool name in
-    capability then tool order. python catalogs the Hook Python, if the policy
-    pins one. The Policy Lock adds each reviewed version's facts.
+    capability then tool order. The Policy Lock adds each reviewed version's
+    facts.
     """
 
     release: str
@@ -203,15 +200,8 @@ class Review:
     uses: Mapping[str, ToolUse]
     alternatives: Mapping[tuple[str, str], Alternatives]
     catalogs: Mapping[str, Catalog]
-    python: Catalog | None
     choices: Mapping[tuple[str, str], ChoiceValue]
     assets: tuple[Asset, ...]
-
-    @property
-    def components(self) -> dict[str, Catalog]:
-        """Return every component's catalog by name, the Hook Python's included."""
-        python = {} if self.python is None else {hook_python.COMPONENT: self.python}
-        return {**self.catalogs, **python}
 
 
 CONTENT = b"gateseal-policy-content-v1\0"
@@ -337,9 +327,9 @@ def review_policy(
     toolset = read_toolset(
         document["capabilities"], document["tools"], read_asset, asset
     )
-    components = dict(mapping(document["components"], "components"))
-    python = components.pop(hook_python.COMPONENT, None)
-    catalogs = _catalogs(components, toolset.definitions)
+    catalogs = _catalogs(
+        mapping(document["components"], "components"), toolset.definitions
+    )
     exposed = _exposed(document["choices"], toolset)
     for name, use in toolset.uses.items():
         for choice_name, choice in toolset.definitions[name].choices.items():
@@ -355,7 +345,6 @@ def review_policy(
         toolset.uses,
         toolset.alternatives,
         catalogs,
-        None if python is None else _catalog(hook_python.COMPONENT, python, ()),
         exposed,
         tuple(assets),
     )
@@ -376,17 +365,14 @@ def load_policy(
         raise lock_failure(
             "policy_lock_missing", f"The policy has no {LOCK}."
         ) from None
-    records = _records(data, review.components)
+    records = _records(data, review.catalogs)
     tools: dict[str, Tool] = {}
-    python = None
     try:
         for name, use in review.uses.items():
             definition = review.definitions[name]
             tools[name] = definition.source.offer(
                 definition, use, review.catalogs[name], records[name]
             )
-        if review.python is not None:
-            python = hook_python.offer(review.python, records[hook_python.COMPONENT])
     except GatesealError as exc:
         if exc.code != "invalid_field":
             raise
@@ -399,7 +385,6 @@ def load_policy(
         tools,
         review.alternatives,
         review.choices,
-        python,
         assets,
         content_digest(assets),
     )
@@ -464,11 +449,14 @@ def _catalogs(
     must meet each other's requirements.
     """
     if set(components) != set(definitions):
+        other = [
+            f"components.{name}" for name in sorted(set(components) ^ set(definitions))
+        ]
         raise GatesealError(
             "unsupported_component",
             f"This policy's capabilities need exactly the components "
-            f"{', '.join(sorted(definitions))}, and components."
-            f"{hook_python.COMPONENT} may pin a Hook Python.",
+            f"{', '.join(sorted(definitions))}, so {', '.join(other)} is missing or "
+            "names no tool of a capability.",
         )
     known = set(built_in_tools()) | set(definitions)
     catalogs = {

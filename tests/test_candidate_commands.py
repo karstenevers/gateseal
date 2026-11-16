@@ -61,19 +61,14 @@ def test_a_candidate_whose_python_lacks_the_compiler_is_unavailable(tmp_path):
 
 
 def test_a_refusing_candidate_names_its_first_diagnostic_and_step(consumer):
-    """A failed activation reports the upgrade's targets too; only its cause shows."""
-    worktree = configure(consumer, "hygiene")
-    worktree.hook.parent.mkdir(exist_ok=True)
-    worktree.hook.write_text("#!/bin/sh\nexit 0\n")
+    configure(consumer, "hygiene")
     with pytest.raises(GatesealError) as raised:
-        COMPILER.run(consumer, "upgrade", "--activate")
+        COMPILER.run(consumer, "upgrade", "pre-commit")
     error = raised.value
     assert (error.code, error.exit_code) == ("candidate_rejected", 2)
-    named = (__version__, "activation_failed", "unmanaged_hook", str(worktree.hook))
+    named = (__version__, "runtime_target", "Compiler Runtime")
     assert all(value in str(error) for value in named)
-    assert "unchanged" not in str(error)
-    steps = (str(worktree.hook), "gateseal activate")
-    assert all(value in error.next_step for value in steps)
+    assert "--compiler-source" in error.next_step
 
 
 def test_a_candidate_lock_that_records_another_manifest_is_refused(tmp_path):

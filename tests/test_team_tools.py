@@ -9,7 +9,6 @@ dictionaries, where gateseal policy lock and add would reach GitHub.
 import hashlib
 import json
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -310,25 +309,14 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     root = team(tmp_path)
     authoring.lock(root)
     locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    prepared = Path("/attempt")
-    paths = SimpleNamespace(
-        pre_commit_python=prepared / "pre-commit/bin/python",
-        pre_commit_home=prepared / "pre-commit-home",
-        tools=prepared / "tools",
-        git=Path("/usr/bin/git"),
-    )
-
-    @contextmanager
-    def pinned(worktree, pinned_lock):
-        yield SimpleNamespace(paths=paths)
 
     def execute(command, root, env, allow_failure):
-        if command[0] == str(paths.tools / "gateseal-gitleaks"):
+        if command[:2] == ["mise", "--no-config"] and "gitleaks" in command:
             line = f"leak.env:3:1: team-token (A team token) in commit {'a' * 40}\n"
             return subprocess.CompletedProcess(command, 1, line.encode(), b"")
         return subprocess.CompletedProcess(command, 0, b"", b"")
 
-    monkeypatch.setattr(checks.runtime, "pinned", pinned)
+    monkeypatch.setattr(checks.setup, "require_pre_commit", lambda: "/python")
     monkeypatch.setattr(checks, "execute", execute)
     result = checks.gate(None, locked, Scope(None, "a..b", None, "Scanned."))
     assert result.code == "checks_failed"
@@ -604,7 +592,7 @@ def test_upgrade_targets_a_tool_that_the_new_release_adds(tmp_path, upstream):
     authoring.lock(old)
     authoring.lock(new)
     current, _ = consumer(load_policy_tree(old), ("hygiene",))
-    request = upgrade.Request(None, None, {"yamllint": None}, None, None, False)
+    request = upgrade.Request(None, None, {"yamllint": None}, None, None)
     assert upgrade._exception_changes(
         parse_manifest(current.snapshot.manifest),
         current,

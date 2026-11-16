@@ -21,7 +21,6 @@ The resolved store path has the same character restrictions as the
 
 An interpreter entry takes its name from the SHA-256 of its Python archive.
 Two repositories that need the same archive share the installed interpreter.
-A policy can also request a separate [Hook Python](policy-format.md#hook-python).
 
 | Path in the store | Purpose |
 | --- | --- |
@@ -60,7 +59,7 @@ Run `gateseal activate` in each affected worktree to use the rebuilt entry.
 
 pre-commit can also try to rebuild an environment if it loses an interpreter
 after the commit's initial checks. A later activation detects and repairs the
-changed entry. See [Cache loss](what-the-tests-prove.md#cache-loss).
+changed entry.
 
 ## Collection
 

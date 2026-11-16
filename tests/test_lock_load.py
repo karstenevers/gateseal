@@ -1,4 +1,4 @@
-"""load and validate_snapshot check a Manifest, Lock and outputs together.
+"""load checks a Manifest, Lock and outputs together.
 
 describe and review_steps then name what the checked worktree selects.
 """
@@ -64,7 +64,6 @@ def test_load_returns_the_checked_worktree(tmp_path):
     assert [tool.definition.name for tool in locked.selection.tools] == [
         "pre-commit-hooks"
     ]
-    assert lock.validate_snapshot(root, locked.snapshot, preparation(root)) == locked
 
 
 def test_load_reads_tracked_files_as_git_stores_them(tmp_path):
@@ -158,13 +157,6 @@ def surprise_from_another_compiler(document):
             (),
         ),
         (manifest_edit, "lock_mismatch", CONFIGURE, ()),
-        (outputs_edit(dict.clear), "lock_mismatch", "", ()),
-        (
-            outputs_edit(lambda o: o.update(extra=b"")),
-            "lock_mismatch",
-            "",
-            (),
-        ),
         (
             outputs_edit(lambda o: o.update({CONFIG: o[CONFIG] + b"#\n"})),
             "ownership_conflict",
@@ -184,8 +176,6 @@ def surprise_from_another_compiler(document):
     ids=[
         "lock choices",
         "manifest choices",
-        "no outputs",
-        "extra output",
         "edited output",
         "schema 2",
         "boolean schema",
@@ -193,10 +183,14 @@ def surprise_from_another_compiler(document):
         "another compiler first",
     ],
 )
-def test_validate_snapshot_refuses_disagreement(tmp_path, change, code, step, named):
+def test_load_refuses_disagreement(tmp_path, change, code, step, named):
     root = configured(tmp_path)
     snapshot = change(lock.load(root, preparation(root)))
-    error = refused(lock.validate_snapshot, root, snapshot, preparation(root))
+    (root / MANIFEST).write_bytes(snapshot.manifest)
+    (root / LOCK).write_bytes(snapshot.lock)
+    for name, content in snapshot.outputs.items():
+        (root / name).write_bytes(content)
+    error = refused(lock.load, root, preparation(root))
     assert (error.code, error.next_step) == (code, step)
     assert all(value in str(error) for value in named)
 

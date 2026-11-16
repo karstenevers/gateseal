@@ -5,12 +5,11 @@ requirements, so its Policy Lock still holds every fact it needs offline.
 """
 
 import json
-import shutil
 
 import pytest
-from conftest import TRACKED, commit_hygiene, unreachable, uv_shim
+from conftest import TRACKED
 from gateseal.validation import canonical
-from installation import PACKAGE, clone, success
+from installation import clone
 from team_policy import URL, environment, git, publish
 
 pytestmark = pytest.mark.integration
@@ -289,78 +288,3 @@ def test_invalid_targets_write_nothing(installed, team, tmp_path, arguments, cat
     result = upgrade(installed, consumer, env, *arguments, code=2)
     assert result["code"] == category
     assert tracked(consumer) == before
-
-
-def test_activation_failure_keeps_the_tracked_upgrade(installed, team, tmp_path):
-    consumer, env = consumer_at(installed, team, tmp_path, "v1")
-    failing = uv_shim(installed, tmp_path, "exit 7")
-    failing = {**env, **{k: failing[k] for k in ("PATH", "GATESEAL_INTERPRETER_STORE")}}
-    result = upgrade(
-        installed, consumer, failing, "--policy-tag", "v2", "--activate", code=4
-    )
-    assert result["code"] == "activation_failed"
-    assert sorted(result["changed"]) == [
-        ".pre-commit-config.yaml",
-        "gateseal.lock",
-        "gateseal.toml",
-    ]
-    assert "Activation failed with tool_failed" in result["diagnostics"][0]["message"]
-    assert result["next_steps"][0] == "gateseal activate"
-    assert installed.cli(consumer, "check", env=env)["code"] == "consistent"
-    assert installed.cli(consumer, "status", env=env)["code"] == "needs_activation"
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
-    success(["git", "add", *TRACKED], consumer)
-    commit_hygiene(consumer)
-
-
-def test_upgrade_without_a_route_to_its_private_compiler(installed, team, tmp_path):
-    """The clone activates from a downloaded wheel because its compiler is private.
-
-    The upgrade's activation downloads the compiler from the Lock, and its next
-    step names the local wheel that finishes the job without moving the pin.
-    """
-    origin, _ = team
-    env = environment(installed, origin)
-    consumer = clone(tmp_path / "origin", tmp_path / "consumer ü")
-    url = json.loads((PACKAGE / "tests/artifact-source.json").read_bytes())["url"]
-    installed.cli(
-        consumer,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--policy",
-        URL,
-        "--policy-path",
-        "policy",
-        "--policy-tag",
-        "v1",
-        "--compiler-source",
-        url,
-        "--compiler-sha256",
-        installed.checksum,
-        env=env,
-    )
-    downloads = tmp_path / "downloads"
-    downloads.mkdir()
-    copy = shutil.copyfile(installed.wheel, downloads / installed.wheel.name)
-    installed.cli(consumer, "activate", "--compiler-wheel", copy, env=env)
-    result = upgrade(
-        installed,
-        consumer,
-        unreachable(env),
-        "--policy-tag",
-        "v2",
-        "--activate",
-        code=4,
-    )
-    assert result["code"] == "activation_failed"
-    assert result["next_steps"][0] == (
-        f"Give this machine network access to {url}, then run gateseal activate. "
-        f"Or save {url} as {installed.wheel.name} and run gateseal activate "
-        "--compiler-wheel with its absolute path."
-    )
-    upgraded = tracked(consumer)
-    activated = installed.cli(consumer, "activate", "--compiler-wheel", copy, env=env)
-    assert activated["code"] == "prepared"
-    assert tracked(consumer) == upgraded
-    assert installed.cli(consumer, "doctor", env=env)["code"] == "healthy"

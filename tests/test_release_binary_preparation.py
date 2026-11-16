@@ -20,7 +20,7 @@ from gateseal.platforms import TARGETS, Target
 from gateseal.policy import bundled_root, load_bundled_policy
 from gateseal.tools import release_binary
 from gateseal.tools.release_binary import Mise, NativeTool
-from prepared_attempts import executable as script
+from stand_ins import executable as script
 
 LINUX = TARGETS["Linux", "x86_64"]
 INSTALLED = "installs/http-betterleaks/1.9.0"

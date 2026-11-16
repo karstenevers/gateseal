@@ -228,7 +228,7 @@ def test_private_fixture_is_the_built_wheel(installed):
 
 
 @pytest.mark.network
-def test_private_source_runs_complete_workflow(tmp_path, consumer):
+def test_private_source_runs_complete_workflow(installed, tmp_path, consumer):
     artifact = json.loads((PACKAGE / "tests/artifact-source.json").read_bytes())
     python, env = environment(tmp_path, "private-workflow")
     result = install(python, env, tmp_path, artifact["url"], artifact["sha256"])
@@ -248,7 +248,9 @@ def test_private_source_runs_complete_workflow(tmp_path, consumer):
         consumer,
         env,
     )
-    success([*command, "activate"], consumer, env)
     success(["git", "add", *TRACKED], consumer)
-    success(["git", "commit", "-m", "Use verified private compiler"], consumer)
+    committed = success(
+        ["git", "commit", "-m", "Use verified private compiler"], consumer
+    )
+    assert "Passed" in committed.stdout + committed.stderr
     success([*command, "run"], consumer, env)

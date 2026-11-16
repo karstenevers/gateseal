@@ -1,8 +1,7 @@
 """Plan gateseal gate's scope from its revision flags, through main in-process.
 
-The worktree is configured but never prepared, so a planned scope reaches the
-preparation check and stops with needs_activation, while a refused or empty
-scope stops before it.
+No pre-commit is set up, so a planned scope reaches the start of pre-commit and
+stops with needs_setup, while a refused or empty scope stops before it.
 """
 
 import contextlib
@@ -33,7 +32,7 @@ def head(root):
 
 @pytest.fixture(scope="module")
 def commits(tmp_path_factory):
-    """A configured, unprepared consumer with two commits: first and second."""
+    """A configured consumer with two commits: first and second."""
     root = tmp_path_factory.mktemp("cli gate")
     consumer = clone(root / "origin", root / "consumer")
     output = io.StringIO()
@@ -62,11 +61,12 @@ def commits(tmp_path_factory):
     ],
     ids=["every file", "change", "push", "new branch"],
 )
-def test_a_planned_scope_reaches_the_preparation(commits, flags):
+def test_a_planned_scope_reaches_pre_commit(commits, flags, tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     root, first, second = commits
     filled = [f.format(first=first, second=second) for f in flags]
     code, found, _ = gate(root, *filled)
-    assert (code, found) == (3, "needs_activation")
+    assert (code, found) == (3, "needs_setup")
 
 
 def test_a_push_that_deleted_its_ref_has_nothing_to_check(commits):

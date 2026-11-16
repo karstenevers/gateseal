@@ -16,7 +16,6 @@ contains the full Git commit in its `revision` field.
 | --- | --- |
 | Pre-commit repository | `revision` is the full commit ID for the release tag. For an annotated tag, gateseal follows the tag to its commit. |
 | Release binary | `platforms` contains the archive `url`, its `sha256`, and the `executable` for each platform in the definition (`linux-x64`, `macos-arm64`, or both). The checksum comes from the release's checksum file. |
-| Hook Python | `python` uses uv's download metadata, as in the compiler's `runtime.lock`. Each platform key, such as `cpython-3.15.2-linux-x86_64-gnu`, records the python-build-standalone `build`, the `install_only_stripped` archive's `url`, and its `sha256` from `SHA256SUMS`. |
 
 Built-in and team-defined tools of the same kind use the same lock format.
 
@@ -30,13 +29,13 @@ directory. These errors exit 2 and direct the policy author to run
 | Code | What to check |
 | --- | --- |
 | `policy_lock_missing` | The directory must contain `policy.lock`. |
-| `policy_lock_stale` | Every reviewed version needs a record with the platforms the compiler prepares. |
+| `policy_lock_stale` | Every reviewed version needs a record with the platforms the compiler supports. |
 | `policy_lock_unreviewed` | Every component and version in the lock must appear in `policy.toml`. |
 | `policy_lock_edited` | Check the JSON format, `generated_by`, field names and values. The URL and executable must match the tool definition. |
 
 The offline check validates the format of revisions and checksums.
-`gateseal policy lock` checks those values against upstream. Activation
-verifies a downloaded archive against its recorded SHA-256.
+`gateseal policy lock` checks those values against upstream. mise verifies a
+downloaded archive against its recorded SHA-256 before it installs it.
 
 ## Lock command
 
@@ -57,9 +56,7 @@ proxy and certificate settings.
 | `upstream_asset_missing` | 2 | The release lacks its checksum file or an archive listed there. |
 | `upstream_checksum_missing` | 2 | The checksum file has no entry for a platform's archive. |
 | `upstream_checksum_mismatch` | 2 | The downloaded archive's SHA-256 differs from the published checksum. |
-| `upstream_checksums_missing` | 2 | The python-build-standalone build lacks `SHA256SUMS`. |
-| `upstream_archive_missing` | 2 | The build lists no Hook Python archive for the requested version on a supported platform. |
-| `upstream_unavailable` | 4 | Git or an HTTPS download failed. Check access and rerun the command. A `latest-release.json` that names no build also gives this code, without a next step. |
+| `upstream_unavailable` | 4 | Git or an HTTPS download failed. Check access and rerun the command. |
 | `policy_changed` | 2 | A policy file changed while `lock`, `add`, or `pin` was running. The command wrote nothing. Review the edit and retry. |
 
 ### Accept a changed fact
@@ -67,13 +64,6 @@ proxy and certificate settings.
 Investigate an upstream change before accepting it. If you approve the new
 commit or checksum, regenerate the lock and review every change. See
 [Handle a fact that upstream changed](author-a-policy.md#handle-a-fact-that-upstream-changed).
-
-### Hook Python versions
-
-For a recorded CPython version, gateseal checks the checksum in the
-recorded build's `SHA256SUMS`. For a new version, it uses the build named
-by python-build-standalone's `latest-release.json`. That build includes only
-the newest patch release of each CPython minor version.
 
 ## Add and pin commands
 
@@ -87,8 +77,6 @@ After the checks pass, it writes `policy.toml` and then `policy.lock`.
   released before you retry.
 - If the version is already reviewed, `add` only updates the lock.
 - If the command stops between writes, run `gateseal policy lock` to finish.
-- The first `gateseal policy add python <version>` also creates
-  `[components.python]` after the existing components and pins that version.
 
 ### `gateseal policy pin <tool> <version> [<directory>]`
 

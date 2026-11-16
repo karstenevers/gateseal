@@ -38,13 +38,12 @@ Review and stage `gateseal.toml`, `gateseal.lock`, and the generated files.
 
 ## Give Git read access
 
-Each contributor who runs `gateseal activate` needs read access to the policy
-repository. Use a URL without credentials in `gateseal.toml`. For a private
+Each contributor who runs a gateseal command in a clone needs read access to
+the policy repository. A commit needs none. Use a URL without credentials in `gateseal.toml`. For a private
 policy, [set up Git access on your machine or in CI](authenticate.md).
 
-`configure`, `activate`, `check`, and `upgrade` can fetch a missing or
-damaged release. Commits and [other commands](policy-acquisition.md#which-commands-fetch)
-use the worktree's stored copy.
+Every repository command except `status` can fetch a missing or damaged
+release. See [which commands fetch](policy-acquisition.md#which-commands-fetch).
 
 ## Set Policy Choices
 

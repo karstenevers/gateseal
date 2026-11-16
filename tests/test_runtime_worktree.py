@@ -1,15 +1,13 @@
-"""Where a worktree keeps its preparation, and what gateseal refuses to prepare."""
+"""Where a worktree keeps its folder in the Git directory, and its writer lock."""
 
 import shutil
 import stat
 
 import pytest
-from gateseal import bootstrap, runtime
+from gateseal import bootstrap, runtime, sources
 from gateseal.diagnostics import GatesealError
 from gateseal.worktree import locate_worktree
 from installation import clone, success
-
-REFUSED = "= \" ' $ ` \\ :"
 
 
 @pytest.fixture(scope="module")
@@ -40,8 +38,6 @@ def test_a_clone_and_its_linked_worktree_prepare_in_their_own_git_directory(
     clone = locate_worktree(root)
     assert clone.preparation == root / ".git" / bootstrap.PREPARATION
     assert clone.hook == root / ".git" / "hooks" / "pre-commit"
-    assert clone.display(root / "src" / "a.py") == "src/a.py"
-    assert clone.display(tmp_path / "elsewhere") == str(tmp_path / "elsewhere")
     success(["git", "worktree", "add", "--quiet", tmp_path / "linked"], root)
     linked = locate_worktree(tmp_path / "linked")
     assert linked.git_dir == root / ".git" / "worktrees" / "linked"
@@ -66,15 +62,13 @@ def test_another_index_is_refused_rather_than_ignored(root, tmp_path, monkeypatc
     assert "GIT_INDEX_FILE" in error.next_step
 
 
-def test_the_preparation_folder_is_private_and_made_only_on_request(root):
+def test_the_preparation_folder_is_private_and_made_once(root):
     worktree = locate_worktree(root)
-    assert runtime.preparation_directory(worktree) == worktree.preparation
     assert not worktree.preparation.exists()
     for _ in range(2):
-        found = runtime.preparation_directory(worktree, create=True)
+        found = runtime.preparation_directory(worktree)
         assert found == worktree.preparation
     assert stat.S_IMODE(found.stat().st_mode) == 0o700
-    assert runtime.preparation_directory(worktree) == worktree.preparation
 
 
 @pytest.mark.parametrize("kind", ["file", "link", "dangling link"])
@@ -93,52 +87,31 @@ def test_a_preparation_that_is_not_a_folder_is_refused(root, tmp_path, kind):
 
 def test_one_gateseal_writer_runs_at_a_time(root):
     worktree = locate_worktree(root)
-    local = runtime.preparation_directory(worktree, create=True)
+    local = runtime.preparation_directory(worktree)
+    scratch = local / ".gateseal-0a"
     with runtime.operation_lock(local):
+        scratch.mkdir()
         with pytest.raises(GatesealError) as failure, runtime.operation_lock(local):
             pass
+        assert scratch.is_dir()
     error = failure.value
     assert (error.code, error.exit_code) == ("operation_in_progress", 4)
     with runtime.operation_lock(local):
         pass
 
 
-@pytest.mark.parametrize("folder", ["a=b", "a:b"])
-def test_a_clone_path_the_hook_cannot_pass_is_refused(root, tmp_path, folder):
-    runtime.require_supported_path(locate_worktree(root))
-    moved = tmp_path / folder
-    root.rename(moved)
-    worktree = locate_worktree(moved)
-    error = refused(runtime.require_supported_path, worktree)
-    assert error.code == "unsupported_path"
-    assert str(worktree.git_dir) in str(error)
-    assert REFUSED in error.next_step
-    assert "gateseal activate" in error.next_step
-    assert "git worktree remove" not in error.next_step
-
-
-def test_a_linked_worktree_name_the_hook_cannot_pass_is_refused(root, tmp_path):
-    success(["git", "worktree", "add", "--quiet", tmp_path / "wt$x"], root)
-    worktree = locate_worktree(tmp_path / "wt$x")
-    error = refused(runtime.require_supported_path, worktree)
-    assert error.code == "unsupported_path"
-    assert str(worktree.git_dir) in str(error)
-    assert "git worktree remove" in error.next_step
-    assert REFUSED in error.next_step
-
-
-def test_the_gateseal_hook_is_owned_and_any_other_is_not(root):
+def test_a_writer_deletes_the_scratch_folders_a_killed_one_left(root, tmp_path):
     worktree = locate_worktree(root)
-    worktree.hook.parent.mkdir(exist_ok=True)
-    worktree.hook.write_bytes(bootstrap.HOOK)
-    runtime.require_owned_hook(worktree)
-    worktree.hook.write_bytes(bootstrap.HOOK + b"# edited\n")
-    assert refused(runtime.require_owned_hook, worktree).code == "unmanaged_hook"
-
-
-def test_an_unreadable_git_configuration_stops_the_hook_check(root):
-    worktree = locate_worktree(root)
-    with (root / ".git" / "config").open("a") as config:
-        config.write("[core\n")
-    error = refused(runtime.require_owned_hook, worktree)
-    assert (error.code, error.exit_code) == ("git_configuration_failed", 4)
+    local = runtime.preparation_directory(worktree)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "kept").write_text("kept\n")
+    (local / ".gateseal-0a.git" / "objects").mkdir(parents=True)
+    (local / ".gateseal-0b" / "repository").mkdir(parents=True)
+    (local / ".gateseal-link").symlink_to(outside, target_is_directory=True)
+    (local / sources.STORE / ".gateseal-0c").mkdir(parents=True)
+    with runtime.operation_lock(local):
+        left = sorted(entry.name for entry in local.iterdir())
+    assert left == sorted([".gateseal-link", "operation.lock", sources.STORE])
+    assert (local / sources.STORE / ".gateseal-0c").is_dir()
+    assert (outside / "kept").read_text() == "kept\n"

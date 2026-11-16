@@ -17,8 +17,30 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- A commit runs pre-commit, not gateseal. pre-commit builds the environment of
+  each hook repository, and mise installs each release binary at its first use
+  and checks its SHA-256. A hook that starts a release binary names its mise
+  request in `.pre-commit-config.yaml`, so `.gateseal/mise.toml` is no longer
+  written.
+- `gateseal run` and `gateseal gate` start the pre-commit that `gateseal setup`
+  installed, with the caller's environment. Without it they stop with
+  `needs_setup`.
+- `gateseal status` and `gateseal doctor` report the same four checks: the
+  Lock, the pre-commit from setup, the commit launcher and mise. `status` uses
+  no network and exits 0. `doctor` exits 3 when a check fails, and warns when
+  `core.hooksPath` is set or mise's install at first use is off.
+- The generated GitHub workflow runs `gateseal setup`, `gateseal check` and
+  `gateseal gate`.
+- A Tool Definition's `stages` is `["commit", "run", "ci"]` or `["ci"]`.
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
   it names. It needed Python 3.14.10 or a later 3.14 release before.
+
+### Removed
+
+- `gateseal activate` and `gateseal upgrade --activate`. A clone needs no
+  preparation after `gateseal setup`.
+- Hook Python, the `[components.python]` table of a policy. A Python hook runs
+  on the Python that `gateseal setup` installed pre-commit with.
 
 ## [0.1.0] - 2026-11-11
 

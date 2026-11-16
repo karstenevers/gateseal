@@ -238,38 +238,3 @@ def pinned(data: bytes, tool: str, version: str) -> bytes:
             f"{POLICY} yourself, then run gateseal policy check.",
         ),
     )
-
-
-def component(data: bytes, name: str, version: str) -> bytes:
-    """Return policy.toml with a new component name that pins and reviews version.
-
-    Its tables go after the last component's, or at the end of the file.
-    """
-    lines = LINE.findall(data.decode("utf-8"))
-    newline = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
-    found = [t.end for t in tables(lines) if t.path[:1] == ("components",)]
-    at = found[-1] if found else len(lines)
-    added = [
-        f"[components.{name}]{newline}",
-        f"pin = {json.dumps(version)}{newline}",
-        newline,
-        f"[components.{name}.versions.{json.dumps(version)}]{newline}",
-    ]
-    lines = _inserted(lines, at, added, newline)
-    expected = parse_toml(data)
-    components = cast(dict[str, object], expected.setdefault("components", {}))
-    components[name] = {"pin": version, "versions": {version: {}}}
-    edited = "".join(lines).encode("utf-8")
-    try:
-        if parse_toml(edited) == expected:
-            return edited
-    except GatesealError:
-        pass
-    raise GatesealError(
-        "policy_edit_unsupported",
-        f"gateseal policy add cannot add {name} {version} to {POLICY} as it is "
-        "written.",
-        next_step=f'Add [components.{name}] with pin = "{version}" and '
-        f'[components.{name}.versions."{version}"] to {POLICY} yourself, then '
-        "run gateseal policy lock.",
-    )

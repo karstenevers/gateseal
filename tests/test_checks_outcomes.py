@@ -1,21 +1,22 @@
 """What gateseal run and gate report for each way pre-commit and a scan end.
 
-A real attempt needs uv to build pre-commit and a downloaded Betterleaks, so
-the clone publishes a stand-in attempt whose pre-commit and history scanner are
-shell scripts. Each script records its arguments, prints the output a test
-gives it and exits with the test's status. The policy, the worktree, its Git,
-the pinning of the attempt, the scope planning and the processes are real.
+The real pre-commit needs uv to install it and mise a downloaded Betterleaks,
+so stand-ins take their place: shell scripts that record their arguments,
+print the output a test gives them and exit with the test's status. One is the
+Python of the owned pre-commit, the other is the mise on the PATH. The policy,
+the worktree, its Git, the scope planning and the processes are real.
 """
 
+import os
 from types import SimpleNamespace
 
 import pytest
 from conftest import TRACKED
-from gateseal import checks, ci, interpreter_store, lock, runtime
+from gateseal import checks, ci, lock, runtime, setup
 from gateseal.diagnostics import GatesealError
 from gateseal.worktree import locate_worktree
 from installation import success
-from prepared_attempts import configure, prepare
+from stand_ins import configure
 
 COMMIT = "c" * 40
 YAML_PASSED = "check yaml...............................................Passed\n"
@@ -48,23 +49,22 @@ STAGE = "gateseal run"
 
 
 class Tool:
-    """A stand-in executable that records its arguments and answers as told.
+    """A stand-in executable that records its arguments and answers as told."""
 
-    Its answers live outside the attempt, whose seals pinning checks.
-    """
-
-    def __init__(self, state):
+    def __init__(self, state, name):
         state.mkdir()
         self.arguments = state / "arguments"
         self.output = state / "output"
         self.status = state / "status"
-        self.script = (
+        self.executable = state / name
+        self.executable.write_text(
             "#!/bin/sh\n"
             f"printf '%s\\n' \"$@\" > '{self.arguments}'\n"
             f"cat '{self.output}'\n"
             "echo 'a warning' >&2\n"
             f"exit \"$(cat '{self.status}')\"\n"
         )
+        self.executable.chmod(0o755)
         self.reset()
 
     def reset(self):
@@ -91,10 +91,7 @@ def commit(root, name):
 
 @pytest.fixture(scope="module")
 def planned(tmp_path_factory):
-    """A clone whose main adds one commit to its adopted base, and the gate's inputs.
-
-    Every test runs from the one attempt the clone publishes, of Tools.
-    """
+    """A clone whose main adds one commit to its adopted base, and the gate's inputs."""
     directory = tmp_path_factory.mktemp("gate")
     root = directory / "clone"
     success(["git", "init", "--quiet", "--initial-branch=main", root], directory)
@@ -104,37 +101,34 @@ def planned(tmp_path_factory):
     configure(worktree, ("hygiene", "secrets"))
     success(["git", "add", *TRACKED], root)
     base, head = commit(root, "base.txt"), commit(root, "notes.txt")
-    local = runtime.preparation_directory(worktree, create=True)
-    locked = lock.load(worktree.root, local)
-    attempt = SimpleNamespace(
-        pre_commit=Tool(directory / "pre-commit"),
-        scanner=Tool(directory / "betterleaks"),
-    )
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setenv(interpreter_store.STORE_VARIABLE, str(directory / "store"))
-        prepare(
-            worktree,
-            locked,
-            pre_commit=attempt.pre_commit.script,
-            betterleaks=attempt.scanner.script,
-        )
+    local = runtime.preparation_directory(worktree)
     return SimpleNamespace(
         root=root,
         worktree=worktree,
-        locked=locked,
+        locked=lock.load(worktree.root, local),
         scope=ci.change_scope(worktree, base, head),
         base=base,
         head=head,
-        attempt=attempt,
+        attempt=SimpleNamespace(
+            pre_commit=Tool(directory / "pre-commit", "python"),
+            scanner=Tool(directory / "scanner", "mise"),
+        ),
     )
 
 
 @pytest.fixture
-def attempt(planned):
-    """Return the published attempt's pre-commit and scanner, reset to answer "", 0."""
-    planned.attempt.pre_commit.reset()
-    planned.attempt.scanner.reset()
-    return planned.attempt
+def attempt(planned, monkeypatch):
+    """Return the stand-in pre-commit and mise, reset to answer "", 0."""
+    stand_ins = planned.attempt
+    stand_ins.pre_commit.reset()
+    stand_ins.scanner.reset()
+    python = str(stand_ins.pre_commit.executable)
+    monkeypatch.setattr(setup, "require_pre_commit", lambda: python)
+    path = os.pathsep.join(
+        [str(stand_ins.scanner.executable.parent), os.environ["PATH"]]
+    )
+    monkeypatch.setenv("PATH", path)
+    return stand_ins
 
 
 def gate(planned, scope=None):
@@ -165,7 +159,18 @@ def test_a_change_checks_its_files_and_scans_its_commits(attempt, planned):
         "--color",
         "never",
     ]
-    assert attempt.scanner.ran()[-1].endswith(f" {revisions}")
+    [betterleaks] = [t for t in planned.locked.selection.tools if t.program()]
+    scan = attempt.scanner.ran()
+    program = betterleaks.program()
+    assert scan[: len(program) + 1] == [
+        "--no-config",
+        "exec",
+        "--deny-env",
+        "--allow-env",
+        "GIT_NO_LAZY_FETCH",
+        *program[4:],
+    ]
+    assert scan[-1].endswith(f" {revisions}")
     [scan] = history(result)
     assert revisions in scan.pop("message")
     assert scan == {
@@ -275,7 +280,7 @@ def test_failed_hooks_name_the_steps_their_results_need(
 
 
 def run(planned):
-    return checks.run(planned.worktree, planned.locked)
+    return checks.run(planned.locked)
 
 
 def test_run_passes_when_pre_commit_does(attempt, planned):
