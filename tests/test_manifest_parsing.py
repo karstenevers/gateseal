@@ -37,15 +37,11 @@ def refused(text):
     return raised.value.code
 
 
-@pytest.mark.parametrize(
-    "names",
-    [["hygiene", "hygiene"], ["hygiene", "Python"], ["python"], ["secrets", "python"]],
-)
-def test_a_selection_names_hygiene_and_each_capability_once(names):
+@pytest.mark.parametrize("names", [[], ["secrets", "secrets"], ["hygiene", "Python"]])
+def test_a_selection_names_at_least_one_capability_each_once(names):
     with pytest.raises(GatesealError) as raised:
         capabilities(names)
     assert raised.value.code == "unsupported_capability"
-    assert "hygiene" in str(raised.value)
 
 
 def test_a_selection_is_sorted_by_name():
@@ -54,6 +50,7 @@ def test_a_selection_is_sorted_by_name():
         "python",
         "secrets",
     )
+    assert capabilities(["secrets", "python"]) == ("python", "secrets")
 
 
 @pytest.mark.parametrize(

@@ -684,8 +684,8 @@ def _new_manifest(
     if capability is None:
         raise GatesealError(
             "missing_capability",
-            "Select explicitly with configure --capability hygiene, and add "
-            "--capability python to check Python with Ruff and --capability "
+            "Select at least one capability with configure --capability, such "
+            "as hygiene for file checks, python to check Python with Ruff and "
             "secrets to detect secrets.",
         )
     return render(

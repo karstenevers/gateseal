@@ -13,7 +13,7 @@ schema = 4
 release = "binary-only"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
+[capabilities.secrets]
 tools = ["betterleaks"]
 
 [tools.betterleaks]
@@ -49,7 +49,7 @@ def test_a_policy_without_a_hook_repository_checks_commits(installed, tmp_path):
         root,
         "configure",
         "--capability",
-        "hygiene",
+        "secrets",
         "--policy",
         URL,
         "--policy-path",

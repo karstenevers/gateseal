@@ -196,6 +196,17 @@ def test_configure_writes_the_manifest_lock_and_outputs(tmp_path):
     ]
 
 
+def test_configure_selects_secrets_alone(tmp_path):
+    root = worktree(tmp_path)
+    changed, _ = configure(root, ["secrets"], source=SOURCE, checksum=CHECKSUM)
+    assert 'capabilities = ["secrets"]' in (root / MANIFEST).read_text()
+    outputs = set(changed) - {MANIFEST, LOCK, CONFIG}
+    assert outputs and all(name.startswith(".gateseal/betterleaks") for name in outputs)
+    config = json.loads((root / CONFIG).read_bytes())
+    hooks = [hook["id"] for repo in config["repos"] for hook in repo["hooks"]]
+    assert hooks == ["betterleaks"]
+
+
 def test_a_rerun_changes_nothing(tmp_path):
     root = configured(tmp_path, "hygiene", "python")
     before = tracked(root)

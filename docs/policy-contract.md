@@ -27,11 +27,11 @@ Keep the `choices` and `exceptions` tables even when they are empty.
 
 ### Capabilities
 
-Select `hygiene` explicitly. Each other name must appear in the selected
-policy, and each name can appear only once. The bundled policy also offers
-`python` and `secrets`. gateseal runs tools in the order the policy defines.
-It does not infer capabilities from file types. A missing `hygiene`, a
-repeated name, or a name the policy does not offer fails with
+Select at least one capability. Each name must appear in the selected
+policy, and each name can appear only once. The bundled policy offers
+`hygiene`, `python` and `secrets`. gateseal runs tools in the order the policy
+defines. It does not infer capabilities from file types. An empty selection,
+a repeated name, or a name the policy does not offer fails with
 `unsupported_capability`.
 
 ### Policy
@@ -88,7 +88,7 @@ that the policy does not expose as choices, change the policy.
 
 ### Configure flags
 
-With a new repository, specify at least `--capability hygiene` and the compiler
+With a new repository, specify at least one `--capability` and the compiler
 wheel or source and its SHA-256. The policy defaults to the bundled release.
 For a Git policy, supply `--policy` and `--policy-tag`. The path defaults to
 `.`, and the commit defaults to the commit at the tag during adoption.

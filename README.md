@@ -112,11 +112,10 @@ release that a repository pins, and installs a wheel by its reviewed SHA-256.
 
 ## Quick start
 
-Adopt the bundled policy in a repository. `hygiene` is required. Leave out
-`python` or `secrets` if you do not want them, and `--ci github` if you do not
-use GitHub Actions. Copy the wheel's URL and SHA-256 from the release's files
-on PyPI, as [Pin the wheel on PyPI](docs/install.md#pin-the-wheel-on-pypi)
-shows:
+Adopt the bundled policy in a repository. Select one or more capabilities,
+and leave out `--ci github` if you do not use GitHub Actions. Copy the wheel's
+URL and SHA-256 from the release's files on PyPI, as
+[Pin the wheel on PyPI](docs/install.md#pin-the-wheel-on-pypi) shows:
 
 ```sh
 gateseal configure \

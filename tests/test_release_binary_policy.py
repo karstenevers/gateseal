@@ -258,17 +258,17 @@ def test_a_capability_of_release_binaries_alone_records_no_component(tmp_path):
     edit(
         root / "policy.toml",
         ('[capabilities.hygiene]\ntools = ["pre-commit-hooks"]\n\n', ""),
-        ("[capabilities.secrets]\n", "[capabilities.hygiene]\n"),
         (f"[tools.pre-commit-hooks]\nhook_ids = {hooks}\n\n", ""),
+        ("[choices.hygiene.exclude]\ndefault = []\n\n", ""),
         ('[components.pre-commit-hooks]\npin = "6.0.0"\n\n', ""),
         ('[components.pre-commit-hooks.versions."6.0.0"]\n\n', ""),
         ('[components.pre-commit-hooks.versions."5.0.0"]\n\n', ""),
     )
     edit_lock(root, lambda components: components.pop("pre-commit-hooks"))
     policy = load_policy_tree(root)
-    hygiene, _ = compiled(policy, ("hygiene",))
-    python, _ = compiled(policy, ("hygiene", "python"))
-    assert (set(hygiene["components"]), set(hygiene["native_artifacts"])) == (
+    secrets, _ = compiled(policy, ("secrets",))
+    python, _ = compiled(policy, ("python", "secrets"))
+    assert (set(secrets["components"]), set(secrets["native_artifacts"])) == (
         set(),
         {"betterleaks"},
     )

@@ -34,6 +34,8 @@ change the manifest, policy or lock format, and its entry says how to move.
 - A Tool Definition's `stages` is `["commit", "run", "ci"]` or `["ci"]`.
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
   it names. It needed Python 3.14.10 or a later 3.14 release before.
+- `hygiene` is optional. A policy defines at least one capability of any name,
+  and a Manifest selects at least one of them, such as `secrets` alone.
 
 ### Removed
 

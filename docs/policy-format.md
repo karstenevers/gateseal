@@ -46,10 +46,11 @@ pin = "6.0.0"
 ## Capabilities
 
 A [capability](../GLOSSARY.md#capability) groups checks by what they apply to.
-Every policy defines `hygiene` for checks common to all repositories, and
-every manifest selects it. Group all checks for one language under its name,
-such as `python` for linting and formatting. Use a separate capability for
-a check that spans file types, such as `secrets`.
+A policy defines at least one capability, and a manifest selects at least
+one of them. Put checks for any file under `hygiene`, as the bundled policy
+does. Group all checks for one language under its name, such as `python` for
+linting and formatting. Use a separate capability for a check that spans file
+types, such as `secrets`.
 
 A repository selects capabilities in `gateseal.toml`. When it adopts a new
 release, it gets the tools, rules, and pins for those capabilities.
@@ -98,7 +99,7 @@ its file.
 | A selected tool has no built-in or team definition. | `unknown_tool` |
 | A team definition uses a built-in tool's name or a tool uses the name `pre-commit` or `python`. | `reserved_tool_name` |
 | Tools share a hook ID, hook name, owned output, or hook repository. A tool can also appear more than once in the capabilities. | `duplicate_identifier` |
-| The policy lacks `hygiene`, a capability has no tools, or the tool tables differ from the capabilities' tools. | `invalid_field` |
+| The policy defines no capability, a capability has no tools, or the tool tables differ from the capabilities' tools. | `invalid_field` |
 | A `hook_ids` entry is missing from the definition. | `unsupported_hook` |
 
 Each tool choice needs a unique name within its capability. The compiler

@@ -28,9 +28,6 @@ from gateseal.validation import fields, mapping, parse_toml, sequence, string
 CAPABILITY = re.compile(r"[a-z][a-z0-9-]*")
 """A capability's name, as policy.toml and a Manifest name it."""
 
-HYGIENE = "hygiene"
-"""The capability every policy defines, since Manifest schema 1 selects it."""
-
 TEAM_TOOLS = "tools/"
 """The directory of a policy's Team-defined Tools, one <name>.toml each."""
 
@@ -161,12 +158,8 @@ def _capabilities(
                     f"{tool}; a tool belongs to exactly one capability, once.",
                 )
         offered[name] = tools
-    if HYGIENE not in offered:
-        raise GatesealError(
-            "invalid_field",
-            f"The policy defines no {HYGIENE} capability, which every Manifest "
-            "selects.",
-        )
+    if not offered:
+        raise GatesealError("invalid_field", "The policy defines no capability.")
     return offered, alternatives
 
 
