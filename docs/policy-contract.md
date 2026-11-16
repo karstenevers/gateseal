@@ -88,8 +88,9 @@ that the policy does not expose as choices, change the policy.
 
 ### Configure flags
 
-With a new repository, specify at least one `--capability` and the compiler
-wheel or source and its SHA-256. The policy defaults to the bundled release.
+With a new repository, specify at least one `--capability`. configure pins
+the running gateseal by the commit of its release tag. The policy defaults to
+the bundled release.
 For a Git policy, supply `--policy` and `--policy-tag`. The path defaults to
 `.`, and the commit defaults to the commit at the tag during adoption.
 See [Configure a repository](configure-a-repository.md).
@@ -98,7 +99,7 @@ With an existing Manifest, omitted options keep its settings. Supplied
 capabilities must match the complete selected set, and source flags must
 match the Manifest. Conflicting flags produce `configure_assertion_failed`.
 Edit the Manifest and run configure again. Configure preserves an existing
-compiler pin and source.
+gateseal pin.
 
 ## Flat policy
 
@@ -115,11 +116,10 @@ compiler pin and source.
 
 | Field | Contents |
 | --- | --- |
-| `schema` | Integer `1`. |
+| `schema` | The Lock format, integer `2`. |
 | `manifest_sha256` | SHA-256 of the Manifest bytes after line-ending normalization. |
-| `compiler` | `name`, `version`, wheel `filename`, `sha256`, and `source`. |
-| `policy` | `kind`, `release`, and content `digest`. A bundled policy also records `compiler_sha256`. A Git policy records `repository`, `path`, `commit`, and `tag`. |
-| `runtime` | The compiler's `minimum_uv`, `python`, and `pre_commit` installation records. See [Compiler runtime](compiler-runtime.md). |
+| `gateseal` | gateseal's `repository`, its `version`, and the full `commit` that the version's release tag names. |
+| `policy` | `kind`, `release`, and content `digest`. A Git policy also records `repository`, `path`, `commit`, and `tag`. |
 | `components` | Selected hook repositories. |
 | `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. |
 | `choices` | Values for selected capabilities, including defaults. |
@@ -131,23 +131,19 @@ Each hook repository record has `repository`, `version`, `revision`,
 `hook_ids`, and `tools`. The last field maps installed tool names to versions.
 For example, Ruff's hook repository installs `ruff` at its selected version.
 
-gateseal reads the compiler pin before the policy or other Lock fields. A
-different compiler produces `selected_compiler_required`. The locked compiler
-interprets the rest of the Lock.
+### The ownership ledger
 
-### Compiler source
+Every gateseal release reads five fields of any Lock: `schema`, `gateseal`,
+`manifest_sha256`, the `digest` in `policy`, and `outputs`. Together they are
+the ownership ledger. The release that wrote a Lock owns its other fields.
 
-`compiler.source` records `kind` and `location`.
-
-- For `local-wheel`, the location is an absolute path to the wheel.
-- For `https-wheel`, the location is a URL whose file cannot change, on one
-  of two hosts. The URL must have no user information, port, query, fragment,
-  or dot segment.
-    - On `files.pythonhosted.org`, PyPI's file URL. The path is `/packages/`,
-      then the wheel's BLAKE2b-256 digest in folders of 2, 2, and 60 hex
-      characters, then the wheel filename.
-    - On `raw.githubusercontent.com`. The path must contain the owner,
-      repository, full 40-character commit ID, and wheel path.
+gateseal reads `schema` first. A Lock of another format produces
+`unsupported_schema`, and the format changes only when the ledger changes.
+Then gateseal reads the pin. A different release produces
+`selected_compiler_required` from every command except `gateseal upgrade`,
+which moves the Lock to the running release, as
+[Move to another gateseal release](upgrade.md#move-to-another-gateseal-release)
+explains.
 
 ## Owned outputs
 

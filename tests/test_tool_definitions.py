@@ -3,7 +3,7 @@ import re
 from importlib.resources import files
 
 import pytest
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError
 from gateseal.environments import tool_environment
 from gateseal.lock import compile_lock
@@ -36,34 +36,34 @@ ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "2a3c6d18281dd9e213e24e7754e3e16bfe9a67e25bec738c7b050e4a6e1e5692"
+            "e547f305802355e8aa9580e527c47c5064e32d2f1c1ad1e2f0ae62d7420be09a"
         ),
         CONFIG: "6a9652a1c613afbc2b912048af64691ea3b92422e86aaee13a5f473c7ff85e0c",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "98545f99ac66f78007f113d199537167c8abbc558b6ea993fd310f0771050fe7"
+            "591fbaa944c9c91a62959290f54cc75ec05d6b7fa5d5aeff3192c57b342c32f3"
         ),
         CONFIG: "70d2ac1f5f68053e1b1e80b5229ca74cf8987c7a777537203545f289bd590077",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "4406d3a7caaa25c1cb12bf4c650490234b867e790312d6b775509adf6d453e90"
+            "581d2cd39b50b35cea48608257c5acd1384b1559efec63f4bfb333a8691d83e8"
         ),
         CONFIG: "4740b6ae5b22495c6f31f06013ab24302b54cdbba43bc0112a9028b3daa4d442",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "35a834fecb0d68a95c47302b10614e00acfcb80210df74781ce58549eba22804"
+            "cef6a6cd01b609ebbc2c16ccd4c215a91c488828772131c6c4a2bc2220b7b4c5"
         ),
         CONFIG: "5dae2948e98d147581e439d03fb23ba3ed160033b04eb087177dba2da9db1b71",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "964bf20f363282a752b5b7bd102e9f39d52bf5ba9ccfe9fdf320dfa510aac11a"
+            "f7c2beca5e9295ad6ef7387fa3d1764b1a4d1907311dc6cc9920559554ad2abf"
         ),
         CONFIG: "9a222e283b4caf856991e0a4647ce20ef1eb5a6104f374f22f711088200e22e7",
         **PYTHON,
@@ -71,7 +71,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "ed12791d918d70c88483f8da9a76473ab72e71c12371a65f992b850f668c8734"
+            "e6727be05f1a1b6cede118ead6a43006aec5135951595b5433b2c8f541e3d3ae"
         ),
         CONFIG: "350228ae37e787ff3947ebbbbf95bd2593178fdfdf66b0b047f75d55ae890408",
         **PYTHON,
@@ -79,7 +79,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "fd705f26175ef19d3c3a32296467d49834906d6489474932b2aa826d6c406ab8"
+            "ad3f8f54954ca9eea1e3b59f265a74e57ec62c20ab7dd7ad7c792caffd258524"
         ),
         CONFIG: "9e7dcc3bd2fc325ed8165f9c8a826bfb64716be3fac8e45df3278c88fa6535a0",
         **PYTHON,
@@ -112,12 +112,8 @@ def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
     capabilities = tuple(item for item in selection if not item.startswith("\n"))
     extra = "".join(item for item in selection if item.startswith("\n"))
     manifest = render(capabilities, source) + extra.encode()
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact(
-        "local-wheel", f"/wheels/{wheel}", wheel, "a" * 64, "0.1.0"
-    )
     chosen = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, chosen)
+    lock = compile_lock(manifest, source, policy, PIN, chosen)
     digests = {name: entry["sha256"] for name, entry in lock["outputs"].items()}
     digests["gateseal.lock"] = hashlib.sha256(canonical(lock)).hexdigest()
     assert digests == GOLDEN[selection]

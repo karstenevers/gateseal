@@ -1,12 +1,11 @@
 # Compiler runtime
 
-Each gateseal compiler release specifies the CPython that runs the compiler
-and the pre-commit version that runs the hooks. To change either, use a
-[compiler target](upgrade.md#compiler-targets) with `gateseal upgrade`.
+Each gateseal compiler release specifies the pre-commit version that runs the
+hooks, and gateseal and pre-commit run on CPython 3.14. To change pre-commit,
+[move to another gateseal release](upgrade.md#move-to-another-gateseal-release).
 
-The compiler package records its runtime in `gateseal/data/runtime.lock`.
-The repository Lock records the same installation inputs so you can review
-them during an upgrade.
+The compiler package records its runtime in `gateseal/data/runtime.lock`. The
+repository Lock pins the gateseal commit, which holds that file.
 
 | Field in `runtime.lock` | Value |
 | --- | --- |
@@ -17,4 +16,4 @@ them during an upgrade.
 
 `gateseal setup` installs the recorded pre-commit version with uv on CPython
 3.14, from the package index that uv is configured for. The generated GitHub
-workflow runs gateseal on the recorded CPython version.
+workflow runs gateseal on CPython 3.14 too.

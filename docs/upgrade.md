@@ -6,8 +6,9 @@ with the same command.
 
 ## Common upgrades
 
-Run the command from the repository root with the gateseal version in the
-current Lock. Choose the example that matches your change.
+Run the command from the repository root. Change the policy or a tool with
+the gateseal version in the current Lock. Choose the example that matches your
+change.
 
 **Update the current team policy.** If your repository already uses this Git
 policy, specify the new release tag. To switch from the bundled policy,
@@ -33,20 +34,20 @@ pins Betterleaks 1.9.0, run:
 gateseal upgrade betterleaks
 ```
 
-**Change the gateseal release.** Copy the wheel's URL and SHA-256 for the
-target release from PyPI, as
-[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
-currently pinned command to update the repository:
+**Change the gateseal release.** Install the release you move to, newer or
+older, and run its command with no target:
 
 ```sh
-gateseal upgrade --compiler-source PYPI_WHEEL_URL \
-  --compiler-sha256 WHEEL_SHA256
+uv tool install --python 3.14.10 gateseal==0.2.0
+gateseal upgrade
 ```
 
-After a compiler upgrade, [install the new pinned
-release](install.md#install-from-pypi) for subsequent commands. Review the
-changed files, stage them together, and commit. The first commit after an
-upgrade installs the tools that changed.
+[Move to another gateseal release](#move-to-another-gateseal-release) explains
+what the move reads and writes.
+
+Review the changed files, stage them together, and commit. After a gateseal
+move, each developer installs the same release and runs `gateseal setup`. The
+first commit after an upgrade installs the tools that changed.
 
 ## Usage
 
@@ -54,7 +55,6 @@ upgrade installs the tools that changed.
 gateseal upgrade [COMPONENT[=VERSION] ...]
                  [--policy-tag TAG] [--policy URL | --policy bundled]
                  [--policy-path PATH] [--policy-commit COMMIT]
-                 [--compiler-wheel PATH | --compiler-source URL] [--compiler-sha256 SHA256]
                  [--reason TEXT] [--review-by DATE]
 ```
 
@@ -67,9 +67,9 @@ target, `gateseal upgrade` reports the current selection.
 | What you want to change | What to select |
 | --- | --- |
 | Git policy | Use `--policy-tag` for a release in the current repository. To change the repository or directory, use `--policy` or `--policy-path`. Use `--policy-commit` to require an exact commit for the tag. |
-| Bundled policy | Use `--policy bundled` for the policy that comes with the selected compiler. |
+| Bundled policy | Use `--policy bundled` for the policy that comes with the running gateseal. |
 | Tool | Use `COMPONENT=VERSION` for an exact reviewed version. A version different from the policy pin needs a reason and review date. Selecting the pin explicitly removes the exception. |
-| Compiler | Use the target wheel and digest from [Pin the release in a repository](install.md#pin-the-release-in-a-repository). The compiler also selects its runtime Python and pre-commit versions. |
+| gateseal | Install the target release and run `gateseal upgrade` with it. The release also fixes the pre-commit version. |
 
 A bare component name such as `betterleaks` normally follows the policy
 pin. If the current version is newer and the target policy still reviews it,
@@ -80,9 +80,9 @@ For a Git policy, gateseal checks the tag against the commit when it first
 adopts the release. When the Lock already records the release, gateseal uses
 the stored copy. See [policy acquisition](policy-acquisition.md).
 
-Upgrade the compiler on its own or together with `--policy bundled`. Run
-other policy or tool upgrades with the new compiler. To change the runtime
-Python or pre-commit, select a compiler that carries the version you need.
+Move gateseal on its own or together with `--policy bundled`. Run other
+policy or tool upgrades with the new release afterwards. To change pre-commit,
+move to a gateseal release that carries the version you need.
 
 ## Steps
 
@@ -104,23 +104,34 @@ new Manifest was written before the Lock, the next command can report
 `lock_mismatch`. For a policy or component upgrade, run `gateseal configure`
 to finish it.
 
-For an interrupted compiler upgrade, review the diff first. Save any edits
-you need to keep. Use `git restore` to restore `gateseal.toml` and the
-affected generated files to their pre-upgrade contents. Then run the upgrade
-again.
+For an interrupted gateseal move, review the diff first. Save any edits you
+need to keep. Use `git restore` to restore `gateseal.toml` and the affected
+generated files to their pre-upgrade contents. Then run the upgrade again.
 
-## Compiler targets
+## Move to another gateseal release
 
-The current compiler checks the target wheel and uses uv to install it in a
-temporary environment. The target compiler must be able to configure and
-check your Manifest in a temporary Git repository. For a Git policy, the
-target fetches the release and checks its tag. This temporary repository
-inherits the worktree's applicable Git directory-based configuration.
+When the Lock pins another gateseal release, `gateseal upgrade` compiles the
+new Lock from the Manifest and the policy alone. Of the old Lock it reads only
+the ownership ledger: its format, its gateseal pin, the Manifest's SHA-256,
+the policy's content digest and the files it lists. The listed files decide
+which files the upgrade may replace or delete. A listed file that the running release never writes stops
+the upgrade with `ownership_conflict`.
 
-If the new compiler ships a different bundled policy, the upgrade reports
-`bundled_policy_moves`. Review that policy. To adopt it with the compiler, add
-`--policy bundled`. A successful upgrade writes the files produced by the
-target compiler.
+The new Lock pins the running release by the commit of its release tag, which
+gateseal reads with your Git. The report names the gateseal move alone, so
+review the Lock's diff for the rest.
+
+If the new release bundles a different policy, even one with the same
+release label, the upgrade reports `bundled_policy_moves`. Review that policy. To adopt it with the release, add
+`--policy bundled`.
+
+To roll back a gateseal move, revert its commit with `git revert`. When later
+commits make the revert conflict, install the earlier release and run
+`gateseal upgrade` with it.
+
+A Lock of another format stops every command with `unsupported_schema`. gateseal
+0.1.0 wrote format 1: delete `gateseal.lock` and the files gateseal wrote, then
+run `gateseal configure` again.
 
 ## Results
 
@@ -134,8 +145,9 @@ redundant. A redundant exception remains until you remove it.
 | --- | --- |
 | `upgraded` or `unchanged` (exit 0) | Review any changed files. |
 | `incompatible_exception`, `unknown_version`, `invalid_exception`, `unsupported_component`, `runtime_target` (exit 2) | Check the target policy, supported components, and exception fields. |
-| `bundled_policy_moves` or `candidate_rejected` | Review the target compiler's message and the policy it accepts. |
-| `candidate_unavailable`, `missing_artifact`, `artifact_hash_mismatch` (exit 4), or `invalid_artifact` (exit 2) | Check the wheel's location, filename, release, and digest. |
+| `bundled_policy_moves` (exit 2) | Review the policy that the new release bundles, then add `--policy bundled`. |
+| `upstream_unavailable` (exit 4) or `upstream_tag_missing` (exit 2) | Check that Git reaches gateseal's repository and that it has the running release's tag. |
+| `unsupported_schema` (exit 2) | Follow the next step for the Lock's format. |
 | `invalid_invocation`, `invalid_field`, `manifest_edit_unsupported`, `ownership_conflict`, `lock_mismatch` (exit 2) | Check the flags and the named files. Editable policy and exception sections need ordinary TOML tables. |
 
 See [Manifest and Lock](policy-contract.md) for field definitions and

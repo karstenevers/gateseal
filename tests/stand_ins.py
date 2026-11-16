@@ -1,28 +1,20 @@
 """What an in-process test needs in place of downloads and installed tools.
 
-configure writes a clone's tracked policy without a compiler download, and
-executable writes the shell script that stands in for a program.
+configure writes a clone's tracked policy with conftest's PIN for gateseal,
+and executable writes the shell script that stands in for a program.
 """
 
-from gateseal import __version__, lock
-
-SOURCE = (
-    "https://raw.githubusercontent.com/example/wheels/"
-    f"{'0' * 40}/artifacts/gateseal-{__version__}-py3-none-any.whl"
-)
+from gateseal import lock
 
 
 def configure(worktree, capabilities):
-    """Write the tracked policy for capabilities, with a compiler not yet fetched."""
+    """Write the tracked policy for capabilities with the bundled policy."""
     lock.configure(
         worktree.root,
         worktree.git,
         worktree.preparation,
         list(capabilities),
         lock.PolicyRequest(),
-        None,
-        SOURCE,
-        "a" * 64,
         None,
     )
 

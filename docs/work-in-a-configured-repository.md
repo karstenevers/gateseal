@@ -6,7 +6,7 @@ maintainer has already selected the checks. Set up your machine once, then use
 
 ## Set up your machine
 
-Install the gateseal version in the `compiler.version` field of
+Install the gateseal version in the `gateseal.version` field of
 `gateseal.lock`. For version `0.1.0`, run:
 
 ```sh
@@ -22,7 +22,7 @@ In a clone that you made before setup, run `gateseal setup --refresh` once.
 A release binary, such as Betterleaks, starts through mise. Install mise
 2026.10.19 or later if the repository selects one.
 [Install gateseal](install.md) lists the tools you need first, and how to
-install a team's own wheel.
+install the commit that the Lock pins.
 
 ## Commit
 

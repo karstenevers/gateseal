@@ -99,7 +99,8 @@ INVALID_LOCKS = {
     "array": (b"[1]", "schema"),
     "no schema": (b"{}", "schema"),
     "boolean schema": (b'{"schema":true}', "schema"),
-    "schema 2": (b'{"schema":2}', "schema"),
+    "format 1": (b'{"schema":1}', "schema"),
+    "format 3": (b'{"schema":3}', "schema"),
 }
 
 
@@ -114,7 +115,7 @@ def test_a_staged_lock_that_is_not_a_lock_points_to_check(record, data, problem)
     assert step == bootstrap.CHECK
 
 
-OTHER_LOCK = b'{"schema":1,"compiler":"0.2.0"}\n'
+OTHER_LOCK = b'{"schema":2,"gateseal":"0.2.0"}\n'
 
 
 def test_another_staged_lock_needs_activation_when_the_worktree_holds_it(record):

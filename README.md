@@ -107,26 +107,25 @@ uv tool install --python 3.14.10 gateseal
 gateseal --version
 ```
 
-[Install gateseal](docs/install.md) explains the Python flag, installs the
-release that a repository pins, and installs a wheel by its reviewed SHA-256.
+[Install gateseal](docs/install.md) explains the Python flag and installs the
+release that a repository pins.
 
 ## Quick start
 
 Adopt the bundled policy in a repository. Select one or more capabilities,
-and leave out `--ci github` if you do not use GitHub Actions. Copy the wheel's
-URL and SHA-256 from the release's files on PyPI, as
-[Pin the wheel on PyPI](docs/install.md#pin-the-wheel-on-pypi) shows:
+and leave out `--ci github` if you do not use GitHub Actions:
 
 ```sh
 gateseal configure \
   --capability hygiene \
   --capability python \
   --capability secrets \
-  --compiler-source PYPI_WHEEL_URL \
-  --compiler-sha256 WHEEL_SHA256 \
   --ci github
 gateseal setup --refresh
 ```
+
+configure pins gateseal by the commit of its release tag, which it reads with
+your Git.
 
 Review and commit `gateseal.toml`, `gateseal.lock`, `.pre-commit-config.yaml`,
 `.github/workflows/gateseal.yml`, and, with `python` or `secrets`, the

@@ -37,8 +37,6 @@ def formatted_with_black(installed, tmp_path_factory):
             "configure",
             *("--capability", "hygiene", "--capability", "python"),
             *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
-            *("--compiler-wheel", installed.wheel),
-            *("--compiler-sha256", installed.checksum),
             env=env,
         )
         manifest = consumer / "gateseal.toml"

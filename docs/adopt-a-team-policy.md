@@ -19,17 +19,16 @@ gateseal upgrade --policy https://github.com/team/gateseal-policy.git \
 If your repository already uses the same Git policy and directory, specify
 only the new tag. See [Upgrade and roll back](upgrade.md#common-upgrades).
 
-For a new repository, get the compiler pin from
-[Pin the release in a repository](install.md#pin-the-release-in-a-repository).
-From the repository root, run the configure command with the team's release
-details. This example uses a team policy that offers the same three
+For a new repository, run the configure command from the repository root
+with the team's release details. configure pins gateseal itself, as
+[Pin the release in a repository](install.md#pin-the-release-in-a-repository)
+explains. This example uses a team policy that offers the same three
 capabilities as the bundled policy.
 
 ```sh
 gateseal configure --capability hygiene --capability python --capability secrets \
   --policy https://github.com/team/gateseal-policy.git \
-  --policy-path policy --policy-tag team-2026.11 \
-  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
+  --policy-path policy --policy-tag team-2026.11
 ```
 
 gateseal records the commit in `gateseal.toml` and reports that the tag

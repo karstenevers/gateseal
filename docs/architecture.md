@@ -84,7 +84,7 @@ interpreters and hook environments that worktrees can reuse.
 See [How a commit runs](how-a-commit-runs.md).
 
 The compiler release fixes CPython and pre-commit. To change pre-commit
-itself, [upgrade the compiler](upgrade.md#compiler-targets).
+itself, [move to another gateseal release](upgrade.md#move-to-another-gateseal-release).
 
 ## What gateseal trusts
 
@@ -95,9 +95,11 @@ hook can also bypass its checks.
 
 - A matching Git tag and content digest identify a release. You still need
   to trust the team that controls the policy repository.
-- The compiler wheel, runtime archives, and runtime wheels have locked
-  SHA-256 values. An upgrade runs the candidate compiler after verifying
-  its wheel.
+- The Lock pins gateseal by the full commit of its release tag. CI builds
+  gateseal from that commit, with a build tool from PyPI by version and no
+  locked hash. `gateseal setup` installs the release's pre-commit version on
+  CPython 3.14 from the configured package index, and CI runs gateseal on
+  CPython 3.14. Neither has a locked hash.
 - Python hook repositories have locked Git revisions. pre-commit installs
   their dependencies using the configured package index and local caches.
   For example, the Ruff hook pins the Ruff package by version. Its wheel

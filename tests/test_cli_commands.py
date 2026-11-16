@@ -10,16 +10,10 @@ import json
 import os
 
 import pytest
-from conftest import TRACKED, git_path, named_flags, with_git_config
+from conftest import PIN, TRACKED, git_path, named_flags, with_git_config
 from gateseal.cli import main
-from installation import clone, package_version, success
+from installation import clone, success
 from team_policy import URL, publish
-
-WHEEL = f"gateseal-{package_version()}-py3-none-any.whl"
-SOURCE = (
-    f"https://raw.githubusercontent.com/example/wheels/{'e' * 40}/artifacts/{WHEEL}"
-)
-SHA = "5" * 64
 
 
 def gateseal(root, *arguments):
@@ -35,17 +29,7 @@ def message(result):
 
 
 def configure(root, *flags):
-    code, result = gateseal(
-        root,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--compiler-source",
-        SOURCE,
-        "--compiler-sha256",
-        SHA,
-        *flags,
-    )
+    code, result = gateseal(root, "configure", "--capability", "hygiene", *flags)
     assert (code, result["code"]) == (0, "configured"), result
     return result
 
@@ -87,9 +71,8 @@ def test_configure_writes_what_its_flags_select(consumer):
     result = configure(consumer, "--policy", "bundled", "--ci", "github")
     workflow = ".github/workflows/gateseal.yml"
     assert set(result["changed"]) == {*TRACKED, workflow}
-    compiler = json.loads((consumer / "gateseal.lock").read_bytes())["compiler"]
-    assert compiler["source"] == {"kind": "https-wheel", "location": SOURCE}
-    assert compiler["sha256"] == SHA
+    pin = json.loads((consumer / "gateseal.lock").read_bytes())["gateseal"]
+    assert pin == PIN.document()
     manifest = (consumer / "gateseal.toml").read_text()
     assert 'source = "bundled"' in manifest
     assert '[ci]\nprovider = "github"' in manifest
@@ -108,10 +91,6 @@ def test_git_policy_flags_without_a_repository_write_nothing(unconfigured):
         "policy",
         "--policy-tag",
         "v1",
-        "--compiler-source",
-        SOURCE,
-        "--compiler-sha256",
-        SHA,
     )
     assert (code, result["code"]) == (2, "invalid_invocation")
     assert named_flags(message(result)) == {
@@ -123,20 +102,12 @@ def test_git_policy_flags_without_a_repository_write_nothing(unconfigured):
     assert not (unconfigured / "gateseal.toml").exists()
 
 
-def test_configure_reads_the_local_compiler_wheel(unconfigured, tmp_path):
-    wheel = tmp_path / WHEEL
-    code, result = gateseal(
-        unconfigured,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--compiler-wheel",
-        wheel,
-        "--compiler-sha256",
-        SHA,
-    )
-    assert (code, result["code"]) == (4, "missing_artifact")
-    assert str(wheel) in message(result)
+@pytest.mark.parametrize("command", ["configure", "upgrade"])
+def test_gateseal_pins_itself_without_flags(unconfigured, command):
+    code, result = gateseal(unconfigured, command, "--compiler-sha256", "5" * 64)
+    assert (code, result["code"]) == (2, "invalid_invocation")
+    assert "--compiler-sha256" in message(result)
+    assert not (unconfigured / "gateseal.toml").exists()
 
 
 def test_before_configure_status_points_to_configure_and_check_fails(unconfigured):
@@ -235,32 +206,16 @@ def test_upgrade_records_a_version_exception(configured):
             "invalid_invocation",
             {"--policy", "--policy-tag"},
         ),
-        (
-            ["--compiler-wheel", "{wheel}", "--compiler-sha256", SHA],
-            4,
-            "missing_artifact",
-            {"{wheel}"},
-        ),
-        (
-            ["--compiler-source", SOURCE],
-            2,
-            "missing_artifact",
-            {"--compiler-wheel", "--compiler-source", "--compiler-sha256"},
-        ),
     ],
-    ids=["bundled with a tag", "commit and path", "wheel", "source alone"],
+    ids=["bundled with a tag", "commit and path"],
 )
 def test_upgrade_targets_reach_their_checks(
-    adopted, tmp_path, arguments, exit_code, expected, named
+    adopted, arguments, exit_code, expected, named
 ):
-    wheel = tmp_path / WHEEL
     before = tracked(adopted)
-    filled = [argument.format(wheel=wheel) for argument in arguments]
-    code, result = gateseal(adopted, "upgrade", *filled)
+    code, result = gateseal(adopted, "upgrade", *arguments)
     assert (code, result["command"], result["code"]) == (exit_code, "upgrade", expected)
-    shown = message(result)
-    assert all(token.format(wheel=wheel) in shown for token in named)
-    assert named_flags(shown) == {token for token in named if token.startswith("--")}
+    assert named_flags(message(result)) == named
     assert tracked(adopted) == before
 
 

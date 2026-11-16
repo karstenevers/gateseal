@@ -117,8 +117,6 @@ def guarded(installed, tmp_path_factory):
             "configure",
             *("--capability", "hygiene", "--capability", "secrets"),
             *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
-            *("--compiler-wheel", installed.wheel),
-            *("--compiler-sha256", installed.checksum),
             env=env,
         )
         success(["git", "add", "-A"], consumer)
@@ -155,8 +153,6 @@ def test_a_ci_only_tool_runs_in_the_gate_and_not_at_a_commit(installed, tmp_path
         "configure",
         *("--capability", "hygiene", "--capability", "secrets"),
         *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
-        *("--compiler-wheel", installed.wheel),
-        *("--compiler-sha256", installed.checksum),
         env=env,
     )
     success(["git", "add", "-A"], consumer)

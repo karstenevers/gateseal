@@ -331,10 +331,6 @@ def adopt(installed, consumer, team, tag, code=0):
         "policy",
         "--policy-tag",
         tag,
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         code=code,
         env=with_git_config(
             installed.environment, {f"url.{team.as_uri()}.insteadOf": TEAM}

@@ -6,24 +6,15 @@ its history for secrets.
 
 ## Turn it on
 
-The runner must be able to download the pinned wheel without credentials.
-A local wheel fails with `ci_needs_network_compiler`. For a new repository, follow [Pin the release in a
-repository](install.md#pin-the-release-in-a-repository) and add `--ci github`
-to the first `configure` command.
+The runner installs gateseal from the commit that the Lock pins, so it must
+reach gateseal's repository without credentials. For a new repository, follow
+[Pin the release in a repository](install.md#pin-the-release-in-a-repository)
+and add `--ci github` to the first `configure` command.
 
-For an existing repository, check `compiler.source.kind` in the Lock.
-If it is `local-wheel`, switch to the same wheel on PyPI **before** you edit
-`gateseal.toml`. Copy the wheel's URL from PyPI, as
-[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
-digest that the Lock records in `compiler.sha256`, and change the location:
-
-```sh
-gateseal upgrade --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
-```
-
-For an existing repository with a public wheel, add this table to
-`gateseal.toml`. For a new repository, `--ci github` creates it. Set `default_branch` to the branch whose pushes you want to
-check. Pull requests and merge groups can target any branch.
+For an existing repository, add this table to `gateseal.toml`. For a new
+repository, `--ci github` creates it. Set `default_branch` to the branch whose
+pushes you want to check. Pull requests and merge groups can target any
+branch.
 
 ```toml
 [ci]
@@ -75,9 +66,10 @@ other events.
 1. Check out the full Git history without persisting credentials. For a pull
    request, check out GitHub's merge commit. The Lock, workflow, and files
    come from the proposed merge.
-2. Download the pinned uv and mise releases and verify them. Install the
-   locked gateseal wheel. Run `gateseal setup` to install pre-commit, then
-   `gateseal check` to check the repository configuration.
+2. Download the pinned uv and mise releases and verify them. Install
+   gateseal from the commit that the Lock pins. Run `gateseal setup` to
+   install pre-commit, then `gateseal check` to check the repository
+   configuration.
 3. Run `gateseal gate` on the files and commits selected by the event.
 
 ## The gate

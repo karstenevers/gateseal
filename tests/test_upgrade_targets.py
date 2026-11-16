@@ -13,10 +13,9 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from conftest import named_flags
+from conftest import PIN, named_flags
 from gateseal import __version__, upgrade
 from gateseal.bootstrap import LOCK
-from gateseal.compiler_release import CompilerArtifact
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import Locked, Snapshot, compile_lock
 from gateseal.manifest import (
@@ -29,9 +28,8 @@ from gateseal.manifest import (
 )
 from gateseal.policy import bundled_root, load_bundled_policy, load_policy_tree
 from gateseal.validation import canonical, decode_json
-from test_upgrade_worktree import REASON, REVIEW_BY, WHEEL, older_pins
+from test_upgrade_worktree import REASON, REVIEW_BY, older_pins
 
-ARTIFACT = CompilerArtifact("local-wheel", f"/{WHEEL}", WHEEL, "a" * 64, __version__)
 KEPT_REASON = "Kept for the migration"
 KEPT_DATE = date(2026, 12, 31)
 EXCEPTION_FLAGS = {"--reason", "--review-by"}
@@ -80,13 +78,11 @@ def current(policy, *exceptions, capabilities=("hygiene", "secrets")):
     source = BundledSource(policy.release)
     manifest = render(capabilities, source) + "".join(exceptions).encode()
     selection = resolve(parse_manifest(manifest), policy)
-    return Locked(
-        Path(), policy, ARTIFACT, Snapshot(manifest, b"", {}), source, selection
-    )
+    return Locked(Path(), policy, PIN, Snapshot(manifest, b"", {}), source, selection)
 
 
 def changes(locked, policy, components, reason=None, review_by=None):
-    request = upgrade.Request(None, None, components, reason, review_by)
+    request = upgrade.Request(None, components, reason, review_by)
     manifest = parse_manifest(locked.snapshot.manifest)
     return upgrade._exception_changes(manifest, locked, policy, request)
 
@@ -129,12 +125,7 @@ def test_invalid_targets_are_refused(arguments, code, named):
 @pytest.mark.parametrize(
     ("name", "code", "why", "step"),
     [
-        (
-            "pre-commit",
-            "runtime_target",
-            "Compiler Runtime",
-            ("--compiler-source", "--compiler-wheel", "--compiler-sha256"),
-        ),
+        ("pre-commit", "runtime_target", "Compiler Runtime", ("gateseal upgrade",)),
         ("ruff", "unsupported_component", "capabilities", ()),
         ("shellcheck", "unsupported_component", "offers", ()),
     ],
@@ -287,18 +278,14 @@ def lock_document(policy, *exceptions, source=None):
     source = source or BundledSource(policy.release)
     manifest = render(("hygiene", "secrets"), source) + "".join(exceptions).encode()
     selection = resolve(parse_manifest(manifest), policy)
-    document = compile_lock(manifest, source, policy, ARTIFACT, selection)
+    document = compile_lock(manifest, source, policy, PIN, selection)
     return decode_json(canonical(document))
 
 
-def built(document, version="0.1.0", sha256="a" * 64, build="20261026", hooks="4.7.0"):
-    """Return document as compiler release version with that runtime records it."""
+def released(document, version, commit):
+    """Return document as the gateseal release version at commit pins it."""
     moved = copy.deepcopy(document)
-    wheel = f"gateseal-{version}-py3-none-any.whl"
-    moved["compiler"].update(version=version, filename=wheel, sha256=sha256)
-    for python in moved["runtime"]["python"].values():
-        python.update(major=3, minor=14, patch=10, build=build)
-    moved["runtime"]["pre_commit"]["version"] = hooks
+    moved["gateseal"].update(version=version, commit=commit)
     return moved
 
 
@@ -318,41 +305,24 @@ def exception_moves(before, after):
     }
 
 
-def test_a_compiler_release_reports_its_runtime_moves(policies):
+def test_a_gateseal_move_reports_gateseal_alone(policies):
+    old = released(lock_document(policies["bundled"]), "0.1.0", "a" * 40)
+    new = released(lock_document(policies["older"]), "0.2.0", "b" * 40)
+    before, after = f"0.1.0 at {'a' * 40}", f"0.2.0 at {'b' * 40}"
+    message = f"gateseal {before} to {after}: upgrade."
+    assert moves(old, new) == {"gateseal": (before, after, "upgrade", message)}
+    assert moves(new, old)["gateseal"][2] == "rollback"
+    assert exception_moves(old, new) == {}
+
+
+def test_another_commit_of_one_release_is_a_change(policies):
     document = lock_document(policies["bundled"])
-    old = built(document)
-    new = built(document, "0.2.0", "b" * 64, "20261101", "4.6.0")
-    forward = moves(old, new)
-    assert forward["compiler"] == (
-        "0.1.0",
-        "0.2.0",
-        "upgrade",
-        "compiler 0.1.0 to 0.2.0: upgrade.",
-    )
-    assert forward["python"][:3] == (
-        "3.14.10 build 20261026",
-        "3.14.10 build 20261101",
-        "change",
-    )
-    assert forward["pre-commit"][:3] == ("4.7.0", "4.6.0", "rollback")
-    assert forward["policy"][2] == forward["pre-commit-hooks"][2] == "unchanged"
-    back = moves(new, old)
-    assert back["compiler"][2:] == ("rollback", "compiler 0.2.0 to 0.1.0: rollback.")
-    assert back["pre-commit"][2:] == ("upgrade", "pre-commit 4.6.0 to 4.7.0: upgrade.")
-
-
-def test_a_rebuilt_compiler_release_is_a_change(policies):
-    document = built(lock_document(policies["bundled"]))
-    rebuilt = built(document, sha256="b" * 64)
-    assert moves(document, rebuilt)["compiler"] == (
-        "0.1.0",
-        "0.1.0",
-        "change",
-        "compiler 0.1.0: change.",
-    )
-    assert moves(document, document)["compiler"][2:] == (
+    other = released(document, __version__, "b" * 40)
+    pinned = f"{__version__} at {PIN.commit}"
+    assert moves(document, other)["gateseal"][2] == "change"
+    assert moves(document, document)["gateseal"][2:] == (
         "unchanged",
-        "compiler 0.1.0: unchanged.",
+        f"gateseal {pinned}: unchanged.",
     )
 
 
@@ -427,29 +397,18 @@ def test_an_exception_entry_names_the_version_and_the_pin(policies):
     assert all(value in entry["message"] for value in named)
 
 
-def test_a_compiler_move_names_the_command_that_runs_the_new_lock(policies):
-    before = built(lock_document(policies["bundled"]))
-    after = built(before, "0.2.0", "b" * 64)
+def test_a_gateseal_move_names_the_install_and_gateseal_setup(policies):
+    after = lock_document(policies["bundled"])
+    before = released(after, "0.0.9", "a" * 40)
     result = upgrade._result(
         before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
     )
     assert (result.code, result.changed) == ("upgraded", (LOCK,))
     install, review = result.next_steps
-    assert "0.2.0" in install
-    assert "git diff" in review
-    assert "compiler 0.1.0 to 0.2.0: upgrade." in result.details.split("\n")
-
-
-def test_a_pre_commit_move_names_gateseal_setup(policies):
-    before = built(lock_document(policies["bundled"]))
-    after = built(before, "0.2.0", "b" * 64, hooks="4.8.0")
-    result = upgrade._result(
-        before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
-    )
-    install, setup, review = result.next_steps
-    assert "0.2.0" in install
-    assert setup == (
-        "Run gateseal setup with the command of gateseal 0.2.0, so git commit runs "
-        "pre-commit 4.8.0."
+    assert install == (
+        f"Have each developer install gateseal {__version__} and run gateseal "
+        "setup, so git commit runs pre-commit 4.7.0."
     )
     assert "git diff" in review
+    moved = f"gateseal 0.0.9 at {'a' * 40} to {__version__} at {PIN.commit}: upgrade."
+    assert result.details.split("\n") == [moved]

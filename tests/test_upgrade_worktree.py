@@ -1,18 +1,19 @@
 """Run gateseal upgrade in process on real Git worktrees.
 
-Each consumer is configured in process with the compiler's network locator,
-which configure records without downloading. A team policy's releases are
-published into a local Git repository that the canonical URL reaches through
-url.<base>.insteadOf, so policy moves fetch real commits offline.
+Each consumer is configured in process with conftest's PIN for gateseal's
+release tag. A team policy's releases are published into a local Git
+repository that the canonical URL reaches through url.<base>.insteadOf, so
+policy moves fetch real commits offline.
 """
 
+import hashlib
 import json
 import os
 import shutil
 from datetime import date
 
 import pytest
-from conftest import TRACKED, with_git_config
+from conftest import PIN, TRACKED, with_git_config
 from gateseal import __version__, lock, runtime, upgrade
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_bundled_policy
@@ -20,14 +21,11 @@ from gateseal.validation import canonical
 from gateseal.worktree import locate_worktree
 from team_policy import URL, git, publish
 
-WHEEL = f"gateseal-{__version__}-py3-none-any.whl"
-SOURCE = (
-    f"https://raw.githubusercontent.com/example/wheels/{'0' * 40}/artifacts/{WHEEL}"
-)
-CHECKSUM = "a" * 64
 REASON = "Our fixtures need the older rules"
 REVIEW_BY = date(2027, 1, 31)
 BUNDLED = lock.PolicyRequest()
+BUNDLED_MOVE = lock.PolicyRequest("bundled")
+POLICY = load_bundled_policy()
 
 
 def older_pins(data):
@@ -121,9 +119,6 @@ def configure(root, *capabilities, policy=BUNDLED, ci=None):
             worktree.preparation,
             list(capabilities),
             policy,
-            None,
-            SOURCE,
-            CHECKSUM,
             ci,
         )
     return worktree
@@ -139,7 +134,7 @@ def adopted(root, tag, *capabilities):
 
 
 def request(policy=None, components=None, flags=(None, None)):
-    return upgrade.Request(policy, None, components or {}, *flags)
+    return upgrade.Request(policy, components or {}, *flags)
 
 
 def tracked(root):
@@ -165,32 +160,104 @@ def refused(worktree, asked):
 def test_an_upgrade_without_targets_writes_nothing(consumer):
     worktree = configure(consumer, "hygiene")
     before = tracked(consumer)
-    policy = load_bundled_policy()
-    same = (None, SOURCE, CHECKSUM)
-    for asked in (request(), upgrade.Request(None, same, {}, None, None)):
-        result = upgrade.run(worktree, asked)
-        assert (result.code, result.changed) == ("unchanged", ())
-        assert result.next_steps == ()
-        lines = result.details.split("\n")
-        assert lines[0] == f"compiler {__version__}: unchanged."
-        assert (
-            f"policy bundled {policy.release} ({policy.content_digest}): unchanged."
-            in lines
-        )
-        assert lines[-1] == "pre-commit-hooks 6.0.0: unchanged."
-        assert {state for _, _, state in moves(result).values()} == {"unchanged"}
+    result = upgrade.run(worktree, request())
+    assert (result.code, result.changed) == ("unchanged", ())
+    assert result.next_steps == ()
+    lines = result.details.split("\n")
+    assert lines[0] == f"gateseal {__version__} at {PIN.commit}: unchanged."
+    assert (
+        f"policy bundled {POLICY.release} ({POLICY.content_digest}): unchanged."
+        in lines
+    )
+    assert lines[-1] == "pre-commit-hooks 6.0.0: unchanged."
+    assert {state for _, _, state in moves(result).values()} == {"unchanged"}
     assert tracked(consumer) == before
 
 
-def test_an_upgrade_moves_the_compiler_pin_to_another_url_of_its_wheel(consumer):
+def written_by_a_newer_release(document):
+    """Make document a Lock that gateseal 9.0.0 wrote, in fields only it reads.
+
+    The ledger stays: the format, the pin, the Manifest's SHA-256, the policy's
+    digest and outputs.
+    """
+    document["gateseal"].update(version="9.0.0", commit="9" * 40)
+    document["policy"] = {"kind": "future", "digest": document["policy"]["digest"]}
+    document["components"] = None
+    document["future"] = "a field this release does not know"
+
+
+def test_a_gateseal_move_reads_only_the_ledger_of_another_releases_lock(consumer):
     worktree = configure(consumer, "hygiene", ci="github")
-    pypi = f"https://files.pythonhosted.org/packages/5b/a5/{'c' * 60}/{WHEEL}"
-    flags = (None, pypi, CHECKSUM)
-    result = upgrade.run(worktree, upgrade.Request(None, flags, {}, None, None))
-    assert set(result.changed) == {"gateseal.lock", ".github/workflows/gateseal.yml"}
-    document = json.loads((consumer / "gateseal.lock").read_bytes())
-    assert document["compiler"]["source"] == {"kind": "https-wheel", "location": pypi}
-    assert pypi in (consumer / ".github/workflows/gateseal.yml").read_text()
+    path = consumer / "gateseal.lock"
+    current = path.read_bytes()
+    document = json.loads(current)
+    written_by_a_newer_release(document)
+    path.write_bytes(canonical(document))
+    result = upgrade.run(worktree, request())
+    assert (result.code, result.changed) == ("upgraded", ("gateseal.lock",))
+    assert path.read_bytes() == current
+    old, new = f"9.0.0 at {'9' * 40}", f"{__version__} at {PIN.commit}"
+    assert moves(result) == {"gateseal": (old, new, "rollback")}
+    install, review = result.next_steps
+    assert f"install gateseal {__version__}" in install
+    assert "git diff" in review
+
+
+def bundled_by_a_newer_release(root, release, digest):
+    """Make root's Manifest and Lock those of gateseal 9.0.0 and its bundled policy."""
+    manifest = root / "gateseal.toml"
+    label = f'release = "{POLICY.release}"'.encode()
+    moved = manifest.read_bytes().replace(label, f'release = "{release}"'.encode())
+    manifest.write_bytes(moved)
+    path = root / "gateseal.lock"
+    document = json.loads(path.read_bytes())
+    written_by_a_newer_release(document)
+    document["policy"]["digest"] = digest
+    document["manifest_sha256"] = hashlib.sha256(moved).hexdigest()
+    path.write_bytes(canonical(document))
+
+
+@pytest.mark.parametrize(
+    ("release", "digest", "changed"),
+    [
+        ("future-1", POLICY.content_digest, {"gateseal.toml", "gateseal.lock"}),
+        (POLICY.release, "sha256:" + "0" * 64, {"gateseal.lock"}),
+    ],
+    ids=["another label", "other content under the label"],
+)
+def test_a_gateseal_move_takes_this_bundled_policy_only_when_asked(
+    consumer, release, digest, changed
+):
+    worktree = configure(consumer, "hygiene")
+    current = tracked(consumer)
+    bundled_by_a_newer_release(consumer, release, digest)
+    error = refused(worktree, request())
+    assert error.code == "bundled_policy_moves"
+    assert all(value in str(error) for value in (release, digest))
+    assert "--policy bundled" in error.next_step
+    result = upgrade.run(worktree, request(BUNDLED_MOVE))
+    assert set(result.changed) == changed
+    assert tracked(consumer) == current
+
+
+@pytest.mark.parametrize(
+    "asked",
+    [
+        request(components={"pre-commit-hooks": None}),
+        request(lock.PolicyRequest(tag="v2")),
+        request(flags=(REASON, REVIEW_BY)),
+    ],
+    ids=["component", "policy tag", "exception flags"],
+)
+def test_a_gateseal_move_moves_alone(consumer, asked):
+    worktree = configure(consumer, "hygiene")
+    path = consumer / "gateseal.lock"
+    document = json.loads(path.read_bytes())
+    written_by_a_newer_release(document)
+    path.write_bytes(canonical(document))
+    error = refused(worktree, asked)
+    assert error.code == "invalid_invocation"
+    assert "--policy bundled" in str(error)
 
 
 def test_a_policy_move_fetches_writes_and_stores_the_new_release(
@@ -218,7 +285,7 @@ def test_a_policy_move_fetches_writes_and_stores_the_new_release(
     manifest = (consumer / "gateseal.toml").read_text()
     assert f'commit = "{team_commits["v2"]}"' in manifest and 'tag = "v2"' in manifest
     loaded = lock.load(consumer, worktree.preparation)
-    assert loaded.policy.release == load_bundled_policy().release
+    assert loaded.policy.release == POLICY.release
 
 
 def test_policy_moves_that_break_the_exceptions_write_nothing(consumer, team_commits):

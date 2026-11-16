@@ -3,7 +3,7 @@ import json
 from datetime import date
 
 import pytest
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError, Result
 from gateseal.lock import acquire, compile_outputs, exclusion
 from gateseal.manifest import (
@@ -32,9 +32,7 @@ def selection(extra="", capabilities=("hygiene", "secrets")):
 
 
 def outputs(chosen):
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
-    return compile_outputs(chosen, artifact, BundledSource(POLICY.release))
+    return compile_outputs(chosen, PIN, BundledSource(POLICY.release))
 
 
 def test_defaults_select_every_pin():

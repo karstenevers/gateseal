@@ -1,22 +1,22 @@
 """Upgrade or roll back one repository's reviewed inputs: gateseal upgrade.
 
-One planner moves the policy release, a component's version and the compiler.
-It starts from a worktree whose Manifest and Lock agree, plans every target,
-and renders the result with the compiler that the result pins: this one, or
-the candidate that a compiler target installs. Every target and every
+One planner moves the policy release, a component's version and gateseal. It
+starts from a worktree whose Manifest and Lock agree, plans every target, and
+renders the result with this gateseal. A Lock that pins another gateseal is a
+gateseal move: of that Lock, only the ownership ledger is read, and the result
+is compiled from the Manifest and the policy alone. Every target and every
 requirement between components is checked before the first write, and the
 writes follow configure's ownership rules.
 """
 
-import contextlib
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
-from gateseal import candidate, lock, manifest_toml, runtime, sources
-from gateseal.bootstrap import LOCK, MANIFEST
-from gateseal.compiler_release import CompilerArtifact, artifact_from_flags
+from gateseal import __version__, lock, manifest_toml, runtime, sources
+from gateseal.bootstrap import LOCK, MANIFEST, sha
+from gateseal.compiler_release import GatesealPin, load_runtime
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.manifest import (
     BundledSource,
@@ -27,7 +27,7 @@ from gateseal.manifest import (
     parse_manifest,
     resolve,
 )
-from gateseal.policy import Policy
+from gateseal.policy import Policy, load_bundled_policy
 from gateseal.tools.model import NAME, Tool
 from gateseal.validation import (
     canonical,
@@ -56,14 +56,12 @@ RESOLVE = (
 class Request:
     """What gateseal upgrade's arguments ask for.
 
-    policy holds the --policy flags, and compiler the --compiler flags, when
-    any is given. components maps each named component to its exact target, or
-    to None for the policy's pin. reason and review_by fill each Version
-    Exception a target needs.
+    policy holds the --policy flags, when any is given. components maps each
+    named component to its exact target, or to None for the policy's pin.
+    reason and review_by fill each Version Exception a target needs.
     """
 
     policy: lock.PolicyRequest | None
-    compiler: tuple[str | None, str | None, str | None] | None
     components: Mapping[str, str | None]
     reason: str | None
     review_by: date | None
@@ -103,11 +101,10 @@ def _unknown(name: str, policy: Policy) -> GatesealError:
     if name == "pre-commit":
         return GatesealError(
             "runtime_target",
-            "pre-commit is part of the Compiler Runtime, so it moves only with the "
-            "compiler.",
-            next_step="Upgrade the compiler to the release that carries the "
-            "pre-commit you need, with --compiler-source or --compiler-wheel and "
-            "--compiler-sha256.",
+            "pre-commit is part of the Compiler Runtime, so it moves only with "
+            "gateseal.",
+            next_step="Install the gateseal release that runs the pre-commit you "
+            "need, then run gateseal upgrade with it.",
         )
     return GatesealError(
         "unsupported_component",
@@ -235,14 +232,8 @@ def _require_reviewed(manifest: Manifest, policy: Policy) -> None:
         )
 
 
-def _plan(
-    current: lock.Locked,
-    request: Request,
-    artifact: CompilerArtifact,
-    git: str,
-    preparation: Path,
-) -> Plan:
-    """Plan policy and component targets, and a new locator for this compiler."""
+def _plan(current: lock.Locked, request: Request, git: str, preparation: Path) -> Plan:
+    """Plan policy and component targets with this gateseal's pin."""
     old = parse_manifest(current.snapshot.manifest)
     source = (
         request.policy.target(current.source, git, preparation)
@@ -258,20 +249,28 @@ def _plan(
     if source != current.source or changes:
         moved = None if source == current.source else source
         manifest = manifest_toml.edited(manifest, moved, changes)
+    return _compiled(
+        current.root, manifest, policy, current.pin, checks, preserved=preserved
+    )
+
+
+def _compiled(
+    root: Path,
+    manifest: bytes,
+    policy: Policy,
+    pin: GatesealPin,
+    checks: tuple[Note, ...],
+    preserved: frozenset[str] = frozenset(),
+) -> Plan:
+    """Plan the Lock and outputs that manifest compiles to with policy and pin."""
     parsed = parse_manifest(manifest)
     _require_reviewed(parsed, policy)
     selection = _selection(parsed, policy)
-    outputs = lock.compile_outputs(selection, artifact, source)
-    document = canonical(
-        lock.compile_lock(manifest, source, policy, artifact, selection)
-    )
+    source = parsed.source
+    outputs = lock.compile_outputs(selection, pin, source)
+    document = canonical(lock.compile_lock(manifest, source, policy, pin, selection))
     locked = lock.Locked(
-        current.root,
-        policy,
-        artifact,
-        lock.Snapshot(manifest, document, outputs),
-        source,
-        selection,
+        root, policy, pin, lock.Snapshot(manifest, document, outputs), source, selection
     )
     return Plan(
         {MANIFEST: manifest, LOCK: document, **outputs},
@@ -291,45 +290,62 @@ def _selection(manifest: Manifest, policy: Policy) -> Selection:
         raise GatesealError(exc.code, str(exc), exc.exit_code, RESOLVE) from exc
 
 
-def _plan_candidate(
-    current: lock.Locked,
+def _plan_move(
+    root: Path,
+    before: dict[str, object],
     request: Request,
-    compiler: candidate.Candidate,
     git: str,
     preparation: Path,
 ) -> Plan:
-    """Plan a compiler target with the candidate, which must take every pin as is.
+    """Plan a move to this gateseal from a Lock that another release wrote.
 
-    A bundled policy belongs to its compiler, so it moves with it only when
-    --policy bundled asks for that.
+    Of that Lock only the ledger is read: its Manifest's SHA-256 and policy
+    digest here, its outputs when the plan is written. A bundled policy belongs
+    to its gateseal, so it moves with it only when --policy bundled asks for
+    that.
     """
     _require_alone(request)
-    moving = request.policy is not None
-    manifest = current.snapshot.manifest
-    with compiler.scratch(git, preparation) as repository:
-        if moving or isinstance(current.source, BundledSource):
-            capabilities = parse_manifest(manifest).capabilities
-            release, digest = compiler.bundled(repository, capabilities)
-            if not moving and (release, digest) != (
-                current.policy.release,
-                current.policy.content_digest,
-            ):
-                raise GatesealError(
-                    "bundled_policy_moves",
-                    f"gateseal {compiler.artifact.version} bundles policy {release} "
-                    f"with digest {digest}, not the selected {current.policy.release} "
-                    f"with digest {current.policy.content_digest}.",
-                    next_step="Add --policy bundled to move to that policy with the "
-                    "compiler, or adopt a Git policy release first.",
-                )
-            if BundledSource(release) != current.source:
-                manifest = manifest_toml.edited(manifest, BundledSource(release), {})
-        files, notes = compiler.configure(repository, manifest)
-    return Plan(files, notes)
+    manifest = lock.tracked(root, MANIFEST)
+    if sha(manifest) != before.get("manifest_sha256"):
+        raise GatesealError(
+            "lock_mismatch",
+            f"{MANIFEST} differs from the Manifest that {LOCK} was compiled from.",
+            next_step=RESTORE,
+        )
+    current = parse_manifest(manifest).source
+    if request.policy is not None:
+        source = request.policy.target(current, git, preparation)
+    else:
+        source = current
+        if isinstance(current, BundledSource):
+            _require_bundled_kept(current, before)
+    if source != current:
+        manifest = manifest_toml.edited(manifest, source, {})
+    policy, checks = lock.acquire(parse_manifest(manifest), None, preparation, git)
+    return _compiled(root, manifest, policy, lock.release_pin(git, preparation), checks)
+
+
+def _require_bundled_kept(current: BundledSource, before: dict[str, object]) -> None:
+    """Fail unless this gateseal bundles the policy that before's Lock selects.
+
+    A release can bundle other content under the same label, so the policy
+    digest that the ledger keeps decides with the label.
+    """
+    bundled = load_bundled_policy()
+    digest = mapping(before.get("policy"), "policy").get("digest")
+    if (current.release, digest) != (bundled.release, bundled.content_digest):
+        raise GatesealError(
+            "bundled_policy_moves",
+            f"gateseal {__version__} bundles policy {bundled.release} with digest "
+            f"{bundled.content_digest}, not the selected {current.release} with "
+            f"digest {digest}.",
+            next_step="Add --policy bundled to move to that policy with gateseal, "
+            "or adopt a Git policy release first.",
+        )
 
 
 def _require_alone(request: Request) -> None:
-    """Fail unless the compiler target moves alone, or with --policy bundled."""
+    """Fail unless a gateseal move moves alone, or with --policy bundled."""
     if (
         request.components
         or request.reason
@@ -341,8 +357,8 @@ def _require_alone(request: Request) -> None:
     ):
         raise GatesealError(
             "invalid_invocation",
-            "A compiler target moves alone, or with --policy bundled. Upgrade the "
-            "compiler first, then the policy or components with its command.",
+            "A gateseal move moves alone, or with --policy bundled. Upgrade "
+            "gateseal first, then the policy or components with the same command.",
         )
 
 
@@ -350,7 +366,7 @@ def _state(before: str, after: str) -> str:
     """Name a move between two values that each start with a version.
 
     It is change when either has no version, or when only what follows the
-    version moves, such as a CPython build.
+    version moves, such as a commit.
     """
     if before == after:
         return "unchanged"
@@ -391,47 +407,33 @@ def _versions(document: dict[str, object]) -> dict[str, str]:
     return found
 
 
-def _runtime(document: dict[str, object]) -> dict[str, str]:
-    """Return the Python and pre-commit versions of a Lock's Compiler Runtime."""
-    record = mapping(document["runtime"], "runtime")
-    python = next(iter(mapping(record["python"], "runtime.python").values()))
-    parts = mapping(python, "python")
-    release = ".".join(str(parts[key]) for key in ("major", "minor", "patch"))
-    return {
-        "python": f"{release} build {parts['build']}",
-        "pre-commit": str(mapping(record["pre_commit"], "pre_commit")["version"]),
-    }
-
-
 def _policy(record: dict[str, object]) -> str:
     if record["kind"] == "bundled":
         return f"bundled {record['release']} ({record['digest']})"
     return f"{record['tag']} at {record['commit']} ({record['digest']})"
 
 
+def _release(pin: GatesealPin) -> str:
+    return f"{pin.version} at {pin.commit}"
+
+
 def report(
     before: dict[str, object], after: dict[str, object], preserved: frozenset[str]
 ) -> list[dict[str, object]]:
-    """Describe how two Locks differ: one entry per target, then per exception."""
-    entries: list[dict[str, object]] = []
-    old, new = mapping(before["compiler"], "c"), mapping(after["compiler"], "c")
-    state = _state(str(old["version"]), str(new["version"]))
-    if state == "unchanged" and old != new:
-        state = "change"
-    entries.append(
-        _target_entry("compiler", str(old["version"]), str(new["version"]), state)
-    )
-    for name, value in _runtime(after).items():
-        previous = _runtime(before)[name]
-        entries.append(_target_entry(name, previous, value, _state(previous, value)))
-    kept = {
-        k: v
-        for k, v in mapping(before["policy"], "p").items()
-        if k != "compiler_sha256"
-    }
-    moved = {
-        k: v for k, v in mapping(after["policy"], "p").items() if k != "compiler_sha256"
-    }
+    """Describe how two Locks differ: one entry per target, then per exception.
+
+    A Lock of another gateseal is read only for its ledger, so a gateseal move
+    reports gateseal alone, and the Lock's diff shows the rest.
+    """
+    old, new = lock.ledger_pin(before), lock.ledger_pin(after)
+    entries = [
+        _target_entry(
+            "gateseal", _release(old), _release(new), _state(*map(_release, (old, new)))
+        )
+    ]
+    if old != new:
+        return entries
+    kept, moved = mapping(before["policy"], "p"), mapping(after["policy"], "p")
     entries.append(
         _target_entry(
             "policy", _policy(kept), _policy(moved), _state(str(kept), str(moved))
@@ -503,17 +505,10 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
     after = decode_json(plan.files[LOCK])
     entries = report(before, after, plan.preserved)
     steps: list[str] = []
-    release = mapping(after["compiler"], "compiler")["version"]
-    if release != mapping(before["compiler"], "compiler")["version"]:
+    if lock.ledger_pin(before) != lock.ledger_pin(after):
         steps.append(
-            f"Install the command of gateseal {release} as Install a reviewed wheel "
-            "shows; only it runs gateseal commands on the new Lock."
-        )
-    pre_commit = _runtime(after)["pre-commit"]
-    if pre_commit != _runtime(before)["pre-commit"]:
-        steps.append(
-            f"Run gateseal setup with the command of gateseal {release}, so git "
-            f"commit runs pre-commit {pre_commit}."
+            f"Have each developer install gateseal {__version__} and run gateseal "
+            f"setup, so git commit runs pre-commit {load_runtime().pre_commit}."
         )
     if written:
         steps.append("Review git diff, then stage and commit the changed files.")
@@ -556,28 +551,25 @@ def run(worktree: Worktree, request: Request) -> Result:
     """Plan every target and write the tracked files."""
     root, git = worktree.root, worktree.git
     local = runtime.preparation_directory(worktree)
-    artifact = (
-        artifact_from_flags(*request.compiler, release=None)
-        if request.compiler
-        else None
-    )
-    with contextlib.ExitStack() as stack:
-        with runtime.operation_lock(local):
+    with runtime.operation_lock(local):
+        before = _ledger(root)
+        if lock.ledger_pin(before).running:
             lock.ensure_policy(root, local, git)
-            current = _current(root, local)
-            before = decode_json(current.snapshot.lock)
-            compiler = None
-            if artifact is not None and (artifact.sha256, artifact.version) != (
-                current.artifact.sha256,
-                current.artifact.version,
-            ):
-                compiler = stack.enter_context(candidate.installed(artifact, root))
-                plan = _plan_candidate(current, request, compiler, git, local)
-            else:
-                plan = _plan(current, request, artifact or current.artifact, git, local)
-            changes = _write(root, local, plan, before)
-            if compiler is None:
-                # pytestmut: off[stmt.call_remove] -- the files it just wrote load
-                lock.load(root, local)
-                # pytestmut: on
-        return _result(before, plan, changes.names)
+            plan = _plan(_current(root, local), request, git, local)
+        else:
+            plan = _plan_move(root, before, request, git, local)
+        changes = _write(root, local, plan, before)
+        # pytestmut: off[stmt.call_remove] -- the files it just wrote load
+        lock.load(root, local)
+        # pytestmut: on
+    return _result(before, plan, changes.names)
+
+
+def _ledger(root: Path) -> dict[str, object]:
+    """Return the worktree's Lock as JSON, whichever gateseal wrote it."""
+    try:
+        return decode_json(lock.tracked(root, LOCK))
+    except FileNotFoundError as exc:
+        raise GatesealError(
+            "missing_configuration", "Run gateseal configure before this command."
+        ) from exc
