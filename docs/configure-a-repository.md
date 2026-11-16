@@ -43,8 +43,9 @@ covers other findings.
 
 ## Add capabilities
 
-On the first `configure`, you can add `--capability python` or
-`--capability secrets` alongside `--capability hygiene`.
+On the first `configure`, repeat `--capability` for each capability you
+want, such as `--capability hygiene --capability python`. Any capability also
+works alone, such as `--capability secrets`.
 
 To add checks later, edit `capabilities` in `gateseal.toml`. For example,
 select `["hygiene", "python"]` to add Python checks. Run:

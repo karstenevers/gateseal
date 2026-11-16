@@ -421,7 +421,7 @@ def test_a_policys_tools_claim_distinct_hooks_and_repositories(
 @pytest.mark.parametrize(
     "old,new,code",
     [
-        ("[capabilities.hygiene]", "[capabilities.tidy]", "invalid_field"),
+        ("[capabilities.hygiene]", "[capabilities.tidy]", "unsupported_choice"),
         (
             'tools = ["gitleaks"]',
             'tools = ["gitleaks", "yamllint"]',
@@ -448,7 +448,7 @@ def test_a_policys_tools_claim_distinct_hooks_and_repositories(
         ('hook_ids = ["check-yaml"]', 'hook_ids = ["yamllint"]', "unsupported_hook"),
     ],
     ids=[
-        "no hygiene",
+        "hygiene choice without hygiene",
         "tool in two capabilities",
         "tool twice",
         "no tools",
@@ -466,6 +466,27 @@ def test_policy_schema_4_structure_is_validated(tmp_path, upstream, old, new, co
         authoring.lock(root)
     assert failure.value.code == code
     assert not (root / "policy.lock").exists()
+
+
+def test_a_policy_defines_at_least_one_capability(tmp_path):
+    tables = "\n\n".join(("[capabilities]", "[tools]", "[choices]", "[components]"))
+    root = team(tmp_path, POLICY.split("\n\n")[0] + "\n\n" + tables + "\n")
+    with pytest.raises(GatesealError) as failure:
+        authoring.lock(root)
+    assert failure.value.code == "invalid_field"
+    assert "no capability" in str(failure.value)
+
+
+def test_a_policy_without_hygiene_compiles_a_selection_of_secrets(tmp_path, upstream):
+    policy = POLICY.replace("[capabilities.hygiene]", "[capabilities.files]")
+    policy = policy.replace("[choices.hygiene.exclude]\ndefault = []\n", "[choices]\n")
+    root = team(tmp_path, policy)
+    assert authoring.lock(root).code == "locked"
+    locked, lock = consumer(load_policy_tree(root), ("secrets",))
+    assert locked.policy.capabilities == ("files", "secrets")
+    assert (lock["components"], set(lock["native_artifacts"])) == ({}, {"gitleaks"})
+    config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
+    assert [repository["repo"] for repository in config["repos"]] == ["local"]
 
 
 def test_omitted_hook_ids_run_every_hook_in_definition_order(tmp_path, upstream):

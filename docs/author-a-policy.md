@@ -33,7 +33,7 @@ flowchart LR
 2. In `policy/policy.toml`, set `release` to a label such as
    `"team-2026.11"`. The label can contain up to 128 printable characters.
    The `[capabilities]` tables group the tools. The `[tools]` tables select
-   their hooks and rule files. Keep the required `hygiene` capability.
+   their hooks and rule files. Keep at least one capability.
 
 3. If you remove a capability, remove its tool and component tables, version
    tables, and choices. For example, if you remove `python`, also delete

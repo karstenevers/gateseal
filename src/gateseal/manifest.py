@@ -17,7 +17,7 @@ from gateseal.policy import (
     choice_parser,
     require_compatible,
 )
-from gateseal.policy_tools import CAPABILITY, HYGIENE
+from gateseal.policy_tools import CAPABILITY
 from gateseal.tools.model import Hook, Origin, Tool, require_local_hooks
 from gateseal.validation import (
     fields,
@@ -180,14 +180,14 @@ def capabilities(names: list[object]) -> tuple[str, ...]:
     """
     selected = [string(name, "capabilities") for name in names]
     if (
-        len(set(selected)) != len(selected)
+        not selected
+        or len(set(selected)) != len(selected)
         or not all(map(CAPABILITY.fullmatch, selected))
-        or HYGIENE not in selected
     ):
         raise GatesealError(
             "unsupported_capability",
-            f"Select {HYGIENE}, optionally with other capabilities the policy "
-            "offers, such as python and secrets, each at most once.",
+            "Select at least one capability that the policy offers, such as "
+            "hygiene, python or secrets, each at most once.",
         )
     return tuple(sorted(selected))
 
