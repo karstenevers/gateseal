@@ -38,6 +38,10 @@ from gateseal.validation import fields, mapping, parse_toml, sequence, string, v
 CAPABILITY = re.compile(r"[a-z][a-z0-9-]*")
 """A capability's name, as policy.toml and a Manifest name it."""
 
+BUILT_IN_RULES = frozenset({"useDefault", "disabledRules"})
+"""The keys of a Betterleaks or Gitleaks extend table that start from the rules
+built into the tool and turn some of them off, without loading a file."""
+
 TEAM_TOOLS = "tools/"
 """The directory of a policy's Team-defined Tools, one <name>.toml each."""
 
@@ -147,15 +151,22 @@ def validate_configuration(data: bytes, field: str) -> None:
 
     Owned outputs are compared with line endings normalized to LF, so a file
     with a carriage return could never match its own output. A configuration
-    that loads another file would escape review.
+    that loads another file would escape review. An extend table that only
+    selects among the rules built into the tool loads none, and the Lock's
+    checksum of the tool covers those rules.
     """
     if b"\r" in data:
         raise GatesealError(
             "invalid_field", f"{field} must use LF line endings, without CR."
         )
-    if EXTEND in parse_toml(data):
+    extend = parse_toml(data).get(EXTEND)
+    if extend is not None and not (
+        isinstance(extend, dict) and extend.keys() <= BUILT_IN_RULES
+    ):
         raise GatesealError(
-            "invalid_field", f"{field} must not extend another configuration."
+            "invalid_field",
+            f"{field} must not extend another configuration. A Betterleaks or "
+            "Gitleaks extend table may hold only useDefault and disabledRules.",
         )
 
 

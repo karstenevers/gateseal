@@ -8,26 +8,65 @@ filter.matchesAny(get(attributes, "path", ""), [
 ])
 '''
 
+# Betterleaks drops a finding whose secret looks like a placeholder. This
+# filter replaces its built-in one, which also drops a secret that starts with
+# true, holds false or ends with null.
+filter = '''
+(matchesAny(finding["secret"], [
+  `(?i)^(?:true|false|null)$`,
+  `^(?i:a+|b+|c+|d+|e+|f+|g+|h+|i+|j+|k+|l+|m+|n+|o+|p+|q+|r+|s+|t+|u+|v+|w+|x+|y+|z+|\*+|\.+)$`,
+  `^\$(?:\d+|{\d+})$`,
+  `^\$(?:[A-Z_]+|[a-z_]+)$`,
+  `^\${(?:[A-Z_]+|[a-z_]+)}$`,
+  `^\{\{[ \t]*[\w ().|]+[ \t]*}}$`,
+  `^\$\{\{[ \t]*(?:(?:env|github|secrets|vars)(?:\.[A-Za-z]\w+)+[\w "'&./=|]*)[ \t]*}}$`,
+  `^%(?:[A-Z_]+|[a-z_]+)%$`,
+  `^%[+\-# 0]?[bcdeEfFgGoOpqstTUvxX]$`,
+  `^\{\d{0,2}}$`,
+  `^@(?:[A-Z_]+|[a-z_]+)@$`,
+  `^/Users/(?i)[a-z0-9]+/[\w .-/]+$`,
+  `^/(?:bin|etc|home|opt|tmp|usr|var)/[\w ./-]+$`
+]) || containsAny(finding["secret"], [
+  "abcdefghijklmnopqrstuvwxyz",
+  "014df517-39d1-4453-b7b3-9930c563627c"
+]))
+'''
+
+# Betterleaks' generic rule misses a base64 value that starts with + or /,
+# such as some AWS secret access keys. This rule reports one.
+[[rules]]
+id = "generic-base64-key"
+description = "Generic base64 secret that starts with + or /"
+regex = '''(?i)(?:access|auth|(?-i:[Aa]pi|API)|credential|creds|key|secret|token)(?:[ \t\w.-]{0,20})[\s'"]{0,3}(?:=|>|:{1,3}=|\|\||:|=>|\?=|,)[\x60'"\s=]{0,5}([+/][a-z0-9+/]{19,}={0,3})(?:\\?['"\x60]|[\s;]|\\[nr]|$)'''
+keywords = ["access", "api", "auth", "credential", "creds", "key", "secret", "token"]
+filter = '''
+entropy(finding["secret"]) <= 3.5 || filter.failsTokenEfficiency(finding["secret"])
+'''
+
+# Betterleaks reports an AWS access key ID only next to its secret key. This
+# rule reports one alone.
 [[rules]]
 id = "aws-access-token"
 description = "AWS access key identifier"
 regex = '''\b(?:AKIA|ASIA)[A-Z0-9]{16}\b'''
 keywords = ["akia", "asia"]
 
+# One rule for the ghp_, gho_, ghu_, ghs_ and ghr_ prefixes. It also finds the
+# stateless GitHub App installation tokens, whose JWT holds dots and dashes.
 [[rules]]
 id = "github-pat"
 description = "GitHub personal access token"
 regex = '''\bgh[pousr]_[A-Za-z0-9._-]{36,}'''
 keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]
 
-[[rules]]
-id = "github-fine-grained-pat"
-description = "GitHub fine-grained personal access token"
-regex = '''\bgithub_pat_[A-Za-z0-9_]{82}\b'''
-keywords = ["github_pat_"]
-
-[[rules]]
-id = "generic-api-key"
-description = "Generic API key assignment"
-regex = '''(?i)(?:api[_-]?key|secret[_-]?key|access[_-]?token)["']?[\t ]{0,8}[:=][\t ]{0,8}["']?([A-Za-z0-9_./+=-]{20,})'''
-keywords = ["api", "key", "secret", "token"]
+# The rules that Betterleaks builds in, except those that the AWS and GitHub
+# rules above replace.
+[extend]
+useDefault = true
+disabledRules = [
+  "aws-access-token",
+  "github-app-token",
+  "github-oauth",
+  "github-pat",
+  "github-refresh-token",
+]

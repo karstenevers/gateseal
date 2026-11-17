@@ -48,6 +48,17 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- The bundled `secrets` rules start from the rules built into Betterleaks. A
+  commit now also stops on an AWS secret access key, a private key, a
+  password, and tokens of services such as Slack, Stripe and npm. gateseal's
+  own rules for an AWS access key ID alone and for the `ghp_`, `gho_`, `ghu_`,
+  `ghs_` and `ghr_` GitHub tokens stay, and Betterleaks' built-in rule finds
+  fine-grained `github_pat_` tokens. A new rule finds a base64 key that
+  starts with `+` or `/`, which the built-in generic rule misses. The
+  placeholder filter no longer drops a secret that starts with `true`, holds
+  `false` or ends with `null`. A policy's Betterleaks or Gitleaks rule file
+  can use an `extend` table with `useDefault` and `disabledRules`. Any other
+  `extend` is still refused.
 - Every failed result names at least one next step: a command to run or a
   plain fix. In `--json`, `next_steps` is never empty when `status` is
   `failed`, and text output and the `gateseal-check` hook print a `Next:`

@@ -24,6 +24,26 @@ gateseal policy init policy
 
 Edit the `release` label in `policy/policy.toml`. Edit its capabilities, tool versions, and rule files for your team. See [Policy format](policy-format.md) for field rules and [Add a tool](add-a-tool.md) for complete examples.
 
+The bundled `rules/betterleaks.toml` starts from the rules built into Betterleaks. To change the secret rules, edit that file:
+
+- Add a `[[rules]]` table to find a secret of your own.
+- Add a rule ID to `disabledRules` to turn off a rule that finds too much, such as `generic-password`.
+- Add an `[[allowlists]]` table to skip paths, such as test fixtures.
+
+```toml
+[[rules]]
+id = "team-service-token"
+description = "Team service token"
+regex = '''\bteam_[A-Za-z0-9]{32}\b'''
+keywords = ["team_"]
+
+[[allowlists]]
+description = "Test fixtures"
+paths = ['''(?:^|/)tests/fixtures/''']
+```
+
+The file's own rules fill gaps in the built-in ones. Its top-level `filter` replaces the filter built into Betterleaks, which drops findings that look like placeholders. A new Betterleaks version can change its built-in rules and filter, so review them when you review the version.
+
 If you remove a capability, remove its tables and rule files. Run `gateseal policy lock policy` after changing reviewed versions or tools. The generated `policy.lock` records the reviewed upstream commits and archive checksums. Check the policy. Then commit it:
 
 ```sh

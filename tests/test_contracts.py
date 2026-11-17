@@ -247,12 +247,30 @@ def test_betterleaks_records_are_validated(tmp_path, change, category):
     )
 
 
-def test_secret_rules_cannot_extend_another_configuration(tmp_path):
+@pytest.mark.parametrize(
+    "rules",
+    [
+        '[extend]\npath = "team.toml"\n',
+        '[extend]\nurl = "https://example.com/rules.toml"\n',
+        '[extend]\nuseDefault = true\npath = "team.toml"\n',
+        'extend = "team.toml"\n',
+    ],
+)
+def test_secret_rules_cannot_extend_another_configuration(tmp_path, rules):
     tree(tmp_path)
-    path = tmp_path / "rules" / "betterleaks.toml"
-    path.write_text("[extend]\nuseDefault = true\n\n" + path.read_text())
+    (tmp_path / "rules" / "betterleaks.toml").write_text(rules)
     with pytest.raises(GatesealError, match="must not extend"):
         load_policy_tree(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "extend",
+    ["useDefault = true", 'useDefault = true\ndisabledRules = ["generic-password"]'],
+)
+def test_secret_rules_can_start_from_the_rules_built_into_betterleaks(tmp_path, extend):
+    tree(tmp_path)
+    (tmp_path / "rules" / "betterleaks.toml").write_text(f"[extend]\n{extend}\n")
+    load_policy_tree(tmp_path)
 
 
 def test_policy_without_secrets_still_loads(tmp_path):
@@ -438,8 +456,13 @@ def test_ruff_configuration_cannot_extend_another_configuration(tmp_path):
     tree(tmp_path)
     path = tmp_path / "rules" / "ruff.toml"
     path.write_text('extend = "../pyproject.toml"\n' + path.read_text())
-    with pytest.raises(GatesealError, match="must not extend"):
+    with pytest.raises(GatesealError) as refused:
         load_policy_tree(tmp_path)
+    assert str(refused.value) == (
+        "The ruff configuration must not extend another configuration. A "
+        "Betterleaks or Gitleaks extend table may hold only useDefault and "
+        "disabledRules."
+    )
 
 
 def test_ruff_configuration_rejects_carriage_returns(tmp_path):
