@@ -23,6 +23,9 @@ COMMIT = re.compile(r"[0-9a-f]{40}")
 CHECK_HOOK = "gateseal-check"
 """The hook that gateseal's repository defines in .pre-commit-hooks.yaml."""
 
+CHECK_HOOK_NAME = "Check files and tools against gateseal.lock"
+"""The name that pre-commit prints for CHECK_HOOK."""
+
 MINIMUM_UV = "0.13.5"
 """The oldest uv that gateseal setup accepts."""
 

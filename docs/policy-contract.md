@@ -68,6 +68,72 @@ version accepts them. `py313` requires Ruff 0.4.5, `py314` requires 0.11.8,
 and `py315` requires 0.14.11 or later. An unsupported value produces
 `invalid_choice`. The bundled `secrets` capability has no choices.
 
+### Skip optional hooks
+
+A policy can mark hooks as optional. It then exposes the choice `skip` for
+their capability, and a repository lists the hooks it leaves out:
+
+<!-- manifest tables: skip -->
+```toml
+[choices.hygiene]
+skip = ["check-yaml"]
+```
+
+The generated configuration lacks a skipped hook, so a commit, `gateseal run`
+and the CI gate all skip it. A tool left without hooks writes no file and has
+no Lock entry, and the CI gate runs no history scan of it. `gateseal status`
+prints the skipped hooks as a choice. The bundled policy marks no hook as
+optional.
+
+A hook that the policy does not mark as optional gives `invalid_choice`. A
+capability without optional hooks gives `unsupported_choice`.
+
+### Repository hooks
+
+Add `[hooks.<id>]` to run a script of the repository as a check. This table
+runs `scripts/check-migrations.sh --strict` with the staged files under
+`migrations/`:
+
+<!-- manifest tables: hooks -->
+```toml
+[hooks.check-migrations]
+name = "Check migration numbers"
+run = "scripts/check-migrations.sh"
+args = ["--strict"]
+files = "^migrations/"
+```
+
+| Field | Accepted value |
+| --- | --- |
+| `<id>` | Lowercase letters, digits, and `-`, starting with a letter. |
+| `name` | The name that pre-commit prints for the hook. |
+| `run` | The path of a file in the repository, from its root, with `/` between segments. Each segment holds letters, digits, `.`, `_`, and `-`, and cannot be `.` or `..`. |
+| `args` | Optional. Arguments that come before the file names. |
+| `files` | Optional. A Python regular expression for the paths that start the hook. Without it, every staged file starts it. |
+
+Repository hooks run after every policy hook, in the order of the Manifest,
+at a commit, in `gateseal run` and in the CI gate. pre-commit passes the
+matching staged files as arguments, and a script that exits with another
+status than 0 fails the hook. Commit the script with a `#!` line, such as
+`#!/bin/sh`, and the executable bit. gateseal installs nothing for it, so it
+runs with the tools of the developer's machine and the CI runner.
+`gateseal status` lists each repository hook, and `gateseal run` reports its
+results with the origin `repository`.
+
+A repository hook only adds a check. An ID or a name that a policy hook,
+another repository hook or gateseal's own `gateseal-check` hook uses gives
+`duplicate_identifier`. So does
+a policy upgrade that adds a hook with a repository hook's ID. Each of these
+gives `invalid_field`:
+
+- A table without `name` or `run`.
+- A `run` that is not a file in the repository.
+- A field that the table above does not list, such as `stages`.
+- A `files` value that is not a regular expression.
+
+A tool from outside the repository belongs in the policy. See
+[Add a tool](add-a-tool.md).
+
 ### Version exceptions
 
 Add `[exceptions.<component>]` to select another version the policy has
@@ -148,7 +214,7 @@ explains.
 
 | Generated file | What to review |
 | --- | --- |
-| `.pre-commit-config.yaml` | gateseal's repository at the pinned commit with its `gateseal-check` hook, then the selected hooks in policy order, each with its stages. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
+| `.pre-commit-config.yaml` | gateseal's repository at the pinned commit with its `gateseal-check` hook, then the selected hooks in policy order, each with its stages, then the repository hooks under `local`. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
 | `.gateseal/ruff.toml` | The selected target version and the policy's Ruff rules. |
 | `.gateseal/betterleaks.toml` | The policy's secret detection rules. |
 | `.gateseal/betterleaks-report.tmpl`, `.gateseal/betterleaks-history-report.tmpl` | Redacted findings. The history report also names the commit. |

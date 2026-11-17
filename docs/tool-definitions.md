@@ -19,6 +19,8 @@ name under a capability in `policy.toml`.
 `status`, `doctor`, `check`, and `configure` identify selected tools as
 `built-in` or `team-defined`. In `run --json` and `gate --json`, the
 `origin` field gives the same label on each hook, finding, and history entry.
+A [repository hook](policy-contract.md#repository-hooks) has the origin
+`repository`.
 
 ## Shared fields
 

@@ -70,6 +70,36 @@ pre-commit and the commit goes on. One from plain `pre-commit install` stops
 the commit. See [troubleshooting](troubleshooting.md) for other errors and recovery
 steps.
 
+## Add your own hooks
+
+You can add hooks that run only on your machine. Git runs them at your
+commits, and no file in the repository changes. CI and `gateseal run` do not
+run them, and they cannot turn off a check of the repository. For a check
+that everyone runs, ask the repository maintainer for a
+[repository hook](policy-contract.md#repository-hooks).
+
+**In Git's configuration.** Git runs these hooks before pre-commit's
+launcher. These lines run a script of yours at each commit in this clone.
+Add `--global` to run it in every clone.
+
+```sh
+git config hook.notes.event pre-commit
+git config hook.notes.command "$HOME/bin/check-notes"
+```
+
+**In the clone's hooks folder.** The launcher runs a `pre-commit.legacy`
+script there before the checks of the repository. A script named for another
+event, such as `pre-push`, runs at that event. A slow check fits `pre-push`
+better than a commit. Make the script executable:
+
+```sh
+chmod +x "$(git rev-parse --git-path hooks)/pre-commit.legacy"
+```
+
+Do not add a hook to `.pre-commit-config.yaml`. The `gateseal-check` hook
+stops a commit that stages an edit of it, and pre-commit stops while that
+file has unstaged changes.
+
 ## Linked worktrees
 
 All worktrees of a clone share its commit launcher, so a worktree from

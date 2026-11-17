@@ -64,8 +64,10 @@ policy to change a check. See [Manifest and Lock](policy-contract.md).
 
 - It never overwrites a file or a Git hook that it did not write. It stops
   instead.
-- It stops if Git would run another hook first or instead, for example
-  from a custom `core.hooksPath`.
+- It stops if Git would skip the commit launcher, for example because of a
+  custom `core.hooksPath`. A hook of yours that Git runs before the launcher
+  cannot turn off a check. See
+  [Add your own hooks](work-in-a-configured-repository.md#add-your-own-hooks).
 - `configure` checks every path before it writes and replaces each file in
   one step. The files together are not one transaction. If `configure`
   stops partway, run it again to finish.

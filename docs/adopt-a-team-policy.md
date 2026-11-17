@@ -92,7 +92,9 @@ Run `gateseal status` to see the selected tools, choices, and exceptions.
 stays active until you renew, change, or remove it.
 
 The tool origin is `built-in` or `team-defined`. In `run --json`, look for
-`origin` on each hook and finding. Both types use a pinned tool version.
+`origin` on each hook and finding. Both types use a pinned tool version. A
+[repository hook](policy-contract.md#repository-hooks) reports `repository`
+instead. It runs a script of the repository and has no pinned version.
 For a team-defined scanner, check the tool's arguments to see whether a
 repository's ignore file can suppress findings. See
 [Tool definition guarantees](tool-definitions.md#what-a-team-definition-guarantees).

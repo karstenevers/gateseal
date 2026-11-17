@@ -86,6 +86,7 @@ they can read it.
 | `policy`, `policy_tag` | Release, source, digest, and the tag check at adoption for a Git policy. |
 | `gateseal` | The gateseal release, repository, and commit that the Lock pins, and the pre-commit version it runs. |
 | `tool`, `policy_choice` | Each tool's version, capability, kind, and origin, and each selected choice. |
+| `repository_hook` | Each [repository hook](policy-contract.md#repository-hooks): its ID, command, and the files that start it. |
 | `version_exception` | Component, selected version, policy pin, review date, and reason. |
 | `overdue_exception`, `redundant_exception` | The local date is past the review date, or the selected version equals the pin. Review the exception in the Manifest. |
 
@@ -94,8 +95,9 @@ Warnings leave the exit code unchanged.
 ### Hooks and findings
 
 `run` and `gate` report checks in the order pre-commit prints them. Entries
-identify the `tool`, its `origin` (`built-in` or `team-defined`), and the
-`stage` (`run` or `ci`).
+identify the `tool`, its `origin`, and the `stage` (`run` or `ci`). The
+origin is `built-in`, `team-defined`, or `repository` for a repository hook,
+whose `tool` is the path of its script.
 
 | Category | What to read |
 | --- | --- |

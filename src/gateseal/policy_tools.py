@@ -10,8 +10,9 @@ release cover it, and the compiler parses it as data through its kind.
 
 A capability's alternatives offer hooks of its tools for one job, such as
 ruff-format or black for formatting. Each is a Policy Choice whose value is
-the hook a repository runs; the others' hooks do not run, and a tool left
-without hooks is not selected.
+the hook a repository runs; the others' hooks do not run. Its optional hooks
+are hooks a repository may skip with the skip choice. A tool left without
+hooks is not selected.
 """
 
 import re
@@ -46,6 +47,15 @@ RULES = "rules/"
 RUNTIME = ("pre-commit", "python")
 """The Compiler Runtime's parts, which exceptions and upgrades name like tools."""
 
+EXCLUDE = "exclude"
+"""The choice that keeps paths from the hooks of every tool of a capability."""
+
+SKIP = "skip"
+"""The choice of the optional hooks that a repository skips."""
+
+RESERVED = frozenset({EXCLUDE, SKIP})
+"""The choice names that gateseal itself declares in every capability."""
+
 AssetReader = Callable[[str, str, str], bytes | None]
 """review_policy's reader of a file the policy names, which it keeps as an asset.
 
@@ -56,8 +66,12 @@ returns the bytes, or None when the policy has no such file.
 
 @dataclass(frozen=True)
 class Alternatives:
-    """A capability's choice of one hook among hooks of its tools, by hook ID."""
+    """A capability's choice of one hook among hooks of its tools, by hook ID.
 
+    field is the policy.toml table that offers them.
+    """
+
+    field: str
     hooks: tuple[str, ...]
 
     def parse(self, value: object, field: str) -> str:
@@ -69,6 +83,44 @@ class Alternatives:
             )
         return value
 
+    def dropped(self, value: str | tuple[str, ...]) -> frozenset[str]:
+        """Return the hooks that do not run when value is chosen."""
+        return frozenset(self.hooks) - {value}
+
+
+@dataclass(frozen=True)
+class OptionalHooks:
+    """The hooks of a capability's tools that a repository may skip, by hook ID.
+
+    The skip choice lists the ones it skips. field is the policy.toml field
+    that marks them.
+    """
+
+    field: str
+    hooks: tuple[str, ...]
+
+    def parse(self, value: object, field: str) -> tuple[str, ...]:
+        """Return value's distinct hooks, or fail with invalid_choice."""
+        skipped = tuple(string(item, field) for item in sequence(value, field))
+        for hook in skipped:
+            if hook not in self.hooks:
+                raise GatesealError(
+                    "invalid_choice",
+                    f"{field} names {hook}, which the policy does not mark as "
+                    f"optional. It may skip {', '.join(self.hooks)}.",
+                )
+        if len(set(skipped)) != len(skipped):
+            raise GatesealError("invalid_choice", f"{field} names a hook twice.")
+        return skipped
+
+    def dropped(self, value: str | tuple[str, ...]) -> frozenset[str]:
+        """Return the hooks that value skips."""
+        return frozenset(value)
+
+
+HookChoice = Alternatives | OptionalHooks
+"""A choice of which hooks of a capability run, by capability and choice name."""
+
 
 @dataclass(frozen=True)
 class Toolset:
@@ -76,16 +128,17 @@ class Toolset:
 
     capabilities is in document order, the order a selection compiles in.
     definitions, uses and catalogs hold every tool of the capabilities, by
-    name, in capability then tool order. alternatives holds each capability's
-    alternatives by capability and choice name, and defaults the value each
-    capability's choices table gives each choice, still unchecked.
+    name, in capability then tool order. hook_choices holds each capability's
+    alternatives and optional hooks by capability and choice name, and
+    defaults the value each capability's choices table gives each choice,
+    still unchecked.
     """
 
     capabilities: tuple[str, ...]
     definitions: Mapping[str, ToolDefinition]
     uses: Mapping[str, ToolUse]
     catalogs: Mapping[str, Catalog]
-    alternatives: Mapping[tuple[str, str], Alternatives]
+    hook_choices: Mapping[tuple[str, str], HookChoice]
     defaults: Mapping[tuple[str, str], object]
 
 
@@ -115,14 +168,14 @@ def read_toolset(
     and owned outputs must be distinct.
     """
     tables: dict[str, tuple[str, dict[str, object]]] = {}
-    alternatives: dict[tuple[str, str], Alternatives] = {}
+    hook_choices: dict[tuple[str, str], HookChoice] = {}
     defaults: dict[tuple[str, str], object] = {}
     entries = mapping(capabilities, "capabilities")
     if not entries:
         raise GatesealError("invalid_field", "The policy defines no capability.")
     for name, entry in entries.items():
         tools, offered, given = _capability(name, entry)
-        alternatives.update(offered)
+        hook_choices.update(offered)
         defaults.update(given)
         for tool, table in tools.items():
             if tables.setdefault(tool, (name, table))[0] != name:
@@ -142,21 +195,22 @@ def read_toolset(
         table = _tool_fields(definitions[name], table, field)
         uses[name] = _use(capability, definitions[name], table, field, asset)
         catalogs[name] = _catalog(name, table, field, known)
-    _require_alternatives(alternatives, uses)
-    return Toolset(tuple(entries), definitions, uses, catalogs, alternatives, defaults)
+    _require_hook_choices(hook_choices, uses)
+    return Toolset(tuple(entries), definitions, uses, catalogs, hook_choices, defaults)
 
 
 def _capability(
     name: str, entry: object
 ) -> tuple[
     dict[str, dict[str, object]],
-    dict[tuple[str, str], Alternatives],
+    dict[tuple[str, str], HookChoice],
     dict[tuple[str, str], object],
 ]:
-    """Validate capabilities.<name>: its tools, alternatives and choices."""
+    """Validate capabilities.<name>: its tools, hook choices and choices."""
     field = f"capabilities.{name}"
     table = mapping(entry, field)
-    table = fields(table, {"tools"} | ({"alternatives", "choices"} & set(table)), field)
+    names = {"tools"} | ({"alternatives", "optional", "choices"} & set(table))
+    table = fields(table, names, field)
     tools = {
         tool: mapping(value, f"{field}.tools.{tool}")
         for tool, value in mapping(table["tools"], f"{field}.tools").items()
@@ -174,52 +228,68 @@ def _capability(
                 f"{field}.tools.{tool} is not a tool name; a tool's name is "
                 "lowercase letters, digits and -.",
             )
-    alternatives = {
+    offered: dict[tuple[str, str], HookChoice] = {
         (name, choice): _alternatives(name, choice, hooks)
         for choice, hooks in mapping(
             table.get("alternatives", {}), f"{field}.alternatives"
         ).items()
     }
+    if "optional" in table:
+        offered[name, SKIP] = _optional(f"{field}.optional", table["optional"])
     defaults = {
         (name, choice): default
         for choice, default in mapping(
             table.get("choices", {}), f"{field}.choices"
         ).items()
     }
-    return tools, alternatives, defaults
+    return tools, offered, defaults
 
 
 def _alternatives(capability: str, name: str, value: object) -> Alternatives:
     """Validate capabilities.<capability>.alternatives.<name>: two or more hooks."""
     field = f"capabilities.{capability}.alternatives.{name}"
+    if name in RESERVED:
+        raise GatesealError(
+            "invalid_field",
+            f"{field} declares the choice {name}, which gateseal itself declares.",
+        )
     hooks = tuple(string(item, field) for item in sequence(value, field))
     if not CHOICE.fullmatch(name) or len(hooks) < 2 or len(set(hooks)) != len(hooks):
         raise GatesealError(
             "invalid_field",
             f"{field} needs a lowercase name and two or more distinct hook IDs.",
         )
-    return Alternatives(hooks)
+    return Alternatives(field, hooks)
 
 
-def _require_alternatives(
-    alternatives: Mapping[tuple[str, str], Alternatives], uses: Mapping[str, ToolUse]
+def _optional(field: str, value: object) -> OptionalHooks:
+    """Validate capabilities.<capability>.optional: one or more hooks."""
+    hooks = tuple(string(item, field) for item in sequence(value, field))
+    if not hooks or len(set(hooks)) != len(hooks):
+        raise GatesealError(
+            "invalid_field", f"{field} needs one or more distinct hook IDs."
+        )
+    return OptionalHooks(field, hooks)
+
+
+def _require_hook_choices(
+    hook_choices: Mapping[tuple[str, str], HookChoice], uses: Mapping[str, ToolUse]
 ) -> None:
-    """Require each alternative to be a hook its capability runs, in one choice."""
+    """Require each hook choice to offer hooks its capability runs, each in one."""
     runs = {hook.id: use.capability for use in uses.values() for hook in use.hooks}
-    offered: dict[str, str] = {}
-    for (capability, name), choice in alternatives.items():
-        field = f"capabilities.{capability}.alternatives.{name}"
+    offered: dict[str, HookChoice] = {}
+    for (capability, _), choice in hook_choices.items():
         for hook in choice.hooks:
             if runs.get(hook) != capability:
                 raise GatesealError(
                     "unsupported_hook",
-                    f"{field} offers {hook}, which no tool of {capability} runs.",
+                    f"{choice.field} offers {hook}, which no tool of {capability} "
+                    "runs.",
                 )
-            if offered.setdefault(hook, name) != name:
+            if offered.setdefault(hook, choice) is not choice:
                 raise GatesealError(
                     "duplicate_identifier",
-                    f"{field} offers {hook}, which "
-                    f"capabilities.{capability}.alternatives.{offered[hook]} "
+                    f"{choice.field} offers {hook}, which {offered[hook].field} "
                     "offers too.",
                 )
 

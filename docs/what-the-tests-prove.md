@@ -25,6 +25,15 @@ index in a path that contains spaces. The hooks see the content that Git
 plans to commit. A hook fix stops the commit, and retrying after staging the
 correction succeeds.
 
+## Adjusted setups
+
+| Test condition | Observed result |
+| --- | --- |
+| A repository hook whose script refuses a file | A commit, `gateseal run`, and `gateseal gate` each run the script and stop. A hand edit of the hook in `.pre-commit-config.yaml` stops `gateseal check` and the commit. |
+| A team policy marks `check-yaml` as optional, and the Manifest skips it | A file that `check-yaml` refuses passes a commit, `gateseal run`, and `gateseal gate`. Without the skip, all three stop. |
+| A skip leaves Betterleaks without hooks | The repository has no Betterleaks file or Lock entry, and the CI gate runs no history scan of it. |
+| A hook from Git's configuration and a `pre-commit.legacy` script | Both run before the checks of the repository at each commit. A hook fix still stops the commit, and `gateseal check` passes afterwards. |
+
 ## Worktrees
 
 A newly linked worktree commits with the launcher of its clone, and keeps
