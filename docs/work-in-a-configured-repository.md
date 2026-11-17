@@ -1,110 +1,45 @@
 # Work in a configured repository
 
-If a repository contains `gateseal.toml` and `gateseal.lock`, its repository
-maintainer has already selected the checks. Set up pre-commit on your machine
-once, then use `git commit` as usual. You do not install gateseal.
+Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, install mise 2026.10.19 or later too. A separate gateseal installation is not needed to commit.
 
-## Set up your machine
-
-Run setup once per machine, with uv 0.13.6 or later. Name the gateseal
-version in the `gateseal.version` field of `gateseal.lock`:
+From each clone's root, install the commit hook:
 
 ```sh
-uvx gateseal@0.2.0 setup
+pre-commit install
 ```
 
-It installs pre-commit and makes Git add pre-commit's commit launcher to every
-new clone. [Set up pre-commit on this
-machine](install.md#set-up-pre-commit-on-this-machine) says what it changes.
-In a clone that you made before setup, run
-`uvx gateseal@0.2.0 setup --refresh` once.
-If you already have pre-commit 4.7.0 or later, run `pre-commit install` in each
-clone instead. That is enough for commits.
-[Use pre-commit without gateseal setup](install.md#use-pre-commit-without-gateseal-setup)
-shows how.
+The first commit needs network access to download the hook environments and selected binaries. Later commits reuse them. Linked worktrees share the clone's hook.
 
-A release binary, such as Betterleaks, starts through mise. Install mise
-2026.10.19 or later if the repository selects one.
+## Commit changes
 
-## Commit
+Stage your changes. Then commit them:
 
-Commits from your terminal or Git client check the files you stage. A commit
-runs pre-commit, and pre-commit runs the gateseal that the Lock pins as its
-first hook.
+```sh
+git add example.txt
+git commit -m 'Update example'
+```
 
-The first commit that needs a tool downloads it, so it needs network access
-and takes longer. pre-commit builds the environment of each hook repository,
-gateseal's own among them.
-mise installs each release binary and checks its SHA-256 against the value in
-`.pre-commit-config.yaml`. Later commits reuse both, and all clones on the
-machine share them. After you pull a changed Lock, the next commit installs
-what changed.
+Replace `example.txt` with your changed file. The first hook runs the version recorded in `gateseal.lock`, the Lock. The Lock records the policy selection and generated files. The hook refuses staged generated files that differ from the Lock. The other hooks check staged files. Stage `.pre-commit-config.yaml` in full. pre-commit stops if it has unstaged changes.
 
-To run the checks across every tracked file, use `gateseal run`. To see
-whether the clone is ready, use `gateseal status`. Both need the pre-commit
-that setup installs, and the gateseal version that the Lock pins, for example
-`uvx gateseal@0.2.0 run`. With another version, `gateseal run` stops with
-`selected_compiler_required`, and `gateseal status` reports a failed Lock
-check. Both name the version that the Lock pins. Without setup,
-`pre-commit run --all-files` runs the checks across every tracked file.
+To check all tracked files, run:
 
-## When a commit stops
+```sh
+pre-commit run --all-files
+```
 
-- If a hook changes a file, review the fix with `git diff`, stage it, and commit again.
-- If a hook reports a finding, fix the reported line and stage the change.
-- If Betterleaks reports a secret, remove it. Rotate any real credential before you retry.
-- If `gateseal-check` reports that a staged file differs from the file gateseal
-  wrote, undo the edit. To change a check, change `gateseal.toml` and run
-  `gateseal configure` instead.
-- If `gateseal-check` reports that an installed program is not the one
-  `gateseal.lock` records, find out what changed it. Then delete the folder
-  that the message names and commit again. See
-  [troubleshooting](troubleshooting.md#a-commit-reports-a-changed-installed-tool).
-- If a hook cannot start, run `gateseal doctor` and follow its next steps.
+If you installed gateseal and ran [setup](install.md#set-up-pre-commit-on-this-machine), `gateseal run` does the same.
 
-You can stage part of an ordinary source file. Stage
-`.pre-commit-config.yaml` in full, because pre-commit stops a commit while
-that file has unstaged changes. On a branch without
-`.pre-commit-config.yaml`, the launcher that `gateseal setup` adds skips
-pre-commit and the commit goes on. One from plain `pre-commit install` stops
-the commit. See [troubleshooting](troubleshooting.md) for other errors and recovery
-steps.
+If a hook changes a file, review the change. Stage it. Retry the commit. If Betterleaks reports a real credential, remove it. Rotate it. See [Troubleshoot gateseal](troubleshooting.md) for other errors.
 
 ## Add your own hooks
 
-You can add hooks that run only on your machine. Git runs them at your
-commits, and no file in the repository changes. CI and `gateseal run` do not
-run them, and they cannot turn off a check of the repository. For a check
-that everyone runs, ask the repository maintainer for a
-[repository hook](policy-contract.md#repository-hooks).
+Personal hooks run during an ordinary Git commit. They do not run in `gateseal run`, the CI gate, `status`, or `doctor`. For a shared check, ask the repository maintainer to add a [repository hook](adjust-a-setup.md#add-a-repository-hook).
 
-**In Git's configuration.** Git runs these hooks before pre-commit's
-launcher. These lines run a script of yours at each commit in this clone.
-Add `--global` to run it in every clone.
+For example, configure an executable script at `$HOME/bin/check-notes` for this clone:
 
 ```sh
 git config hook.notes.event pre-commit
 git config hook.notes.command "$HOME/bin/check-notes"
 ```
 
-**In the clone's hooks folder.** The launcher runs a `pre-commit.legacy`
-script there before the checks of the repository. A script named for another
-event, such as `pre-push`, runs at that event. A slow check fits `pre-push`
-better than a commit. Make the script executable:
-
-```sh
-chmod +x "$(git rev-parse --git-path hooks)/pre-commit.legacy"
-```
-
-Do not add a hook to `.pre-commit-config.yaml`. The `gateseal-check` hook
-stops a commit that stages an edit of it, and pre-commit stops while that
-file has unstaged changes.
-
-## Linked worktrees
-
-All worktrees of a clone share its commit launcher, so a worktree from
-`git worktree add` needs no extra step. Clones with a separate Git directory
-and worktrees attached to a bare repository work the same way.
-
-A gateseal command in a worktree that uses a Git policy fetches the locked
-policy release once for that worktree. A commit does not need it.
+Alternatively, pre-commit runs an executable `pre-commit.legacy` file in the clone's hooks directory first. Do not edit the generated `.pre-commit-config.yaml` to add a personal hook.

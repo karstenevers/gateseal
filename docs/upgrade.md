@@ -1,155 +1,38 @@
 # Upgrade and roll back
 
-Use `gateseal upgrade` to change the policy, a tool version, or the gateseal
-release recorded in a repository. To roll back, select the earlier version
-with the same command.
+Use `gateseal upgrade` to change a policy release, a reviewed tool version, or the gateseal release. Run it from the repository root. `gateseal.toml` is the Manifest that selects the checks. `gateseal.lock` is the Lock that records the selection and generated files.
 
-## Common upgrades
-
-Run the command from the repository root. Change the policy or a tool with
-the gateseal version in the current Lock. Choose the example that matches your
-change.
-
-**Update the current team policy.** If your repository already uses this Git
-policy, specify the new release tag. To switch from the bundled policy,
-follow [Adopt a team policy](adopt-a-team-policy.md#select-a-release).
+To adopt a new tag of the same team policy, replace the example tag. Run:
 
 ```sh
-gateseal upgrade --policy-tag v2026.12
+gateseal upgrade --policy-tag team-2026.12
 ```
 
-**Select another reviewed tool version.** For example, if your policy
-reviews Betterleaks 1.8.0, record why you need that version and when you
-will review the exception:
+To select another version that the policy reviewed, record a reason and review date. This example assumes the policy offers Betterleaks 1.8.0:
 
 ```sh
 gateseal upgrade betterleaks=1.8.0 \
-  --reason "1.9.0 flags the test fixtures" --review-by 2026-12-15
+  --reason 'Needed for the test fixtures' --review-by 2026-12-15
 ```
 
-**Return that tool to the policy pin.** For the example above, if the policy
-pins Betterleaks 1.9.0, run:
+To return to the policy's pinned version, supply its exact version. A bare component follows the pin unless the selected version is newer and still reviewed.
 
-```sh
-gateseal upgrade betterleaks
-```
+To move gateseal itself, run `gateseal upgrade` using the target release. A bundled policy change can require `--policy bundled`. Change other policy and tool selections afterwards.
 
-**Change the gateseal release.** Run the command of the release you move to,
-newer or older, with no target:
+Review the changed Manifest, Lock, and generated files. Stage the files. Commit them together. A later commit builds any newly selected hook environments. If the release needs a newer pre-commit, each developer updates pre-commit or runs setup for that release.
 
-```sh
-uvx gateseal@0.2.0 upgrade
-```
+## Recover from an interrupted upgrade
 
-[Move to another gateseal release](#move-to-another-gateseal-release) explains
-what the move reads and writes.
+If the Manifest still matches the old Lock, retry the upgrade. If a policy or tool upgrade wrote the Manifest but not the Lock, run `gateseal configure` to finish it. If a gateseal release change stopped after writing the Manifest, save any changes you need. Restore the Manifest and affected generated files to their pre-upgrade contents. Then retry.
 
-Review the changed files, stage them together, and commit. After a gateseal
-move, the next commit in each clone builds the new gateseal's hook and installs
-the tools that changed. When the new release names a newer pre-commit, a commit
-stops and asks for it. Each developer then runs setup of the new release, such
-as `uvx gateseal@0.2.0 setup`.
+To roll back a committed upgrade, revert its commit. To select another policy source, see [Adopt a team policy](adopt-a-team-policy.md). Run `gateseal upgrade --help` for all options and see [Commands and results](commands-and-results.md) for exit codes.
 
-## Usage
+## Upgrade errors
 
-```text
-gateseal upgrade [COMPONENT[=VERSION] ...]
-                 [--policy-tag TAG] [--policy URL | --policy bundled]
-                 [--policy-path PATH] [--policy-commit COMMIT]
-                 [--reason TEXT] [--review-by DATE]
-```
-
-Put component names before flags. Use `--repo` to specify a worktree,
-`--json` for a structured result, or `--verbose` for more detail. With no
-target, `gateseal upgrade` reports the current selection.
-
-## Targets
-
-| What you want to change | What to select |
+| Code | What to check |
 | --- | --- |
-| Git policy | Use `--policy-tag` for a release in the current repository. To change the repository or directory, use `--policy` or `--policy-path`. Use `--policy-commit` to require an exact commit for the tag. |
-| Bundled policy | Use `--policy bundled` for the policy that comes with the running gateseal. |
-| Tool | Use `COMPONENT=VERSION` for an exact reviewed version. A version different from the policy pin needs a reason and review date. Selecting the pin explicitly removes the exception. |
-| gateseal | Run `gateseal upgrade` of the target release, such as `uvx gateseal@0.2.0 upgrade`. The release also fixes the pre-commit version. |
-
-A bare component name such as `betterleaks` normally follows the policy
-pin. If the current version is newer and the target policy still reviews it,
-gateseal keeps that version. If this creates an exception, supply a reason
-and review date. To force a rollback to the pin, specify its exact version.
-
-For a Git policy, gateseal checks the tag against the commit when it first
-adopts the release. When the Lock already records the release, gateseal uses
-the stored copy. See [policy acquisition](policy-acquisition.md).
-
-Move gateseal on its own or together with `--policy bundled`. Run other
-policy or tool upgrades with the new release afterwards. To change pre-commit,
-move to a gateseal release that carries the version you need.
-
-## Steps
-
-gateseal checks that the Manifest matches the Lock, then checks the requested
-versions and all existing exceptions against the target policy. If an
-exception no longer fits, name the affected component in the same command
-and select a reviewed version.
-
-gateseal prepares the new Manifest, Lock, and generated files before writing
-to the worktree. It preserves unrelated Manifest text. If the change would
-overwrite an edited generated file, it stops with `ownership_conflict`.
-It writes the Lock last and checks the result. You decide when to stage and
-commit the changes.
-
-### An interrupted upgrade
-
-If the Manifest still matches the old Lock, run the upgrade again. If the
-new Manifest was written before the Lock, the next command can report
-`lock_mismatch`. For a policy or component upgrade, run `gateseal configure`
-to finish it.
-
-For an interrupted gateseal move, review the diff first. Save any edits you
-need to keep. Use `git restore` to restore `gateseal.toml` and the affected
-generated files to their pre-upgrade contents. Then run the upgrade again.
-
-## Move to another gateseal release
-
-When the Lock pins another gateseal release, `gateseal upgrade` compiles the
-new Lock from the Manifest and the policy alone. Of the old Lock it reads only
-the ownership ledger: its format, its gateseal pin, the Manifest's SHA-256,
-the policy's content digest and the files it lists. The listed files decide
-which files the upgrade may replace or delete. A listed file that the running release never writes stops
-the upgrade with `ownership_conflict`.
-
-The new Lock pins the running release by the commit of its release tag, which
-gateseal reads with your Git. The report names the gateseal move alone, so
-review the Lock's diff for the rest.
-
-If the new release bundles a different policy, even one with the same
-release label, the upgrade reports `bundled_policy_moves`. Review that policy. To adopt it with the release, add
-`--policy bundled`.
-
-To roll back a gateseal move, revert its commit with `git revert`. When later
-commits make the revert conflict, run `gateseal upgrade` of the earlier
-release, such as `uvx gateseal@0.2.0 upgrade` after a move to 0.2.1.
-
-A Lock of another format stops every command with `unsupported_schema`. gateseal
-0.1.0 wrote format 1: delete `gateseal.lock` and the files gateseal wrote, then
-run `gateseal configure` again.
-
-## Results
-
-`gateseal upgrade --json` lists the changed paths. Each `upgrade` diagnostic
-names a target and reports its state and its values before and after the
-change. An `exception` diagnostic identifies the component, version, and
-whether the exception was added, changed, removed, retained, or made
-redundant. A redundant exception remains until you remove it.
-
-| Result | Next step |
-| --- | --- |
-| `upgraded` or `unchanged` (exit 0) | Review any changed files. |
-| `incompatible_exception`, `unknown_version`, `invalid_exception`, `unsupported_component`, `runtime_target` (exit 2) | Check the target policy, supported components, and exception fields. |
-| `bundled_policy_moves` (exit 2) | Review the policy that the new release bundles, then add `--policy bundled`. |
-| `upstream_unavailable` (exit 4) or `upstream_tag_missing` (exit 2) | Check that Git reaches gateseal's repository and that it has the running release's tag. |
-| `unsupported_schema` (exit 2) | Follow the next step for the Lock's format. |
-| `invalid_invocation`, `invalid_field`, `manifest_edit_unsupported`, `ownership_conflict`, `lock_mismatch` (exit 2) | Check the flags and the named files. Editable policy and exception sections need ordinary TOML tables. |
-
-See [Manifest and Lock](policy-contract.md) for field definitions and
-[upgrade tests](what-the-tests-prove.md#upgrades) for the cases covered.
+| `incompatible_exception`, `unknown_version`, `invalid_exception` | Check the target policy and the named exception. |
+| `bundled_policy_moves` | Review the bundled policy change. Add `--policy bundled` to accept it. |
+| `ownership_conflict`, `manifest_edit_unsupported`, `lock_mismatch` | Review the named files and the proposed edits. |
+| `upstream_tag_missing`, `upstream_unavailable` | Check the release tag and Git access. |
+| `unsupported_schema` | Follow the reported step for the Lock format. |

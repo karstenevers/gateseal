@@ -1,33 +1,38 @@
 # Adjust a setup
 
-Each change to the checks has one place. A change that CI must run goes in the
-policy or in `gateseal.toml`, and `gateseal.lock` records it. A change for one
-developer goes in Git and touches no file that gateseal writes. So a commit
-and the CI gate always run the same checks.
+Change checks in `gateseal.toml`, the Manifest that selects the policy and checks. Run `gateseal configure` after each edit. Review the Manifest, `gateseal.lock`, and generated files. Commit them together. The Lock records the selected policy and generated files.
 
-| Change | Who makes it | Where |
-| --- | --- | --- |
-| Change a rule or a tool version for every repository | Policy Author | [A new policy release](author-a-policy.md) |
-| Add a tool | Policy Author | [A new policy release](add-a-tool.md) |
-| Select the checks for a repository | Repository Maintainer | [`capabilities`](policy-contract.md#capabilities) in `gateseal.toml` |
-| Set a choice, such as a formatter or a target version | Repository Maintainer | [`[choices.<capability>]`](policy-contract.md#choices) |
-| Keep paths out of a capability's checks | Repository Maintainer | [`exclude`](policy-format.md#exclude) in `[choices.<capability>]` |
-| Leave out a hook that the policy marks as optional | Repository Maintainer | [`skip`](policy-contract.md#skip-optional-hooks) in `[choices.<capability>]` |
-| Keep a tool on another reviewed version | Repository Maintainer | [`[exceptions.<tool>]`](policy-contract.md#version-exceptions) |
-| Run a script of the repository as a check | Repository Maintainer | [`[hooks.<id>]`](policy-contract.md#repository-hooks) |
-| Add a check for yourself only | Developer | [Git configuration or the clone's hooks folder](work-in-a-configured-repository.md#add-your-own-hooks) |
+## Add a repository hook
 
-After an edit of `gateseal.toml`, run `gateseal configure`. Commit the
-Manifest, the Lock and the generated files together.
+A repository hook runs a script from the repository after policy hooks. For example, add this table to `gateseal.toml`:
 
-## What you cannot change
+```toml
+[hooks.check-migrations]
+name = "Check migration numbers"
+run = "scripts/check-migrations.sh"
+args = ["--strict"]
+files = "^migrations/"
+```
 
-- **A generated file.** `gateseal check`, the `gateseal-check` hook and the CI
-  gate compare `.pre-commit-config.yaml` and the files under `.gateseal/` with
-  the SHA-256 that the Lock records. A hand edit stops all three. Change
-  `gateseal.toml` or the policy instead.
-- **A hook that the policy does not mark as optional.** A repository skips
-  only what its policy offers, so the policy release still says which checks
-  run. Ask the Policy Author to mark the hook as optional in a new release.
-- **A check of your own in CI.** CI runs only the checks that the Lock
-  records. To make CI run a script, add it as a repository hook.
+Commit the executable script with a `#!` line. The script receives matching staged paths after its configured arguments. It also runs in `gateseal run` and CI. gateseal does not install its dependencies. See [repository hook fields](policy-contract.md#repository-hooks) for restrictions.
+
+## Skip an optional hook
+
+A policy may allow a repository to skip selected hooks. For example, if the policy marks `check-yaml` optional, add:
+
+```toml
+[choices.hygiene]
+skip = ["check-yaml"]
+```
+
+Only hooks the policy marks optional can be skipped. The bundled policy marks none optional. See [optional hooks](policy-contract.md#skip-optional-hooks).
+
+## Make other changes
+
+- Select checks with [`capabilities`](policy-contract.md#capabilities).
+- Set policy-exposed values with [`choices`](policy-contract.md#choices).
+- Select a reviewed tool version with a [version exception](policy-contract.md#version-exceptions).
+- Change rules or add a tool for the team in a [policy release](author-a-policy.md).
+- Add a [personal hook](work-in-a-configured-repository.md#add-your-own-hooks) for checks on your machine alone.
+
+Do not edit generated files. The commit hook and CI check them against the Lock.

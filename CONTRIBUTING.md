@@ -15,9 +15,10 @@ rest to existing tools. These changes fit:
   [Add a tool](docs/add-a-tool.md) shows the data.
 - **A new tool kind.** Also bring one built-in tool that uses it.
 
-gateseal does not install tools, run hooks, open pull requests or administer
-CI platforms, as the [vision's principles](VISION.md#principles) explain.
-A change that adds one of those is declined.
+gateseal does not install tools, run hooks or administer CI platforms.
+pre-commit runs hooks, mise installs release binaries, and CI runs the gate, as
+the [vision's principles](VISION.md#principles) say. A change that makes
+gateseal do one of those itself is declined.
 
 For anything bigger than a fix, open an issue first, so the design is agreed
 before the code is written.
@@ -45,17 +46,20 @@ The first pytest command runs the unit layer in seconds. The second adds the
 integration layer, which builds a wheel, installs it and drives the installed
 `gateseal` command in real Git repositories. Tests marked `network` read
 private test fixtures and run in CI.
-[Build and verify](docs/verification.md#build-and-test) describes each layer.
 
 Run these too when they apply:
 
 - **A change to `src/gateseal`.** Run the
-  [mutation check](docs/verification.md#fix-a-failing-mutation-check) on the
-  lines it changes:
+  mutation check on the lines it changes:
 
   ```sh
   uv run pytestmut run --diff "$(git merge-base origin/main HEAD)"
   ```
+
+  Any surviving mutant fails the check, and so does a score below 90%.
+  `uv run pytestmut show <id>` explains a mutant. Add a test that fails on
+  it. If no input can tell the mutant from the original code, mark its line
+  with `# pytestmut: skip[<operator>] -- <reason>`.
 
 - **A change to the documentation.** Preview the site at
   `http://127.0.0.1:8000`:
@@ -70,8 +74,7 @@ Run these too when they apply:
 - Add or update the tests that show it.
 - Update the documentation a user reads, and add a line under Unreleased in
   [CHANGELOG.md](CHANGELOG.md) when a user can notice the change.
-- When the change settles a design question, add a
-  [design record](docs/design/README.md).
+- Explain any design decision that a reviewer needs to assess.
 
 CI runs the same checks on Linux and macOS, mutation testing on the changed
 lines, and a strict build of the documentation.

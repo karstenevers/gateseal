@@ -8,6 +8,7 @@ strict: true
 
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/mark.svg
   favicon: assets/mark.svg
   font: false
@@ -47,59 +48,28 @@ nav:
   - Home: index.md
   - Get started:
       - Install gateseal: install.md
-      - Demo: demo.md
+      - Configure a repository: configure-a-repository.md
+      - Try gateseal: demo.md
       - Work in a configured repository: work-in-a-configured-repository.md
       - Troubleshooting: troubleshooting.md
-  - Set up a repository:
-      - Configure a repository: configure-a-repository.md
+  - Manage checks:
       - Adjust a setup: adjust-a-setup.md
       - GitHub CI: github-ci.md
       - Upgrade and roll back: upgrade.md
-  - Use a team policy:
+  - Team policies:
       - Adopt a team policy: adopt-a-team-policy.md
-      - Authenticate to a private policy: authenticate.md
-      - Policy acquisition: policy-acquisition.md
-  - Write a team policy:
       - Author a team policy: author-a-policy.md
       - Add a tool: add-a-tool.md
-      - Policy format: policy-format.md
-      - Tool definitions: tool-definitions.md
-      - Policy Lock: policy-lock.md
-  - How it works:
-      - How a commit runs: how-a-commit-runs.md
-      - Architecture: architecture.md
-      - What the tests prove: what-the-tests-prove.md
-      - Vision: vision.md
   - Reference:
       - Commands and results: commands-and-results.md
       - Manifest and Lock: policy-contract.md
-      - Tested platforms: tested-platforms.md
+      - Policy format: policy-format.md
+      - Tool definitions: tool-definitions.md
       - Glossary: glossary.md
-  - Design records:
-      - design/README.md
-      - design/0001-delegate-native-checks-provisioning-to-mise.md
-      - design/0002-resolve-one-declarative-policy.md
-      - design/0003-prepare-gateseal-tools-before-commits.md
-      - design/0004-acquire-git-policy-releases-by-exact-commit.md
-      - design/0005-version-policy-components-as-reviewed-catalogs.md
-      - design/0006-generate-policy-lock-data-and-ship-the-runtime-with-the-compiler.md
-      - design/0007-implement-tool-kinds-in-the-compiler-and-describe-every-tool-as-data.md
-      - design/0008-generate-the-ci-gate-as-an-owned-workflow.md
-      - design/0009-upgrade-through-one-planner-and-let-the-candidate-render-a-compiler-move.md
-      - design/0010-share-one-sealed-interpreter-store-across-repositories.md
-      - design/0011-share-sealed-hook-environments-through-the-interpreter-store.md
-      - design/0012-fail-gateseal-pull-requests-on-surviving-mutants.md
-      - design/0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md
-      - design/0014-write-each-tool-once-under-its-capability.md
-      - design/0015-keep-adjustments-where-the-ci-gate-sees-them.md
-  - Contribute:
-      - Build and verify: verification.md
+  - About:
+      - How gateseal works: architecture.md
+      - Vision: vision.md
 
-# Linked from "What the tests prove", and left out of the navigation.
-not_in_nav: |
-  /what-the-tool-tests-prove.md
-
-# Only extensions whose syntax also reads well on GitHub.
 markdown_extensions:
   - github-callouts
   - md_in_html

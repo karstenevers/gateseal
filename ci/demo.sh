@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the steps of docs/demo.md with the gateseal command on PATH.
+# Run the steps of docs/demo.md with gateseal and pre-commit on PATH.
 # Usage: ci/demo.sh
 set -euo pipefail
 
@@ -27,18 +27,13 @@ refused() {
 root="$(mktemp -d "${RUNNER_TEMP:-$(mktemp -d)}/demo.XXXXXX")"
 cd "$root"
 
-step "Create a new repository"
+step "Create the repository and adopt the hygiene checks"
 git init -b main gateseal-demo
 cd gateseal-demo
 git config user.name "gateseal demo"
 git config user.email "demo@example.invalid"
-printf 'def greet(name):\n    return f"Hello, {name}!"\n' > greet.py
-
-step "Select the three capabilities and add the commit launcher to this clone"
-gateseal configure --capability hygiene --capability python --capability secrets
-gateseal setup --refresh
-
-step "Commit the configuration and the Python file"
+gateseal configure --capability hygiene
+pre-commit install
 git add -A
 git commit -m 'Adopt gateseal'
 
@@ -46,27 +41,8 @@ step "Trailing whitespace stops the commit"
 printf 'notes  \n' > notes.txt
 git add notes.txt
 refused trailing-whitespace -- git commit -m 'Add notes'
+
+step "Stage the fix and retry"
 git diff
 git add notes.txt
 git commit -m 'Add notes'
-
-step "Ruff stops the commit"
-printf 'import os\ndef shout(name):\n    return nmae.upper()\n' > shout.py
-git add shout.py
-refused F821 -- git commit -m 'Add shout'
-printf 'def shout(name):\n    return name.upper()\n' > shout.py
-git add shout.py
-git commit -m 'Add shout'
-
-step "A secret stops the commit"
-printf 'aws_key = %s%s\n' AKIA Q7XK2M9P4R8T6W3Z > deploy.env
-git add deploy.env
-refused aws-access-token -- git commit -m 'Add deploy settings'
-printf 'aws_region = eu-central-1\n' > deploy.env
-git add deploy.env
-git commit -m 'Add deploy settings'
-
-step "Inspect the result"
-gateseal run --json
-gateseal status
-gateseal doctor

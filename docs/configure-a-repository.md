@@ -1,101 +1,32 @@
 # Configure a repository
 
-Start here to add gateseal to a Git repository. If the repository already
-contains `gateseal.lock`, follow [Work in a configured
-repository](work-in-a-configured-repository.md).
+Add the bundled checks to a Git repository. If it already has `gateseal.lock`, follow [Work in a configured repository](work-in-a-configured-repository.md).
 
-## Configure and commit
-
-[Install gateseal](install.md#run-gateseal), then [pin the release in the
-repository](install.md#pin-the-release-in-a-repository). The example
-`configure` command selects the bundled `hygiene` capability. It checks for
-trailing whitespace, missing final newlines, and invalid YAML. To select more
-checks at the same time, see [Add capabilities](#add-capabilities).
-
-Review the three files that `configure` creates for `hygiene`:
-
-| File | What to review |
-| --- | --- |
-| `gateseal.toml` | The Manifest selects the policy and the checks you want. |
-| `gateseal.lock` | The Lock records the exact compiler and policy, tool versions, and generated files. |
-| `.pre-commit-config.yaml` | The pre-commit hooks that gateseal generated from your selection. |
-
-From the repository root, check that these files agree, and add the commit
-launcher to this clone:
+[Install gateseal](install.md), pre-commit, and mise first. From the repository root, select the hygiene and secrets checks and GitHub Actions:
 
 ```sh
-gateseal check
-gateseal setup --refresh
+gateseal configure --capability hygiene --capability secrets --ci github
+pre-commit install
 ```
 
-Stage the files. If you enabled Python, secrets, or CI, also stage the files
-listed below for those selections. Commit, then check all tracked files:
+`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. Omit `--ci github` if you do not use GitHub Actions. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
+
+Review the Manifest, Lock, `.pre-commit-config.yaml`, and the workflow if generated. If you omitted `--ci github`, omit `.github/workflows/gateseal.yml` from the next command. Then commit them:
 
 ```sh
-git add gateseal.toml gateseal.lock .pre-commit-config.yaml
+git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
+  .gateseal .github/workflows/gateseal.yml
 git commit -m 'Adopt gateseal checks'
-gateseal run
 ```
 
-If a hook changes a file, review the change, stage it, and try the commit
-again. [When a commit stops](work-in-a-configured-repository.md#when-a-commit-stops)
-covers other findings.
+The first commit downloads the hook environments. If a hook changes a file, review the change. Stage it. Retry the commit. See [Troubleshoot gateseal](troubleshooting.md) if a check stops.
 
-## Add capabilities
+## Change the checks
 
-On the first `configure`, repeat `--capability` for each capability you
-want, such as `--capability hygiene --capability python`. Any capability also
-works alone, such as `--capability secrets`.
-
-To add checks later, edit `capabilities` in `gateseal.toml`. For example,
-select `["hygiene", "python"]` to add Python checks. Run:
+Each `--capability` option adds one capability. Without `secrets`, the repository needs no mise. To change the selection later, edit `capabilities` in `gateseal.toml`. For example, set it to `['hygiene', 'python']` to drop `secrets` and add Ruff. Then run:
 
 ```sh
 gateseal configure
-git add gateseal.toml gateseal.lock .pre-commit-config.yaml .gateseal
 ```
 
-Review the staged changes and commit. Stage `.pre-commit-config.yaml` in
-full, because pre-commit stops a commit while it has unstaged changes.
-
-### Check Python with Ruff
-
-With the bundled `python` capability, Ruff runs `ruff check` and then
-`ruff format` on changed Python files, stubs, and notebooks. It uses the
-release selected by the policy or a reviewed version exception. Its rules
-come from `.gateseal/ruff.toml`. Stage this file with the Lock.
-
-Ruff applies safe fixes. For other findings, it reports the file, line,
-column, and rule. Fix the reported line, review any automatic changes, then
-stage and commit again. To see findings across all tracked files, run
-`gateseal run --json`. `gateseal status` names the selected Ruff version.
-
-### Detect secrets
-
-The bundled `secrets` capability runs Betterleaks on staged changes. A
-finding identifies the file, line, column, and rule. The output hides the
-secret. Remove the secret, rotate a real credential, then stage and commit
-the fix. A false positive needs a change to the reviewed policy rules.
-
-Each Betterleaks hook starts through mise, which installs Betterleaks at the
-first use and checks its SHA-256. Stage the generated Betterleaks rules and
-both report templates under `.gateseal`.
-
-## Check in GitHub CI
-
-For a new repository, add `--ci github` to the first `configure` command. For an existing repository, follow [Turn it
-on](github-ci.md#turn-it-on). Commit the generated
-`.github/workflows/gateseal.yml` along with the Lock.
-
-## What a commit checks
-
-A commit checks the files you staged, with the hooks in
-`.pre-commit-config.yaml`. The first hook, `gateseal-check`, runs the gateseal
-that the Lock pins. It stops a commit whose staged `gateseal.toml` or
-generated files differ from what the staged Lock records, such as a
-hand-edited `.pre-commit-config.yaml`. It also stops a commit on a machine
-where the installed Betterleaks is not the program that the Lock records,
-because mise never checks an installed tool again. It needs no network. [Which files run](how-a-commit-runs.md#which-files-run) covers
-`git commit -a` and the other ways Git chooses the files. `gateseal run`
-skips `gateseal-check`, because it checks the working tree and compares the
-generated files there with the Lock first.
+Review the Manifest, Lock, and generated files. Commit them together. Python and secrets also generate files under `.gateseal/`. See [Adjust a setup](adjust-a-setup.md) for repository hooks and policy choices.
