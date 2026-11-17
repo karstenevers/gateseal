@@ -43,6 +43,8 @@ The workflow runs on `ubuntu-24.04` for pushes to `default_branch`, pull request
 
 You do not have to write or maintain this logic. For a pull request, the gate finds the merge base of the pull request and its target branch. It gives that range to pre-commit as `--from-ref` and `--to-ref`, so the hooks check only the changed files. A weekly or manual run uses `--all-files`.
 
+A new push to a pull request cancels the run for the older commit. Runs of the other events always finish.
+
 | Event | Files checked | History scanned |
 | --- | --- | --- |
 | Manual or weekly | All tracked files | None |

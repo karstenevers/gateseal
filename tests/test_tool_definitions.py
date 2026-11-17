@@ -17,6 +17,8 @@ BETTERLEAKS_1_8 = (
     "review_by = 2026-12-31\n"
 )
 EXCLUDE = '\n[choices.hygiene]\nexclude = ["vendor", "docs/gen.d"]\n'
+CI = '\n[ci]\nprovider = "github"\ndefault_branch = "main"\n'
+WORKFLOW = ".github/workflows/gateseal.yml"
 CONFIG = ".pre-commit-config.yaml"
 RUFF = ".gateseal/ruff.toml"
 RULES = ".gateseal/betterleaks.toml"
@@ -38,6 +40,13 @@ GOLDEN = {
             "412d09bbbe99d2550651f44835bd7d717189841c43169d6dcd9e5f9d8a6e643e"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
+    },
+    ("hygiene", CI): {
+        "gateseal.lock": (
+            "533c04d4946fbc1a40112965bdd7a81cf8e1067f9e332b7d35404daaa7e097ce"
+        ),
+        CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
+        WORKFLOW: "13f46910c665a9eaa54097751434dbda827bf1caba0047f2a2d81c132707571c",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
@@ -92,6 +101,7 @@ GOLDEN = {
     list(GOLDEN),
     ids=[
         "hygiene",
+        "hygiene with a github workflow",
         "python",
         "secrets",
         "secrets with betterleaks 1.8.0",
