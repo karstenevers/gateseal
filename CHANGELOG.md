@@ -21,6 +21,14 @@ change the manifest, policy or lock format, and its entry says how to move.
   the staged Lock records, with no network and no policy. A commit that stages
   an edited generated file stops and names `gateseal configure`. `gateseal
   run` skips the hook.
+- `check_at_commit` in a tool definition's `[executable]`. `gateseal policy
+  lock` records the SHA-256 of the program in each archive of such a tool,
+  and the `gateseal-check` hook compares the program that mise starts with
+  it, because mise never checks an installed tool again. Betterleaks sets it,
+  so a commit on a machine with a replaced Betterleaks stops and names it. A
+  team policy that reviews Betterleaks stops loading until you run `gateseal
+  policy lock` on its directory again, which records these SHA-256s, and
+  release it.
 
 ### Changed
 

@@ -15,7 +15,7 @@ contains the full Git commit in its `revision` field.
 | Component | What each version records |
 | --- | --- |
 | Pre-commit repository | `revision` is the full commit ID for the release tag. For an annotated tag, gateseal follows the tag to its commit. |
-| Release binary | `platforms` contains the archive `url`, its `sha256`, and the `executable` for each platform in the definition (`linux-x64`, `macos-arm64`, or both). The checksum comes from the release's checksum file. |
+| Release binary | `platforms` contains the archive `url`, its `sha256`, and the `executable` for each platform in the definition (`linux-x64`, `macos-arm64`, or both). The checksum comes from the release's checksum file. For an executable with `check_at_commit`, `executable_sha256` is the SHA-256 of the executable at the top of the archive. |
 
 Built-in and team-defined tools of the same kind use the same lock format.
 
@@ -43,6 +43,8 @@ Run `gateseal policy lock` in the policy directory when you change the tools
 or versions the policy reviews. It checks the existing records against
 upstream, fills in missing versions or platforms, and removes versions the
 policy no longer reviews. It downloads and verifies each new tool archive.
+For an executable with `check_at_commit`, it also downloads each archive whose
+record lacks `executable_sha256` and reads the executable's SHA-256 from it.
 Only after the new lock passes the offline check does it replace the old one.
 
 Of the policy authoring commands, only `lock` and `add` read upstream release
@@ -56,6 +58,7 @@ proxy and certificate settings.
 | `upstream_asset_missing` | 2 | The release lacks its checksum file or an archive listed there. |
 | `upstream_checksum_missing` | 2 | The checksum file has no entry for a platform's archive. |
 | `upstream_checksum_mismatch` | 2 | The downloaded archive's SHA-256 differs from the published checksum. |
+| `upstream_executable_missing` | 2 | An archive of an executable with `check_at_commit` is not a tar.gz archive with the executable at its top. |
 | `upstream_unavailable` | 4 | Git or an HTTPS download failed. Check access and rerun the command. |
 | `policy_changed` | 2 | A policy file changed while `lock`, `add`, or `pin` was running. The command wrote nothing. Review the edit and retry. |
 

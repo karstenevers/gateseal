@@ -121,7 +121,7 @@ gateseal pin.
 | `gateseal` | gateseal's `repository`, its `version`, and the full `commit` that the version's release tag names. |
 | `policy` | `kind`, `release`, and content `digest`. A Git policy also records `repository`, `path`, `commit`, and `tag`. |
 | `components` | Selected hook repositories. |
-| `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. |
+| `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. For an executable checked at commit, each record also holds the program's `executable_sha256`. |
 | `choices` | Values for selected capabilities, including defaults. |
 | `exceptions` | Each component's selected `version`, policy `pin`, `reason`, and `review_by`. |
 | `outputs` | Each generated path, its SHA-256, UTF-8 encoding, and `executable: false`. |
@@ -167,7 +167,9 @@ column, and rule. `ruff-format` formats matching files. Both use
 files under directories with their own Ruff configuration.
 
 The Betterleaks hook starts `betterleaks` through mise, which installs the
-version in the hook's entry at the first use.
+version in the hook's entry at the first use. At each commit, the
+`gateseal-check` hook compares the installed program with the SHA-256 that
+the Lock records.
 It ignores repository ignore files and inline allow comments. Its report
 shows the location and rule without the line of source that held the
 secret. Both Ruff and Betterleaks treat filenames that start with a hyphen

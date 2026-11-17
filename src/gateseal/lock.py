@@ -39,6 +39,7 @@ from gateseal.manifest import (
 )
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
+from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -415,17 +416,21 @@ class Ledger:
     """What the commit check reads of a Lock that this gateseal wrote.
 
     files holds the Manifest's SHA-256 and each owned output's, by path, from
-    the ownership ledger.
+    the ownership ledger. programs holds each executable checked at commit
+    on the machine's platform.
     """
 
     files: dict[str, str]
+    programs: tuple[InstalledProgram, ...]
 
 
-def own_ledger(lock: bytes) -> Ledger:
-    """Return the ledger of a Lock that this gateseal wrote.
+def own_ledger(lock: bytes, platform: str | None) -> Ledger:
+    """Return what the commit check reads of a Lock that this gateseal wrote.
 
     Reading it needs no policy and no network. A path this gateseal never
-    writes means the Lock was edited, as it does for _obsolete.
+    writes means the Lock was edited, as it does for _obsolete. platform is
+    the machine's mise platform, or None on a machine gateseal does not
+    support, where no executable is checked.
     """
     document = _readable(lock)
     _locked_pin(document)
@@ -438,6 +443,8 @@ def own_ledger(lock: bytes) -> Ledger:
             )
             for name, record in mapping(document.get("outputs"), "outputs").items()
         }
+        native = mapping(document.get("native_artifacts"), "native_artifacts")
+        programs = () if platform is None else checked_programs(native, platform)
     except GatesealError as exc:
         raise _unreadable(exc) from exc
     for name in outputs:
@@ -448,7 +455,7 @@ def own_ledger(lock: bytes) -> Ledger:
                 f"{__version__} never writes it.",
                 next_step=f"Restore {LOCK} from Git, then run gateseal configure.",
             )
-    return Ledger({MANIFEST: manifest, **outputs})
+    return Ledger({MANIFEST: manifest, **outputs}, programs)
 
 
 def _optional(root: Path, name: str) -> bytes | None:

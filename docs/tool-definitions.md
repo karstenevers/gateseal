@@ -65,6 +65,7 @@ such as `/dev/null`, directly to the tool without a shell.
 | `name` | The bare program name. A release-binary hook starts it through mise. Start each release-binary probe with this name. |
 | `version` | The arguments that make the program print its version. No command runs them. |
 | `version_output` | A regular expression for the entire output after trimming whitespace. Include `{version}` once. |
+| `check_at_commit` | Optional, `false` by default. Set it to `true` for a release binary that a commit should check after mise installs it, such as a secret scanner. `gateseal policy lock` then records the SHA-256 of the program in each archive, and the `gateseal-check` hook compares the installed program with it at each commit. |
 
 Declare an executable for a pre-commit repository if it installs its tool
 from a package index by version, as `ruff-pre-commit` does. For hooks
@@ -112,9 +113,14 @@ mise keeps, such as `HOME` and `PATH`. The gate's history scan also gets
 the caller's environment, so a variable such as `RUFF_OUTPUT_FILE` reaches
 Ruff.
 
-mise does not check an installed tool again. With its install turned off by
-`MISE_AUTO_INSTALL` or `MISE_EXEC_AUTO_INSTALL`, mise starts a program of the
-same name from `PATH`, and `gateseal doctor` warns about it.
+mise does not check an installed tool again. For an executable with
+`check_at_commit = true`, the `gateseal-check` hook asks mise which program
+the hook's request starts and compares it with the recorded SHA-256. mise
+starts the program in the install's `bin` folder when the install has one.
+The hook skips a tool that mise has not installed yet. With its
+install turned off by `MISE_AUTO_INSTALL` or `MISE_EXEC_AUTO_INSTALL`, mise
+starts a program of the same name from `PATH`, and `gateseal doctor` warns
+about it.
 
 ## Choices
 

@@ -36,34 +36,34 @@ ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "eba63952ea0846265461a69889d915af17a78f3315dfbef7a9c2523a21ee7853"
+            "12564729f303329214e1de397575be4ab49a5ce242d88f7b22cea2e346b0eeba"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "c05e62c2da2e1f356941db67f9416be95581f528b96ad9bd7daf64b4c57503ee"
+            "2af683af8708bcf1a0ab975947707a118ecd8b2236db6d05b2f016daf42b9933"
         ),
         CONFIG: "0b1cc4d5b9a12df9e44c94893c455d35b6a087c44c95143f0334148d8e2cf451",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "33e99b751525ba4a4878f353ad7cc5909fee4da32d6d9227484dc5881e420bdf"
+            "123b36c33e0ca22798dc72929a37453da1119f4781724d03948afa422fb45f25"
         ),
         CONFIG: "539062edebd6998b5a2f2050ffe4e63897e8c7d7b221435cee1a65325590d3f3",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "8304ce3029bfd34e52e94e8e9eeb19066f25fac52d644203aafab7ff1b7acb9d"
+            "f5eaeb321e4fa59a295f17bcede38492ddec0aca6769ea40d9d5cd9d8ca49ac2"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "b542693f0ce11c2fb3825d7feb914d7d17be64cab44fe11ec05ab3203cddd856"
+            "8ad00f0e43fb65cb7c95ef20ae46d38f23d0686e44fff2116b678fbde42b9c6d"
         ),
         CONFIG: "6be995a52e003a9e380b0c5db4e523eaf2f0ab470b60e4870780f9863c551d78",
         **PYTHON,
@@ -71,7 +71,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "3dc2d791f77a9c719839705bf1548418096f2b7dbb6017f2b0cd9b5a64c42f25"
+            "7b69dccd773879baea79049377c013180d3777bd986f74654b1c3e5d3cbfa9a0"
         ),
         CONFIG: "c86d15d1696b56d8ab5b15c2268efad5e03754148a6d9f8e84b95c3d6233fd44",
         **PYTHON,
@@ -79,7 +79,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "7d1a1802f4ee6d06a4a7f013b9253b04727fb42295c3f4fa2c177d58581783a1"
+            "1787cbc959b0b9a1236209fc3aba92d48e6b8593e1151c7b539d0f07d818da6e"
         ),
         CONFIG: "3a88b2d4f19a4e2777264d6e781ab2046db54102087ad629ad7882d0f644c967",
         **PYTHON,
@@ -189,8 +189,14 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
         (
             "betterleaks",
             '[executable]\nname = "betterleaks"\nversion = ["version"]\n'
-            'version_output = "{version}"\n',
+            'version_output = "{version}"\ncheck_at_commit = true\n',
             "",
+        ),
+        ("betterleaks", "check_at_commit = true", 'check_at_commit = "yes"'),
+        (
+            "ruff",
+            'version_output = "ruff {version}"\n',
+            'version_output = "ruff {version}"\ncheck_at_commit = true\n',
         ),
         ("betterleaks", "_{version}_{platform}.tar.gz", "_{version}.tar.gz"),
         ("betterleaks", '"betterleaks_{version}', '"../{version}'),
@@ -215,6 +221,8 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
         "hook name twice",
         "probe of another program",
         "release binary without executable",
+        "check at commit that is no boolean",
+        "pre-commit repository checked at commit",
         "archive without platform",
         "archive path",
         "file path",
@@ -283,13 +291,15 @@ def test_a_definition_choice_needs_an_accepted_value():
     ],
 )
 def test_version_proof_accepts_the_selected_version(output, reported):
-    Executable("tool", ("--version",), output).require_version(reported, "1.9.0", "x")
+    Executable("tool", ("--version",), output, False).require_version(
+        reported, "1.9.0", "x"
+    )
 
 
 @pytest.mark.parametrize("reported", ["11.9.0", "1.9.0.1", "1.9.0-rc1", "1.9.1"])
 def test_version_proof_cannot_be_loosened(reported):
     with pytest.raises(GatesealError) as failure:
-        Executable("tool", ("--version",), ".*{version}.*").require_version(
+        Executable("tool", ("--version",), ".*{version}.*", False).require_version(
             reported, "1.9.0", "tool"
         )
     assert failure.value.code == "tool_failed"
@@ -299,7 +309,7 @@ def test_version_proof_cannot_be_loosened(reported):
 @pytest.mark.parametrize("output", ["{version}|.*", ".*|{version}"])
 def test_alternation_cannot_skip_the_version(output):
     with pytest.raises(GatesealError) as failure:
-        Executable("tool", ("--version",), output).require_version(
+        Executable("tool", ("--version",), output, False).require_version(
             "9.9.9", "1.9.0", "x"
         )
     assert failure.value.code == "tool_failed"

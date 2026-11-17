@@ -1,6 +1,6 @@
 - id: gateseal-check
-  name: Check the files gateseal wrote
-  description: Compare the staged Manifest and owned files with gateseal.lock.
+  name: Check files and tools against gateseal.lock
+  description: Compare the staged Manifest, the staged owned files and each installed tool checked at commit with gateseal.lock.
   entry: gateseal-check
   language: python
   pass_filenames: false

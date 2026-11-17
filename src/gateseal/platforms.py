@@ -1,5 +1,6 @@
 """The machines gateseal supports, named as each tool names them."""
 
+import platform
 from dataclasses import dataclass
 
 
@@ -25,3 +26,8 @@ TARGETS = {
     ),
 }
 """The machines a compiler release carries a CPython for."""
+
+
+def machine() -> Target | None:
+    """Return this machine's Target, or None when gateseal does not support it."""
+    return TARGETS.get((platform.system(), platform.machine()))

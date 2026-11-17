@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+from archives import tar_gz
 from conftest import with_git_config
 from gateseal.policy import bundled_root
 from installation import clone, process, success
@@ -66,6 +67,11 @@ def git(root, *arguments):
     return success(["git", *IDENTITY, *arguments], root).stdout.strip()
 
 
+def archive(name):
+    """Return the fake Betterleaks archive name, whose program is name's bytes."""
+    return tar_gz(("README.md", b"Betterleaks\n"), ("betterleaks", name.encode()))
+
+
 def release(root, version, platforms=("linux_x64", "darwin_arm64")):
     """Publish fake Betterleaks archives of version and their checksums.txt."""
     directory = root / RELEASES / f"v{version}"
@@ -73,8 +79,8 @@ def release(root, version, platforms=("linux_x64", "darwin_arm64")):
     lines = [f"{'0' * 64}  betterleaks_{version}_windows_x64.zip"]
     for platform in platforms:
         name = f"betterleaks_{version}_{platform}.tar.gz"
-        (directory / name).write_bytes(name.encode())
-        lines.append(f"{hashlib.sha256(name.encode()).hexdigest()}  {name}")
+        (directory / name).write_bytes(archive(name))
+        lines.append(f"{hashlib.sha256(archive(name)).hexdigest()}  {name}")
     (directory / "checksums.txt").write_text("\n".join(lines) + "\n")
     return directory
 
@@ -180,7 +186,8 @@ def test_lock_resolves_every_reviewed_version_from_upstream(
     name = "betterleaks_1.9.0_darwin_arm64.tar.gz"
     assert platforms["macos-arm64"] == {
         "executable": "betterleaks",
-        "sha256": hashlib.sha256(name.encode()).hexdigest(),
+        "executable_sha256": hashlib.sha256(name.encode()).hexdigest(),
+        "sha256": hashlib.sha256(archive(name)).hexdigest(),
         "url": f"https://{RELEASES}/v1.9.0/{name}",
     }
     assert installed.cli(started, "policy", "check", str(started))["code"] == (
@@ -221,7 +228,7 @@ def test_a_replaced_checksum_never_rewrites_a_recorded_digest(
     policy_command(installed, upstream, started, "lock")
     before = (started / "policy.lock").read_bytes()
     checksums = upstream.root / RELEASES / "v1.8.0" / "checksums.txt"
-    old = hashlib.sha256(b"betterleaks_1.8.0_linux_x64.tar.gz").hexdigest()
+    old = hashlib.sha256(archive("betterleaks_1.8.0_linux_x64.tar.gz")).hexdigest()
     checksums.write_text(checksums.read_text().replace(old, "e" * 64))
     refused = policy_command(installed, upstream, started, "lock", code=2)
     assert refused["code"] == "upstream_changed"
@@ -400,7 +407,8 @@ def test_add_reviews_a_version_and_pin_makes_it_the_pin(installed, upstream, loc
     name = "betterleaks_1.10.0_linux_x64.tar.gz"
     assert record["platforms"]["linux-x64"] == {
         "executable": "betterleaks",
-        "sha256": hashlib.sha256(name.encode()).hexdigest(),
+        "executable_sha256": hashlib.sha256(name.encode()).hexdigest(),
+        "sha256": hashlib.sha256(archive(name)).hexdigest(),
         "url": f"https://{RELEASES}/v1.10.0/{name}",
     }
     again = policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")

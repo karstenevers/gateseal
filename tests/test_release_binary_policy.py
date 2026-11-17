@@ -13,6 +13,7 @@ import shutil
 from dataclasses import replace
 
 import pytest
+from archives import tar_gz
 from conftest import PIN
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_lock, compile_outputs
@@ -287,9 +288,12 @@ class Releases:
 
 
 def release_files(line):
-    """Return Betterleaks 1.9.0's archives and a listing of line for each."""
+    """Return Betterleaks 1.9.0's archives and a listing of line for each.
+
+    Each archive's program is the bytes of the archive's name.
+    """
     archives = {
-        name: name.encode()
+        name: tar_gz(("betterleaks", name.encode()))
         for name in (
             "betterleaks_1.9.0_darwin_arm64.tar.gz",
             "betterleaks_1.9.0_linux_x64.tar.gz",
@@ -312,7 +316,8 @@ def test_a_listing_line_as_sha256sum_writes_it_locks_its_archive():
         "platforms": {
             platform: {
                 "executable": "betterleaks",
-                "sha256": sha(f"betterleaks_1.9.0_{name}.tar.gz".encode()),
+                "executable_sha256": sha(f"betterleaks_1.9.0_{name}.tar.gz".encode()),
+                "sha256": sha(files[f"{BETTERLEAKS}betterleaks_1.9.0_{name}.tar.gz"]),
                 "url": f"{BETTERLEAKS}betterleaks_1.9.0_{name}.tar.gz",
             }
             for platform, name in (

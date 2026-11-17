@@ -6,7 +6,8 @@ Guarantees this module owns, whatever a definition says:
   mise platform the definition names, exactly the URL the definition derives,
   <repository>/releases/download/<tag>/<archive>, the definition's executable
   and the SHA-256 that gateseal policy lock read from the release's checksum
-  file and checked against the downloaded archive.
+  file and checked against the downloaded archive. For an executable checked
+  at commit it also records the SHA-256 of the executable in the archive.
 - Verified acquisition: each hook starts its executable with mise exec, and
   the hook's entry names every platform's URL and checksum. mise installs the
   archive at its first use and checks the checksum. mise names an install by
@@ -21,7 +22,9 @@ Guarantees this module owns, whatever a definition says:
   an archive stops the hook.
 
 mise never checks an installed tool again, and with its auto-install off it
-starts an executable of the same name from the PATH.
+starts an executable of the same name from the PATH. So for an executable
+checked at commit, the commit check asks mise where it installed the tool's
+request and compares the executable there with the recorded SHA-256.
 
 Each version's Policy Lock record holds its archives by mise platform. The
 Lock records each tool in native_artifacts under its name.
@@ -30,16 +33,26 @@ Lock records each tool in native_artifacts under its name.
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import re
+import shutil
 import stat
+import tarfile
 import tempfile
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, TypeGuard
 
-from gateseal.bootstrap import TOOL_PREFIX, PreparedPaths, PreparedRecord, PreparedTool
+from gateseal.bootstrap import (
+    LOCK,
+    TOOL_PREFIX,
+    PreparedPaths,
+    PreparedRecord,
+    PreparedTool,
+    sha,
+)
 from gateseal.diagnostics import GatesealError
 from gateseal.paths import resolved
 from gateseal.platforms import TARGETS, Target
@@ -65,6 +78,7 @@ from gateseal.validation import (
     digest,
     fields,
     mapping,
+    string,
     version_key,
 )
 
@@ -75,11 +89,18 @@ MINIMUM_MISE = "2026.10.19"
 """The oldest mise that installs an archive as a hook's entry asks it to."""
 
 
+PROGRAM = "executable_sha256"
+"""The record field of the executable's SHA-256 in an archive, for a check at commit."""
+
+
 @dataclass(frozen=True)
 class Archive:
+    """One platform's archive. executable_sha256 is set for a check at commit."""
+
     url: str
     sha256: str
     executable: str
+    executable_sha256: str | None
 
 
 @dataclass(frozen=True)
@@ -151,7 +172,10 @@ class ReleaseBinary:
         """Read each platform's SHA-256 from the release's checksum file.
 
         An archive the record lacks is downloaded and must have that SHA-256.
-        A recorded platform the definition no longer names is dropped.
+        For an executable checked at commit, an archive whose record lacks a
+        SHA-256 of the executable is downloaded too, to read it. A recorded
+        platform the definition no longer names is dropped, and so is a
+        recorded executable SHA-256 the definition no longer checks.
         """
         name, executable = definition.name, definition.executable
         if executable is None:
@@ -167,17 +191,13 @@ class ReleaseBinary:
         except GatesealError:
             raise changed_upstream(name, version, source, recorded, record) from None
         for platform, archive in platforms.items():
-            if platform in kept:
-                if kept[platform] != archive:
-                    raise changed_upstream(
-                        name,
-                        version,
-                        source,
-                        {platform: kept[platform]},
-                        {platform: archive},
-                    )
-                continue
-            _check_archive(upstream, archive, name, version, source)
+            _lock_archive(
+                upstream,
+                (platform, archive),
+                kept.get(platform, {}),
+                executable.check_at_commit,
+                (name, version, source),
+            )
         return record
 
     def _listed_archives(
@@ -234,25 +254,29 @@ class ReleaseBinary:
                 f"{', '.join(sorted(records)) or 'no platform'}, but gateseal "
                 f"prepares it for {', '.join(sorted(self.platforms))}.",
             )
+        checked = {PROGRAM} if executable.check_at_commit else set[str]()
         archives: dict[str, Archive] = {}
         for platform, value in sorted(records.items()):
             at = f"{field}.platforms.{platform}"
-            entry = fields(value, {"url", "sha256", "executable"}, at)
+            entry = fields(value, {"url", "sha256", "executable"} | checked, at)
             url = self.url(version, platform)
             if entry["url"] != url or entry["executable"] != executable.name:
                 raise GatesealError(
                     "invalid_field", f"{at} must name {url} and {executable.name}."
                 )
             archives[platform] = Archive(
-                url, digest(entry["sha256"], f"{at}.sha256"), executable.name
+                url,
+                digest(entry["sha256"], f"{at}.sha256"),
+                executable.name,
+                digest(entry[PROGRAM], f"{at}.{PROGRAM}") if checked else None,
             )
         return archives
 
 
 def _check_archive(
     upstream: Upstream, archive: Mapping[str, str], name: str, version: str, source: str
-) -> None:
-    """Download an archive and fail unless it has the SHA-256 that source lists."""
+) -> bytes:
+    """Download an archive and return it, once it has the SHA-256 that source lists."""
     data = upstream.download(archive["url"])
     if data is None:
         raise MissingUpstream(
@@ -269,6 +293,71 @@ def _check_archive(
             next_step=f"Do not review {name} {version} until its "
             "maintainers publish an archive that matches its checksum file.",
         )
+    return data
+
+
+def _lock_archive(
+    upstream: Upstream,
+    listed: tuple[str, dict[str, str]],
+    recorded: Mapping[str, object],
+    checked: bool,
+    release: tuple[str, str, str],
+) -> None:
+    """Complete one platform's archive record from its recorded one or a download.
+
+    listed is the platform and the archive record that the checksum file gives.
+    release names the tool, its version and the checksum file.
+    """
+    (platform, archive), (name, version, source) = listed, release
+    known = dict(recorded)
+    program = known.pop(PROGRAM, None)
+    if known and known != archive:
+        raise changed_upstream(
+            name, version, source, {platform: known}, {platform: archive}
+        )
+    if known and not checked:
+        return
+    if known and _is_digest(program):
+        archive[PROGRAM] = program
+        return
+    data = _check_archive(upstream, archive, name, version, source)
+    if checked:
+        archive[PROGRAM] = _program_sha256(data, archive, name, version)
+
+
+def _is_digest(value: object) -> TypeGuard[str]:
+    return isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value) is not None
+
+
+def _program_sha256(
+    data: bytes, archive: Mapping[str, str], name: str, version: str
+) -> str:
+    """Return the SHA-256 of the executable at the top of a tar.gz archive.
+
+    mise unpacks the archive into the tool's install, so the executable there
+    has these bytes. Of members with one name, the last is the one unpacked.
+    """
+    executable = archive["executable"]
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as bundle:
+            members = [
+                member
+                for member in bundle.getmembers()
+                if member.name.removeprefix("./") == executable
+            ]
+            last = members[-1] if members else None
+            program = bundle.extractfile(last) if last and last.isfile() else None
+            if program is not None:
+                return hashlib.sha256(program.read()).hexdigest()
+    except (tarfile.TarError, OSError, EOFError):
+        pass
+    raise GatesealError(
+        "upstream_executable_missing",
+        f"{archive['url']} is not a tar.gz archive with the file {executable} at "
+        "its top.",
+        next_step=f"Check that {name} {version} publishes {executable} at the top "
+        "of a tar.gz archive, or stop checking it at commit.",
+    )
 
 
 def _checksums(listing: bytes) -> dict[str, str]:
@@ -282,9 +371,13 @@ def _checksums(listing: bytes) -> dict[str, str]:
     return listed
 
 
-def _platforms(record: object) -> dict[str, object]:
+def _platforms(record: object) -> dict[str, dict[str, object]]:
     """Return a recorded version's archives by platform, or fail invalid_field."""
-    return mapping(fields(record, {"platforms"}, "record")["platforms"], "platforms")
+    platforms = fields(record, {"platforms"}, "record")["platforms"]
+    return {
+        platform: mapping(archive, platform)
+        for platform, archive in mapping(platforms, "platforms").items()
+    }
 
 
 def parse_source(value: object, field: str) -> ReleaseBinary:
@@ -332,24 +425,7 @@ class BinaryTool:
 
     @property
     def mise_request(self) -> str:
-        """Return mise's request for the tool, with every platform's archive.
-
-        mise reads the option platforms_<os>_<arch>_<name> as the nested
-        platforms.<os>-<arch>.<name> of a mise file. A URL, a checksum and a
-        version hold no comma or bracket, which would end an option. mise
-        installs a request once under its tool name and version and never
-        reads its options again, so the tool name ends in a digest of them.
-        """
-        options = ",".join(
-            f"platforms_{platform.replace('-', '_')}_{name}={value}"
-            for platform, archive in sorted(self.release.platforms.items())
-            for name, value in (
-                ("url", archive.url),
-                ("checksum", "sha256:" + archive.sha256),
-            )
-        )
-        digest = hashlib.sha256(options.encode()).hexdigest()[:12]
-        return f"http:{self.definition.name}-{digest}[{options}]@{self.version}"
+        return mise_request(self.definition.name, self.version, self.release.platforms)
 
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
         """Return the command that installs the tool if needed and starts it."""
@@ -375,9 +451,137 @@ class BinaryTool:
                         "sha256": archive.sha256,
                         "executable": archive.executable,
                     }
+                    | (
+                        {}
+                        if archive.executable_sha256 is None
+                        else {PROGRAM: archive.executable_sha256}
+                    )
                     for platform, archive in release.platforms.items()
                 },
             },
+        )
+
+
+def mise_request(name: str, version: str, platforms: Mapping[str, Archive]) -> str:
+    """Return mise's request for a tool, with every platform's archive.
+
+    mise reads the option platforms_<os>_<arch>_<name> as the nested
+    platforms.<os>-<arch>.<name> of a mise file. A URL, a checksum and a
+    version hold no comma or bracket, which would end an option. mise
+    installs a request once under its tool name and version and never
+    reads its options again, so the tool name ends in a digest of them.
+    """
+    options = ",".join(
+        f"platforms_{platform.replace('-', '_')}_{option}={value}"
+        for platform, archive in sorted(platforms.items())
+        for option, value in (
+            ("url", archive.url),
+            ("checksum", "sha256:" + archive.sha256),
+        )
+    )
+    digest = hashlib.sha256(options.encode()).hexdigest()[:12]
+    return f"http:{name}-{digest}[{options}]@{version}"
+
+
+@dataclass(frozen=True)
+class InstalledProgram:
+    """An executable checked at commit, as the Lock records it for one platform.
+
+    request is mise's request in the tool's hooks, and sha256 the SHA-256 of
+    the executable in that platform's archive.
+    """
+
+    tool: str
+    version: str
+    request: str
+    executable: str
+    sha256: str
+
+
+def checked_programs(
+    native: Mapping[str, object], platform: str
+) -> tuple[InstalledProgram, ...]:
+    """Return each executable that the Lock's native_artifacts check on platform."""
+    programs: list[InstalledProgram] = []
+    for name, value in sorted(native.items()):
+        field = f"native_artifacts.{name}"
+        record = fields(value, {"version", "minimum_mise", "platforms"}, field)
+        version = string(record["version"], f"{field}.version")
+        archives: dict[str, Archive] = {}
+        for key, entry in mapping(record["platforms"], f"{field}.platforms").items():
+            at = f"{field}.platforms.{key}"
+            table = mapping(entry, at)
+            names = {"url", "sha256", "executable"} | ({PROGRAM} & set(table))
+            table = fields(table, names, at)
+            archives[key] = Archive(
+                string(table["url"], f"{at}.url"),
+                digest(table["sha256"], f"{at}.sha256"),
+                string(table["executable"], f"{at}.executable"),
+                digest(table[PROGRAM], f"{at}.{PROGRAM}") if PROGRAM in table else None,
+            )
+        here = archives.get(platform)
+        if here is not None and here.executable_sha256 is not None:
+            request = mise_request(name, version, archives)
+            programs.append(
+                InstalledProgram(
+                    name, version, request, here.executable, here.executable_sha256
+                )
+            )
+    return tuple(programs)
+
+
+def check_installs(programs: Iterable[InstalledProgram], root: Path) -> None:
+    """Fail unless each checked executable that mise installed has its SHA-256.
+
+    mise --no-config where finds the install of the hooks' request, and mise
+    which the program in it that the hooks' mise exec starts, which is in the
+    install's bin folder when it has one. Neither uses the network. A tool
+    that mise has not installed is skipped, and so is every tool without a
+    mise on PATH: no hook of the tool can start it, and at its first use mise
+    installs it from the archive that mise checks.
+    """
+    mise = shutil.which("mise")
+    if mise is None:
+        return
+    env = dict(os.environ, MISE_OFFLINE="1")
+    for program in programs:
+        where = execute(
+            [mise, "--no-config", "where", program.request],
+            root,
+            env,
+            allow_failure=True,
+        )
+        if where.returncode:
+            if b" not installed" in where.stderr:
+                continue
+            raise GatesealError(
+                "tool_failed",
+                f"mise did not say where it installed {program.tool}: "
+                + where.stderr.decode("utf-8", "replace").strip(),
+                next_step="Fix what mise reports, then commit again.",
+            )
+        folder = Path(where.stdout.decode().strip())
+        name = Path(program.executable).name
+        which = execute(
+            [mise, "--no-config", "which", name, "--tool", program.request],
+            root,
+            env,
+            allow_failure=True,
+        )
+        path = Path(which.stdout.decode().strip())
+        tool = f"{program.tool} {program.version}"
+        if which.returncode:
+            problem = f"mise starts no {name} from {folder}, where it installed {tool}."
+        elif not path.is_file() or sha(path.read_bytes()) != program.sha256:
+            problem = f"{path} is not the {tool} program that {LOCK} records."
+        else:
+            continue
+        raise GatesealError(
+            "installed_tool_changed",
+            problem,
+            next_step=f"Find out what changed it. Then delete {folder} and "
+            f"commit again, so that the {program.tool} hook installs it again "
+            "from its checked archive.",
         )
 
 
