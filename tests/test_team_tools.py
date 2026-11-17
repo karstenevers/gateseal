@@ -300,7 +300,7 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     assert result.code == "checks_failed"
     assert [
         (entry["category"], entry["tool"], entry["origin"], entry.get("file"))
-        for entry in result.entries
+        for entry in result.entries[1:]
     ] == [
         ("history", "gitleaks", "team-defined", None),
         ("finding", "gitleaks", "team-defined", "leak.env"),
@@ -483,9 +483,9 @@ def test_a_team_definition_choice_renders_into_its_configuration(tmp_path, upstr
     assert policy.tools["strict-ruff"].definition.origin == "team-defined"
 
 
-@pytest.mark.parametrize("name", ["target_version", "exclude"])
+@pytest.mark.parametrize("name", ["target_version", "exclude", "skip"])
 def test_a_tool_cannot_declare_a_choice_its_capability_has(tmp_path, upstream, name):
-    """strict-ruff declares target_version, and gateseal declares exclude."""
+    """strict-ruff declares target_version, and gateseal declares exclude and skip."""
     other = hook_tool(
         "https://github.com/team/pyfmt",
         "pyfmt",

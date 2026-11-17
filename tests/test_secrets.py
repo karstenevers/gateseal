@@ -1,7 +1,9 @@
 import json
 import os
+import random
 import shutil
 from pathlib import Path
+from string import ascii_letters, ascii_uppercase, digits
 
 import pytest
 from conftest import on_machine, preserved
@@ -19,6 +21,7 @@ TRACKED = (
     ".gateseal/betterleaks.toml",
 )
 REMOVE = "Next: Remove each secret, stage the fix, and retry."
+ALNUM = ascii_letters + digits
 
 
 def configure(installed, root, *capabilities, code=0):
@@ -174,6 +177,89 @@ def test_a_token_under_a_quoted_json_key_blocks_the_commit(installed, guarded):
         assert token not in output
     finally:
         unstage(guarded, path.name)
+
+
+def common_secrets():
+    """Return a file of each common secret form, and every random part of them.
+
+    The parts are drawn at run time, so this file holds no secret of its own.
+    """
+    chars, drawn = random.Random(92), []
+
+    def token(length, alphabet=ALNUM):
+        drawn.append("".join(chars.choice(alphabet) for _ in range(length)))
+        return drawn[-1]
+
+    def pem(kind):
+        body = "\n".join(token(64, ALNUM + "+/") for _ in range(6))
+        label = f"{kind}PRIVATE KEY-----"
+        return f"-----BEGIN {label}\n{body}\n-----END {label}\n"
+
+    aws, password = token(40, ALNUM + "+/"), token(16)
+    client, auth = token(32), token(32)
+    slack = f"xoxb-{token(12, digits)}-{token(13, digits)}-{token(24)}"
+    stripe, npm = "sk_" + "live_" + token(24), "npm_" + token(36)
+    plus, slash = "+" + token(39, ALNUM + "+/"), "/" + token(39, ALNUM + "+/")
+    key_id = "AKIA" + token(12, ascii_uppercase + digits) + "NULL"
+    github = "ghp_" + token(10) + "false" + token(21)
+    fine_grained = f"github_pat_{token(22)}_{token(59)}"
+    files = {
+        "aws.ini": f"[default]\naws_secret_access_key = {aws}\n",
+        "aws.env": f"AWS_SECRET_ACCESS_KEY={aws}\n",
+        "aws.json": f'{{"SecretAccessKey": "{aws}"}}\n',
+        "rsa.pem": pem("RSA "),
+        "openssh.key": pem("OPENSSH "),
+        "pkcs8.pem": pem(""),
+        "settings.py": f'password = "{password}"\n',
+        "db.env": f"DB_PASSWORD={password}\n",
+        "oauth.py": f'client_secret = "{client}"\n',
+        "auth.py": f'auth_token = "{auth}"\n',
+        "slack.txt": f"bot = {slack}\n",
+        "stripe.txt": f"key = {stripe}\n",
+        ".npmrc": f"//registry.npmjs.org/:_authToken={npm}\n",
+        "plus.py": f'api_key = "{plus}"\n',
+        "slash.ini": f"aws_secret_access_key = {slash}\n",
+        "key_id.ini": f"aws_access_key_id = {key_id}\n",
+        "github.txt": f"token = {github}\n",
+        "fine_grained.txt": f"token = {fine_grained}\n",
+    }
+    return files, drawn
+
+
+def test_common_secret_forms_each_stop_the_commit(guarded):
+    files, drawn = common_secrets()
+    for name, text in files.items():
+        (guarded / name).write_text(text)
+    success(["git", "add", *files], guarded)
+    try:
+        committed = process(["git", "commit", "-m", "Common secrets"], guarded)
+        output = committed.stdout + committed.stderr
+        assert committed.returncode == 1, output
+        for finding in (
+            ".npmrc:1:34: npm-access-token",
+            "auth.py:1:1: generic-api-key",
+            "aws.env:1:5: generic-api-key",
+            "aws.ini:2:5: generic-api-key",
+            "aws.json:1:3: generic-api-key",
+            "db.env:1:4: generic-password",
+            "fine_grained.txt:1:9: github-fine-grained-pat",
+            "github.txt:1:9: github-pat",
+            "key_id.ini:1:21: aws-access-token",
+            "oauth.py:1:8: generic-api-key",
+            "openssh.key:1:1: private-key",
+            "pkcs8.pem:1:1: private-key",
+            "plus.py:1:1: generic-base64-key",
+            "rsa.pem:1:1: private-key",
+            "settings.py:1:1: generic-password",
+            "slack.txt:1:7: slack-bot-token",
+            "slash.ini:1:5: generic-base64-key",
+            "stripe.txt:1:7: stripe-access-token",
+        ):
+            assert finding in output, output
+        assert not [part for part in drawn if part in output]
+    finally:
+        for name in files:
+            unstage(guarded, name)
 
 
 def test_commit_scans_staged_content_and_run_scans_the_worktree(installed, guarded):

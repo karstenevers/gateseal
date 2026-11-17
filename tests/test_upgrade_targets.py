@@ -19,6 +19,7 @@ from gateseal.diagnostics import GatesealError
 from gateseal.lock import Locked, Snapshot, compile_lock
 from gateseal.managed_files import LOCK
 from gateseal.manifest import (
+    REASON_LIMIT,
     BundledSource,
     ExceptionRequest,
     git_source,
@@ -121,6 +122,14 @@ def test_invalid_targets_are_refused(arguments, code, named):
     assert named in str(raised.value)
 
 
+@pytest.mark.parametrize("argument", ["betterleaks=latest", "betterleaks="])
+def test_an_invalid_target_names_the_argument_in_its_step(argument):
+    with pytest.raises(GatesealError) as raised:
+        upgrade.components([argument])
+    assert "betterleaks=VERSION" in raised.value.next_step
+    assert "file" not in raised.value.next_step
+
+
 @pytest.mark.parametrize(
     ("name", "code", "why", "step"),
     [
@@ -137,7 +146,7 @@ def test_a_target_outside_the_selected_components_names_why(
     assert error.code == code
     assert all(value in str(error) for value in (name, why))
     assert all(value in error.next_step for value in step)
-    assert bool(error.next_step) == bool(step)
+    assert error.next_step
 
 
 def test_another_reviewed_version_gets_an_exception_with_both_flags(policies):
@@ -164,6 +173,25 @@ def test_another_reviewed_version_without_both_flags_is_refused(
     assert error.code == "invalid_exception"
     assert all(value in str(error) for value in ("betterleaks 1.8.0", "1.9.0"))
     assert named_flags(error.next_step) == EXCEPTION_FLAGS
+
+
+@pytest.mark.parametrize("reason", [" ", "r" * (REASON_LIMIT + 1), "two\nlines"])
+def test_a_reason_flag_the_manifest_would_refuse_names_the_flag(policies, reason):
+    bundled = policies["bundled"]
+    error = refused(
+        current(bundled), bundled, {"betterleaks": "1.8.0"}, reason, REVIEW_BY
+    )
+    assert error.code == "invalid_exception"
+    assert named_flags(str(error)) == named_flags(error.next_step) == {"--reason"}
+
+
+def test_a_reason_flag_holds_at_most_the_limit(policies):
+    bundled = policies["bundled"]
+    longest = "r" * REASON_LIMIT
+    exceptions, _ = changes(
+        current(bundled), bundled, {"betterleaks": "1.8.0"}, longest, REVIEW_BY
+    )
+    assert exceptions["betterleaks"].reason == longest
 
 
 def test_an_unreviewed_target_lists_the_reviewed_versions(policies):
@@ -396,17 +424,17 @@ def test_an_exception_entry_names_the_version_and_the_pin(policies):
     assert all(value in entry["message"] for value in named)
 
 
-def test_a_gateseal_move_names_the_install_and_gateseal_setup(policies):
+def test_a_gateseal_move_names_setup_of_the_new_release(policies):
     after = lock_document(policies["bundled"])
     before = released(after, "0.0.9", "a" * 40)
     result = upgrade._result(
         before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
     )
     assert (result.code, result.changed) == ("upgraded", (LOCK,))
-    install, review = result.next_steps
-    assert install == (
-        f"Have each developer install gateseal {__version__} and run gateseal "
-        "setup, so git commit runs pre-commit 4.7.0."
+    setup, review = result.next_steps
+    assert setup == (
+        f"Have each developer run uvx gateseal@{__version__} setup, so git commit "
+        "runs pre-commit 4.7.0."
     )
     assert "git diff" in review
     moved = f"gateseal 0.0.9 at {'a' * 40} to {__version__} at {PIN.commit}: upgrade."

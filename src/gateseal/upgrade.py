@@ -19,6 +19,7 @@ from gateseal.compiler_release import PRE_COMMIT, GatesealPin
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.managed_files import LOCK, MANIFEST
 from gateseal.manifest import (
+    REASON_LIMIT,
     BundledSource,
     ExceptionRequest,
     GitSource,
@@ -26,6 +27,7 @@ from gateseal.manifest import (
     Selection,
     parse_manifest,
     resolve,
+    valid_reason,
 )
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.tools.model import NAME, Tool
@@ -79,8 +81,22 @@ def components(arguments: list[str]) -> dict[str, str | None]:
                 f"Name each component once, as betterleaks or betterleaks=1.9.0, "
                 f"not {argument!r}.",
             )
-        found[name] = version(target, f"{name}'s target") if separator else None
+        found[name] = _target(name, target) if separator else None
     return found
+
+
+def _target(name: str, target: str) -> str:
+    """Return target as a release, naming the argument when it is not one."""
+    try:
+        return version(target, f"{name}'s target")
+    except GatesealError as exc:
+        raise GatesealError(
+            exc.code,
+            str(exc),
+            exc.exit_code,
+            f"Write the target as {name}=VERSION, with VERSION as "
+            f"major.minor.patch such as {name}=1.9.0, then run the command again.",
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -128,6 +144,13 @@ def _exception(
         if kept is not None and kept.version == target
         else (None, None)
     )
+    if request.reason and not valid_reason(request.reason):
+        raise GatesealError(
+            "invalid_exception",
+            f"--reason must say why on one line, in at most {REASON_LIMIT} characters.",
+            next_step=f"Write --reason on one line, in at most {REASON_LIMIT} "
+            "characters, then run the command again.",
+        )
     reason = request.reason or kept_reason
     review_by = request.review_by or kept_review_by
     if not reason or review_by is None:
@@ -286,7 +309,7 @@ def _selection(manifest: Manifest, policy: Policy) -> Selection:
     try:
         return resolve(manifest, policy)
     except GatesealError as exc:
-        if exc.code != "incompatible_exception" or exc.next_step:
+        if exc.code != "incompatible_exception":
             raise
         raise GatesealError(exc.code, str(exc), exc.exit_code, RESOLVE) from exc
 
@@ -508,8 +531,8 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
     steps: list[str] = []
     if lock.ledger_pin(before) != lock.ledger_pin(after):
         steps.append(
-            f"Have each developer install gateseal {__version__} and run gateseal "
-            f"setup, so git commit runs pre-commit {PRE_COMMIT}."
+            f"Have each developer run uvx gateseal@{__version__} setup, so git "
+            f"commit runs pre-commit {PRE_COMMIT}."
         )
     if written:
         steps.append("Review git diff, then stage and commit the changed files.")

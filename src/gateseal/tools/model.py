@@ -89,16 +89,18 @@ class ConfigurationFormat(StrEnum):
 
 
 class Origin(StrEnum):
-    """Who wrote a definition.
+    """Who wrote a hook.
 
-    gateseal ships a BUILT_IN one in its package. A policy's tools/ folder holds
-    a TEAM one, which carries its kind's guarantees but the tool-specific ones,
-    such as turning off a scanner's ignore file, only as far as its arguments
-    declare them.
+    gateseal ships a BUILT_IN definition in its package. A policy's tools/
+    folder holds a TEAM one, which carries its kind's guarantees but the
+    tool-specific ones, such as turning off a scanner's ignore file, only as
+    far as its arguments declare them. A Manifest's [hooks] table holds a
+    REPOSITORY hook, which runs a file of the repository and has no definition.
     """
 
     BUILT_IN = "built-in"
     TEAM = "team-defined"
+    REPOSITORY = "repository"
 
 
 LockSection = Literal["components", "native_artifacts"]
@@ -174,12 +176,13 @@ def closed(value: object, members: type[E], field: str) -> E:
 
 @dataclass(frozen=True)
 class Hook:
-    """One hook of a tool, with every placeholder resolved.
+    """One hook that a selection runs, with every placeholder resolved.
 
-    tool is the definition's name, and origin its definition's. id and name
-    are unique among the hooks of a policy's tools: the Lock and run's results
+    tool is the definition's name, or a Repository Hook's file, and origin
+    says who wrote the hook. id and name are unique among the hooks a
+    selection runs, gateseal's check hook included: the Lock and run's results
     name a hook by its id, and pre-commit's status line by its name. args
-    follow the program the kind runs, never through a shell.
+    follow the program that runs the hook, never through a shell.
     """
 
     tool: str

@@ -7,6 +7,8 @@ Python of the owned pre-commit, the other is the mise on the PATH. The policy,
 the worktree, its Git, the scope planning and the processes are real.
 """
 
+import dataclasses
+import json
 import os
 from types import SimpleNamespace
 
@@ -44,6 +46,7 @@ HISTORY_FINDING = f"leak.txt:1:7: aws-access-token (AWS) in commit {COMMIT}\n"
 CURRENT_FINDING = "leak.txt:1:7: aws-access-token (AWS)\n"
 FIX = "finding"
 RECOMMIT = "gateseal run"
+READ = "output of each failed hook"
 REVIEW = "git diff"
 STAGE = "gateseal run"
 
@@ -196,6 +199,74 @@ def test_a_deleted_ref_runs_nothing(attempt, planned):
     result = checks.gate(planned.worktree, planned.locked, None)
     assert (result.code, result.exit_code) == ("nothing_to_check", 0)
     assert not attempt.pre_commit.has_run()
+    assert result.entries == ()
+
+
+def without_message(entry):
+    return {k: v for k, v in entry.items() if k != "message"}, entry["message"]
+
+
+def budgeted(planned, budget, elapsed, monkeypatch):
+    """Return the gate's result for a policy budget and a run that took elapsed."""
+    instants = iter([1000.0, 1000.0 + elapsed])
+    monkeypatch.setattr(checks, "monotonic", lambda: next(instants))
+    policy = dataclasses.replace(planned.locked.policy, time_budget_seconds=budget)
+    locked = dataclasses.replace(planned.locked, policy=policy)
+    return checks.gate(planned.worktree, locked, planned.scope)
+
+
+@pytest.mark.parametrize(
+    "budget,elapsed,seconds",
+    [(None, 42.34, 42.3), (300, 42.34, 42.3), (300, 300.04, 300.0)],
+    ids=["no budget", "within", "at the budget once rounded"],
+)
+def test_the_gate_reports_its_time_first(
+    attempt, planned, monkeypatch, budget, elapsed, seconds
+):
+    attempt.pre_commit.answer(YAML_PASSED, 0)
+    result = budgeted(planned, budget, elapsed, monkeypatch)
+    timed, message = without_message(result.entries[0])
+    assert f"{seconds} seconds" in message
+    assert timed == {"severity": "info", "category": "duration", "seconds": seconds} | (
+        {} if budget is None else {"budget_seconds": budget}
+    )
+    assert result.notes == ()
+    assert (result.code, result.exit_code) == ("checks_passed", 0)
+
+
+@pytest.mark.parametrize(
+    "output,status,code",
+    [(YAML_PASSED, 0, "checks_passed"), (EOF_FAILED, 1, "checks_failed")],
+    ids=["passing", "failing"],
+)
+def test_a_gate_over_its_budget_warns_and_ends_as_its_checks_decide(
+    attempt, planned, monkeypatch, output, status, code
+):
+    attempt.pre_commit.answer(output, status)
+    result = budgeted(planned, 300, 300.06, monkeypatch)
+    timed, _ = without_message(result.entries[0])
+    assert timed == {
+        "severity": "info",
+        "category": "duration",
+        "seconds": 300.1,
+        "budget_seconds": 300,
+    }
+    [over] = result.notes
+    assert (over.severity, over.category) == ("warning", "over_time_budget")
+    assert all(
+        text in over.message for text in ("300.1", "300 seconds", "time_budget_seconds")
+    )
+    assert (result.code, result.exit_code) == (code, status)
+    assert json.loads(result.render(True))["status"] == ("failed" if status else "ok")
+    assert f"Warning: {over.message}" in result.render(False).splitlines()
+
+
+def test_the_time_covers_pre_commit_and_the_history_scan(attempt, planned, monkeypatch):
+    def now():
+        return 10.0 * attempt.pre_commit.has_run() + 100.0 * attempt.scanner.has_run()
+
+    monkeypatch.setattr(checks, "monotonic", now)
+    assert gate(planned).entries[0]["seconds"] == 110.0
 
 
 def test_a_head_that_is_not_checked_out_stops_before_pre_commit(attempt, planned):
@@ -266,7 +337,7 @@ def test_pre_commit_stopping_is_a_tool_failure(attempt, planned):
         (YAML_PASSED + SECRET_FOUND + WHITESPACE_FIXED, (FIX, RECOMMIT)),
         (YAML_PASSED + WHITESPACE_FIXED, (RECOMMIT,)),
         (YAML_PASSED + SECRET_FOUND, (FIX,)),
-        (YAML_PASSED + EOF_FAILED, ()),
+        (YAML_PASSED + EOF_FAILED, (READ,)),
     ],
     ids=["finding and fix", "fix", "finding", "failure"],
 )

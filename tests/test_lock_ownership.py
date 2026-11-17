@@ -17,7 +17,6 @@ from test_lock_configure import (
     configured,
     edit,
     edit_lock,
-    outcome,
     refused,
     sha,
     tracked,
@@ -29,8 +28,9 @@ EXCLUDE = '\n[choices.hygiene]\nexclude = ["vendor"]\n'
 
 def conflicted(error, name):
     """Check that error keeps name, a file gateseal did not write, for the team."""
-    assert outcome(error) == ("ownership_conflict", "")
+    assert error.code == "ownership_conflict"
     assert name in str(error)
+    assert f"Move {name} aside" in error.next_step
 
 
 def test_a_file_gateseal_did_not_write_is_kept(tmp_path):

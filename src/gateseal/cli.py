@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -319,9 +320,16 @@ def main(argv: list[str] | None = None) -> int:
     full = "--verbose" in raw
     # pytestmut: on
     try:
-        arguments = _parser().parse_args(raw)
-        as_json, full = bool(arguments.json), bool(arguments.verbose)
-        result = _operation(arguments)
+        try:
+            arguments = _parser().parse_args(raw)
+            as_json, full = bool(arguments.json), bool(arguments.verbose)
+            result = _operation(arguments)
+        except OSError as exc:
+            raise GatesealError("filesystem_error", str(exc), 4) from exc
+        except KeyboardInterrupt:
+            raise GatesealError(
+                "interrupted", "Operation interrupted. Retry the same command.", 4
+            ) from None
     except GatesealError as exc:
         result = Result(
             command,
@@ -330,11 +338,6 @@ def main(argv: list[str] | None = None) -> int:
             exc.exit_code,
             next_steps=(exc.next_step,) if exc.next_step else (),
         )
-    except OSError as exc:
-        result = Result(command, "filesystem_error", str(exc), 4)
-    except KeyboardInterrupt:
-        result = Result(
-            command, "interrupted", "Operation interrupted. Retry the same command.", 4
-        )
-    print(result.render(as_json, full))
+    annotate = os.environ.get("GITHUB_ACTIONS") == "true"
+    print(result.render(as_json, full, workflow_commands=annotate))
     return result.exit_code

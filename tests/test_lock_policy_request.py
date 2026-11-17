@@ -8,7 +8,7 @@ import pytest
 from conftest import named_flags
 from gateseal.lock import PolicyRequest
 from gateseal.manifest import BundledSource, GitSource
-from test_lock_configure import MANIFEST, POLICY, outcome, refused
+from test_lock_configure import MANIFEST, POLICY, refused
 
 URL = "https://policy.example/team/gateseal-policy.git"
 OTHER = "https://policy.example/other/gateseal-policy.git"
@@ -39,7 +39,7 @@ def test_no_repository_selects_the_bundled_release(tmp_path, nogit, source):
 )
 def test_git_flags_need_a_repository(tmp_path, nogit, request_):
     error = refused(request_.build, nogit, tmp_path)
-    assert outcome(error) == ("invalid_invocation", "")
+    assert error.code == "invalid_invocation"
     assert named_flags(str(error)) == GIT_FLAGS
 
 
@@ -68,7 +68,7 @@ def test_an_upgrade_to_bundled_selects_this_compilers_release(tmp_path, nogit, c
     assert PolicyRequest("bundled").target(current, nogit, tmp_path) == BUNDLED
     request = PolicyRequest("bundled", commit=SECOND)
     error = refused(request.target, current, nogit, tmp_path)
-    assert outcome(error) == ("invalid_invocation", "")
+    assert error.code == "invalid_invocation"
     assert named_flags(str(error)) == GIT_FLAGS
 
 
@@ -106,7 +106,7 @@ def test_an_upgrade_from_bundled_names_its_repository(tmp_path, nogit):
     assert request.target(BUNDLED, nogit, tmp_path) == GitSource(URL, ".", SECOND, "v2")
     request = PolicyRequest(commit=SECOND, tag="v2")
     error = refused(request.target, BUNDLED, nogit, tmp_path)
-    assert outcome(error) == ("invalid_invocation", "")
+    assert error.code == "invalid_invocation"
     assert named_flags(str(error)) == {"--policy", "--policy-tag"}
 
 

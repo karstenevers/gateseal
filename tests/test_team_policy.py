@@ -242,8 +242,8 @@ def test_another_releases_lock_is_named_before_any_fetch(installed, adopted, tmp
     lock.write_text(json.dumps(document))
     needed = f"gateseal.lock pins gateseal 0.1.1 from {REPOSITORY} at commit "
     step = (
-        "Install gateseal 0.1.1, or run gateseal upgrade to move gateseal.lock to "
-        f"gateseal {__version__}."
+        "Run gateseal 0.1.1 with uvx gateseal@0.1.1, or run gateseal upgrade to "
+        f"move gateseal.lock to gateseal {__version__}."
     )
     for command, code in (("status", 0), ("doctor", 3)):
         unhealthy = installed.cli(fresh, command, env=env, code=code)
@@ -536,7 +536,7 @@ def test_interrupted_fetch_stops_git(monkeypatch, tmp_path):
 
 
 FIXTURES = "https://github.com/karstenevers/gateseal-fixtures.git"
-FIXTURE_COMMIT = "e140db5e790f8eb270dc2dc120bb9bf98eb34cbd"
+FIXTURE_COMMIT = "0aed62f7640db12d0ab2227d04fda71d5c1ab0a3"
 """The fixture repository's commit whose policy folder is the bundled policy."""
 
 

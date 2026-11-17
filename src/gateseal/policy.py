@@ -9,7 +9,13 @@ from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import read
 from gateseal.paths import resolved
-from gateseal.policy_tools import Alternatives, Toolset, read_toolset
+from gateseal.policy_tools import (
+    EXCLUDE,
+    RESERVED,
+    HookChoice,
+    Toolset,
+    read_toolset,
+)
 from gateseal.tools.choices import Choice
 from gateseal.tools.model import (
     Catalog,
@@ -83,43 +89,33 @@ ChoiceValue = str | tuple[str, ...]
 ChoiceParser = Callable[[object, str], ChoiceValue]
 """Return a choice's value for its field, or fail with invalid_choice."""
 
-EXCLUDE = "exclude"
-"""The choice that keeps paths from the hooks of every tool of a capability."""
-
 CHOICES: dict[str, ChoiceParser] = {EXCLUDE: paths_choice}
 """The choices the compiler itself renders, by name.
 
-Any capability may expose one, so no tool definition or alternative may
-declare a choice of that name. The definitions of a capability's tools and
-its alternatives declare the others.
+Any capability may expose one. The definitions of a capability's tools and
+its hook choices declare the others, and no definition or alternative may
+declare a name of RESERVED.
 """
 
-Declared = Choice | Alternatives
-"""A choice that a tool's definition or a capability's alternatives declare."""
+Declared = Choice | HookChoice
+"""A choice that a tool's definition or a capability's hook choices declare."""
 
 
 def declared_choices(
     tools: Iterable[tuple[str, ToolDefinition]],
-    alternatives: Mapping[tuple[str, str], Alternatives],
+    hook_choices: Mapping[tuple[str, str], HookChoice],
 ) -> dict[tuple[str, str], Declared]:
     """Return each choice the policy declares, by capability and name.
 
     tools pairs each tool's capability with its definition. A choice name of
-    a capability must mean one choice, so no two of its tools and alternatives
-    may declare one name, and none may declare a choice of CHOICES.
+    a capability must mean one choice, so no two of its tools and hook
+    choices may declare one name, and no definition may declare a name of
+    RESERVED.
     """
-    declared: dict[tuple[str, str], Declared] = {}
-    for (capability, name), choice in alternatives.items():
-        if name in CHOICES:
-            raise GatesealError(
-                "invalid_field",
-                f"capabilities.{capability}.alternatives.{name} declares the "
-                f"choice {name}, which gateseal itself declares.",
-            )
-        declared[capability, name] = choice
+    declared: dict[tuple[str, str], Declared] = dict(hook_choices)
     for capability, definition in tools:
         for name, choice in definition.choices.items():
-            if name in CHOICES or (capability, name) in declared:
+            if name in RESERVED or (capability, name) in declared:
                 raise GatesealError(
                     "invalid_field",
                     f"tools.{definition.name} declares the choice {name}, which "
@@ -168,17 +164,18 @@ class Policy:
     minimum_compiler: str
     capabilities: tuple[str, ...]
     tools: Mapping[str, Tool]
-    alternatives: Mapping[tuple[str, str], Alternatives]
+    hook_choices: Mapping[tuple[str, str], HookChoice]
     choices: Mapping[tuple[str, str], ChoiceValue]
     assets: tuple[Asset, ...]
     content_digest: str
+    time_budget_seconds: int | None
 
     @property
     def declared(self) -> dict[tuple[str, str], Declared]:
-        """Return the choices that tools and alternatives declare, by key."""
+        """Return the choices that tools and hook choices declare, by key."""
         return declared_choices(
             ((tool.use.capability, tool.definition) for tool in self.tools.values()),
-            self.alternatives,
+            self.hook_choices,
         )
 
 
@@ -197,10 +194,11 @@ class Review:
     capabilities: tuple[str, ...]
     definitions: Mapping[str, ToolDefinition]
     uses: Mapping[str, ToolUse]
-    alternatives: Mapping[tuple[str, str], Alternatives]
+    hook_choices: Mapping[tuple[str, str], HookChoice]
     catalogs: Mapping[str, Catalog]
     choices: Mapping[tuple[str, str], ChoiceValue]
     assets: tuple[Asset, ...]
+    time_budget_seconds: int | None
 
 
 CONTENT = b"gateseal-policy-content-v1\0"
@@ -279,6 +277,22 @@ def _compatibility(document: dict[str, object], compiler_version: str) -> str:
     return minimum
 
 
+TIME_BUDGET = "time_budget_seconds"
+"""The optional top-level field that sets the gate's time budget in seconds."""
+
+
+def _time_budget(value: object) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or value < 1:
+        raise GatesealError(
+            "invalid_field",
+            f"{TIME_BUDGET} must be a positive whole number of seconds, such as "
+            "300 for five minutes.",
+        )
+    return value
+
+
 def review_policy(
     read_asset: Callable[[str], bytes], *, compiler: str = __version__
 ) -> Review:
@@ -316,13 +330,15 @@ def review_policy(
         raise GatesealError("missing_policy_asset", f"The policy has no file {POLICY}.")
     document = mapping(parse_toml(source), "policy")
     minimum = _compatibility(document, version(compiler, "compiler_version"))
+    time_budget = _time_budget(document.pop(TIME_BUDGET, None))
     required = {"schema", "release", "minimum_compiler", "capabilities"}
     extra = sorted(set(document) - required)
     if extra:
         raise GatesealError(
             "invalid_field",
             f"{POLICY} has {', '.join(extra)} at its top level, which holds only "
-            "schema, release, minimum_compiler and capabilities.",
+            "schema, release, minimum_compiler, capabilities and the optional "
+            f"{TIME_BUDGET}.",
             next_step="Write each tool as capabilities.<capability>.tools.<tool>, "
             "with its pin and reviewed versions, and each choice in "
             "capabilities.<capability>.choices.",
@@ -356,10 +372,11 @@ def review_policy(
         toolset.capabilities,
         toolset.definitions,
         toolset.uses,
-        toolset.alternatives,
+        toolset.hook_choices,
         catalogs,
         exposed,
         tuple(assets),
+        time_budget,
     )
 
 
@@ -396,10 +413,11 @@ def load_policy(
         review.minimum_compiler,
         review.capabilities,
         tools,
-        review.alternatives,
+        review.hook_choices,
         review.choices,
         assets,
         content_digest(assets),
+        review.time_budget_seconds,
     )
 
 
@@ -484,14 +502,14 @@ def _exposed(toolset: Toolset) -> dict[tuple[str, str], ChoiceValue]:
 
     A choice that a tool definition declares renders a key into the tool's
     configuration, so the policy's own file must not set that key too. Every
-    alternative needs a default, which says which hook runs.
+    hook choice needs a default, which says which hooks run.
     """
     declared = declared_choices(
         (
             (use.capability, toolset.definitions[name])
             for name, use in toolset.uses.items()
         ),
-        toolset.alternatives,
+        toolset.hook_choices,
     )
     exposed: dict[tuple[str, str], ChoiceValue] = {}
     for (capability, name), default in toolset.defaults.items():
@@ -499,12 +517,12 @@ def _exposed(toolset: Toolset) -> dict[tuple[str, str], ChoiceValue]:
         exposed[capability, name] = parse(
             default, f"capabilities.{capability}.choices.{name}"
         )
-    for capability, name in toolset.alternatives:
+    for (capability, name), choice in toolset.hook_choices.items():
         if (capability, name) not in exposed:
             raise GatesealError(
                 "invalid_field",
-                f"capabilities.{capability}.alternatives.{name} needs "
-                f"capabilities.{capability}.choices.{name} with the default hook.",
+                f"{choice.field} needs capabilities.{capability}.choices.{name} "
+                "with its default.",
             )
     _require_unscanned(exposed, toolset)
     _require_unset_keys(exposed, toolset)

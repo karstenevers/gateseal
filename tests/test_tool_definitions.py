@@ -17,13 +17,15 @@ BETTERLEAKS_1_8 = (
     "review_by = 2026-12-31\n"
 )
 EXCLUDE = '\n[choices.hygiene]\nexclude = ["vendor", "docs/gen.d"]\n'
+CI = '\n[ci]\nprovider = "github"\ndefault_branch = "main"\n'
+WORKFLOW = ".github/workflows/gateseal.yml"
 CONFIG = ".pre-commit-config.yaml"
 RUFF = ".gateseal/ruff.toml"
 RULES = ".gateseal/betterleaks.toml"
 REPORT = ".gateseal/betterleaks-report.tmpl"
 HISTORY_REPORT = ".gateseal/betterleaks-history-report.tmpl"
 SECRETS = {
-    RULES: "183ff997bc28f117c430b0b47903b9ddc92f697e8d421dc126e191fdc583c26e",
+    RULES: "af60be81d22bdd646aa8b41ba8955d86420d71b486a14f81fa1d971293e4c71d",
     REPORT: "e90202b5add329ed4cc8e507dacdda7bbdc9cb72b37aa717a8f31897bf53cdf9",
     HISTORY_REPORT: (
         "6a78914b3697c6e2a5baa53330b760938a191b367afc428947eb9ca4465c6aa6"
@@ -35,34 +37,41 @@ ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "412d09bbbe99d2550651f44835bd7d717189841c43169d6dcd9e5f9d8a6e643e"
+            "b4c4215f26f94b5981c1d5164ba55282dad82c9adb4ae522e8ce4e646fd55e1a"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
+    ("hygiene", CI): {
+        "gateseal.lock": (
+            "add6ece08770e5b0ee2ea8d5d9a5fb120df4c9b7ed9135b48f083ac4d5845815"
+        ),
+        CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
+        WORKFLOW: "13f46910c665a9eaa54097751434dbda827bf1caba0047f2a2d81c132707571c",
+    },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "4398d56e0f6e3a5bf985dfb86abafe6073c02e3c74a92664bed37d63732c21f9"
+            "19ebbf0275017880df760ea7493b0ea35d144467df10913af996156a9f8c6b69"
         ),
         CONFIG: "0b1cc4d5b9a12df9e44c94893c455d35b6a087c44c95143f0334148d8e2cf451",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "4053ca24ef02d03c4094de7e0ba2c1578ab0138b9178bf8811c4ee0a74d24159"
+            "db698048a15e55c1a8e0e84a1e982be9991c2447aa2b9bc657cf58cc687f0d29"
         ),
         CONFIG: "539062edebd6998b5a2f2050ffe4e63897e8c7d7b221435cee1a65325590d3f3",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "67d286809e169657a92c3b526e97d8211d017144e8d676763009bdcc4cc291f7"
+            "57d485b974ce7968ecf162474f6992cbc3e85b34a07a1e61e4e21dc2cfe42ee7"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "d71a5f893eb50e2eb490ec776345a718359acd5a597b5f730770f30332c10601"
+            "3516a0642fdff45f401ca245db69b69d15a491b8e00a0922e3a7e8ac71b2f093"
         ),
         CONFIG: "6be995a52e003a9e380b0c5db4e523eaf2f0ab470b60e4870780f9863c551d78",
         **PYTHON,
@@ -70,7 +79,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "213716a6e90487fb87036834ddd3b16c12ada9b54785f990f1cd5909112fe06f"
+            "97b72319865ad46287baec1fbf46dd62e5f69109a4e7b5bcc70ac7510aa166c7"
         ),
         CONFIG: "c86d15d1696b56d8ab5b15c2268efad5e03754148a6d9f8e84b95c3d6233fd44",
         **PYTHON,
@@ -78,7 +87,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "f4faa07e3ef77cfcc1f7cd7ba55ace2c9b58bd7d6ca33e282137469ec1e07b9d"
+            "c056714ec825435d265079accc86ce28e266bf3013d51866675dc417cbdb99db"
         ),
         CONFIG: "3a88b2d4f19a4e2777264d6e781ab2046db54102087ad629ad7882d0f644c967",
         **PYTHON,
@@ -92,6 +101,7 @@ GOLDEN = {
     list(GOLDEN),
     ids=[
         "hygiene",
+        "hygiene with a github workflow",
         "python",
         "secrets",
         "secrets with betterleaks 1.8.0",

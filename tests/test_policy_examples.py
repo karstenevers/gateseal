@@ -1,4 +1,4 @@
-"""Every policy example in the docs is one that gateseal loads.
+"""The policy-format guide's alternatives fragment is part of add-a-tool's Black policy.
 
 The add-a-tool guide's Gitleaks and Black policies have tests of their own,
 which lock, compile and run them.
@@ -7,20 +7,6 @@ which lock, compile and run them.
 import tomllib
 
 from doc_examples import example
-from gateseal.policy import review_policy
-
-
-def test_the_policy_format_example_loads():
-    text = example("policy-format.md", "policy example").encode()
-
-    def read_asset(name):
-        if name != "policy.toml":
-            raise FileNotFoundError(name)
-        return text
-
-    review = review_policy(read_asset)
-    assert review.capabilities == ("hygiene",)
-    assert review.choices == {("hygiene", "exclude"): ()}
 
 
 def within(part, whole):

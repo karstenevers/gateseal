@@ -81,7 +81,8 @@ def test_two_repositories_upgrade_and_roll_back_independently(
     assert upgraded["code"] == "upgraded"
     assert targets(upgraded) == {"gateseal": (current, upcoming, "upgrade")}
     assert upgraded["changed"][0] == "gateseal.lock"
-    assert any("gateseal setup" in step for step in upgraded["next_steps"])
+    setup = f"uvx gateseal@{NEXT} setup"
+    assert any(setup in step for step in upgraded["next_steps"])
     success(["git", "add", *TRACKED], first)
     commit_hygiene(first)
     assert committed_pin(first)["version"] == NEXT

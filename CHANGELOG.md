@@ -29,9 +29,44 @@ change the manifest, policy or lock format, and its entry says how to move.
   team policy that reviews Betterleaks stops loading until you run `gateseal
   policy lock` on its directory again, which records these SHA-256s, and
   release it.
+- Repository hooks. A `[hooks.<id>]` table in `gateseal.toml` runs a script
+  of the repository after every policy hook, at a commit, in `gateseal run`
+  and in the CI gate. It only adds a check: an ID or a name that a policy hook
+  uses is refused.
+- Optional hooks. `optional` in a capability of `policy.toml` lists hooks that
+  a repository may leave out with `skip` in `[choices.<capability>]`. A
+  skipped hook leaves the generated configuration, so a commit and the CI
+  gate both skip it. gateseal reserves `skip` in every capability, as
+  `exclude`.
+- A page on how to adjust a setup, which lists each way to change the checks
+  and who makes the change, and a section on hooks of your own in Work in a
+  configured repository.
+- A time budget for the CI gate. `time_budget_seconds` in `policy.toml` sets
+  it in whole seconds. Each `gateseal gate` that checks files reports its time
+  in a `duration` diagnostic. A gate over the budget also gives an
+  `over_time_budget` warning and keeps the exit code that its checks decide.
 
 ### Changed
 
+- The bundled `secrets` rules start from the rules built into Betterleaks. A
+  commit now also stops on an AWS secret access key, a private key, a
+  password, and tokens of services such as Slack, Stripe and npm. gateseal's
+  own rules for an AWS access key ID alone and for the `ghp_`, `gho_`, `ghu_`,
+  `ghs_` and `ghr_` GitHub tokens stay, and Betterleaks' built-in rule finds
+  fine-grained `github_pat_` tokens. A new rule finds a base64 key that
+  starts with `+` or `/`, which the built-in generic rule misses. The
+  placeholder filter no longer drops a secret that starts with `true`, holds
+  `false` or ends with `null`. A policy's Betterleaks or Gitleaks rule file
+  can use an `extend` table with `useDefault` and `disabledRules`. Any other
+  `extend` is still refused.
+- Every failed result names at least one next step: a command to run or a
+  plain fix. In `--json`, `next_steps` is never empty when `status` is
+  `failed`, and text output and the `gateseal-check` hook print a `Next:`
+  line.
+- With `GITHUB_ACTIONS=true`, text output prints each warning as a
+  `::warning` workflow command instead of a `Warning:` line, which GitHub
+  shows as an annotation. This also applies to the overdue and redundant
+  Version Exception warnings of `gateseal check`.
 - A commit runs pre-commit, not the installed gateseal command. pre-commit
   builds the environment of each hook repository, and mise installs each
   release binary at its first use and checks its SHA-256. A hook that starts a
@@ -46,6 +81,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   `core.hooksPath` is set or mise's install at first use is off.
 - The generated GitHub workflow runs `gateseal setup`, `gateseal check` and
   `gateseal gate`.
+- A new push to a pull request cancels the older run of the generated GitHub
+  workflow for that pull request. Runs for pushes, merge groups, manual starts
+  and the schedule never cancel each other. A repository gets the new workflow
+  when it moves to this release.
 - A Tool Definition's `stages` is `["commit", "run", "ci"]` or `["ci"]`.
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
   it names. It needed Python 3.14.10 or a later 3.14 release before.
@@ -71,6 +110,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   format, its gateseal pin, the Manifest's SHA-256, the policy's digest and
   the files it lists. A listed file that the release never writes stops the
   move, and so does a bundled policy with other content under the same label.
+- When `gateseal.lock` pins another gateseal release, the next step of
+  `selected_compiler_required` runs that release with `uvx gateseal@VERSION`
+  instead of asking you to install it. After a move to another release,
+  `gateseal upgrade` asks each developer to run `uvx gateseal@VERSION setup`.
 - The Lock no longer records the CPython and pre-commit that gateseal runs.
 - A hook repository record in the Lock no longer has `tools`.
 

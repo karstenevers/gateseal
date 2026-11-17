@@ -1,3 +1,4 @@
+import re
 from importlib.resources import files
 
 import pytest
@@ -73,6 +74,78 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
         .endswith('"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "${scope[@]}"')
     )
     assert "TOKEN" not in str(gate["env"])
+
+
+def evaluate(text, github):
+    """Evaluate each ${{ }} in text against the github context, as GitHub does.
+
+    Only the syntax the concurrency mapping needs: a value that is one
+    expression keeps its type, and an expression inside a string becomes text.
+    """
+    whole = re.fullmatch(r"\$\{\{ (.*) \}\}", text)
+    if whole:
+        return expression(whole[1], github)
+    return re.sub(r"\$\{\{ (.*?) \}\}", lambda m: str(expression(m[1], github)), text)
+
+
+def expression(text, github):
+    values = [comparison(part, github) for part in text.split(" || ")]
+    return next((value for value in values if value), values[-1])
+
+
+def comparison(text, github):
+    left, *right = text.split(" == ")
+    value = operand(left, github)
+    return value == operand(right[0], github) if right else value
+
+
+def operand(text, github):
+    if text.startswith("'"):
+        return text.strip("'")
+    value = {"github": github}
+    for key in text.split("."):
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
+
+
+def run_concurrency(event, run_id, pull_request=None):
+    """Return the concurrency group and cancel flag of one run of the workflow."""
+    github = {"event_name": event, "run_id": run_id, "event": {}}
+    if pull_request is not None:
+        github["event"]["pull_request"] = {"number": pull_request}
+    concurrency = workflow()[0]["concurrency"]
+    return (
+        evaluate(concurrency["group"], github),
+        evaluate(concurrency["cancel-in-progress"], github),
+    )
+
+
+OTHER_EVENTS = ("push", "merge_group", "workflow_dispatch", "schedule")
+
+
+def test_a_new_run_of_a_pull_request_cancels_its_older_run():
+    older = run_concurrency("pull_request", 19000000001, pull_request=7)
+    newer = run_concurrency("pull_request", 19000000002, pull_request=7)
+    assert older[0] == newer[0]
+    assert older[1] is True and newer[1] is True
+
+
+def test_runs_of_different_pull_requests_never_cancel_each_other():
+    first = run_concurrency("pull_request", 19000000001, pull_request=7)
+    second = run_concurrency("pull_request", 19000000002, pull_request=8)
+    assert first[0] != second[0]
+
+
+@pytest.mark.parametrize("event", OTHER_EVENTS)
+def test_every_other_run_has_a_group_of_its_own_and_never_cancels(event):
+    first = run_concurrency(event, 7)
+    second = run_concurrency(event, 8)
+    pull_requests = {
+        run_concurrency("pull_request", run_id, pull_request=7)[0] for run_id in (7, 8)
+    }
+    assert first[0] != second[0]
+    assert first[1] is False and second[1] is False
+    assert not {first[0], second[0]} & pull_requests
 
 
 def test_preparation_pins_its_tools_and_the_locked_gateseal():

@@ -5,24 +5,36 @@
   </picture>
 </h1>
 
-gateseal runs reviewed checks on the files you commit. Each repository records
-the exact tool versions it uses. A generated GitHub Actions workflow can run
-those same tools in CI.
+gateseal keeps one reviewed set of commit checks in every repository, on developer machines and in CI.
 
-## Get started
+## Who it is for
 
-- [Try the demo](demo.md) to see a commit fail, fix the file, and commit again.
-- [Prepare your clone](work-in-a-configured-repository.md) if the repository already uses gateseal.
-- [Install gateseal](install.md) and [configure a repository](configure-a-repository.md) to start using the bundled checks.
+- **Platform teams** review a policy release once and roll it out to many repositories.
+- **Repository maintainers** adopt a release and see when the repository drifts from it.
+- **Developers and coding agents** commit as usual. pre-commit runs the pinned checks.
 
-## Manage checks
+## Why use it
 
-- [Run checks in GitHub Actions](github-ci.md) or [upgrade a tool, policy, or compiler](upgrade.md).
-- [Adopt a team policy](adopt-a-team-policy.md), [write a policy](author-a-policy.md), or [add a tool](add-a-tool.md).
+- **One source of truth.** A versioned policy records tool versions, rules, binary checksums, and CI settings.
+- **Drift detection.** Each commit and CI run compares the generated files with the Lock.
+- **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock.
+- **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries must match recorded checksums.
+- **Fast CI out of the box.** The generated workflow checks only what a pull request changed. With the secrets checks on, Betterleaks scans its commits. A scheduled run checks every file. You do not have to maintain this logic. [How it works](github-ci.md#what-the-gate-checks).
+- **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and the next step.
 
-## Find an answer
+## Start here
 
-- [Troubleshoot a failed check or commit](troubleshooting.md).
-- [Look up a command or result](commands-and-results.md) or [find a term in the glossary](../GLOSSARY.md).
-- [Follow a commit through its checks](how-a-commit-runs.md) or [read about the architecture](architecture.md).
-- [See what the tests cover](what-the-tests-prove.md) or [build and test gateseal](verification.md).
+[Install gateseal](install.md). Then [configure a repository](configure-a-repository.md) with the hygiene and secrets checks:
+
+```sh
+gateseal configure --capability hygiene --capability secrets --ci github
+```
+
+In a Python repository, add `--capability python` for Ruff.
+
+- [Try the checks](demo.md) in a scratch repository.
+- [Work in a configured repository](work-in-a-configured-repository.md) or [troubleshoot](troubleshooting.md).
+- [Adjust checks](adjust-a-setup.md), [enable CI](github-ci.md), or [upgrade](upgrade.md).
+- [Adopt a team policy](adopt-a-team-policy.md) or [author one](author-a-policy.md).
+- Look up [commands](commands-and-results.md), [repository configuration](policy-contract.md), and [policy fields](policy-format.md).
+- Read [how gateseal works](architecture.md).

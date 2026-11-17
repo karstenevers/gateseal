@@ -15,6 +15,7 @@ import pytest
 from conftest import TRACKED, published_origin, stderr_refusal
 from gateseal import __version__, commit_check
 from gateseal.compiler_release import PRE_COMMIT, REPOSITORY
+from gateseal.diagnostics import NEXT_STEPS
 from gateseal.worktree import locate_worktree
 from installation import clone, process, success
 from stand_ins import configure
@@ -96,6 +97,19 @@ def test_the_hook_reads_the_index_that_git_names(staged, capsys, monkeypatch):
     assert hook(capsys) == (0, "")
 
 
+def test_a_refusal_without_its_own_step_names_the_default(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert hook(capsys) == (
+        1,
+        (
+            "Install the documented git prerequisite.",
+            NEXT_STEPS["missing_prerequisite"],
+        ),
+    )
+
+
 def edit_lock(root, change):
     def edited(text):
         document = json.loads(text)
@@ -112,7 +126,9 @@ def test_a_lock_of_another_gateseal_names_it(staged, capsys):
         1,
         "gateseal.lock pins gateseal 9.9.9",
     )
-    assert step.startswith("Install gateseal 9.9.9, or run gateseal upgrade")
+    assert step.startswith(
+        "Run gateseal 9.9.9 with uvx gateseal@9.9.9, or run gateseal upgrade"
+    )
 
 
 def test_a_lock_that_lists_a_file_gateseal_never_writes_fails(staged, capsys):
