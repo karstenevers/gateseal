@@ -19,7 +19,7 @@ To return to the policy's pinned version, supply its exact version. A bare compo
 
 To move gateseal itself, run `gateseal upgrade` using the target release. A bundled policy change can require `--policy bundled`. Change other policy and tool selections afterwards.
 
-Review the changed Manifest, Lock, and generated files. Stage the files. Commit them together. A later commit builds any newly selected hook environments. If the release needs a newer pre-commit, each developer updates pre-commit or runs setup for that release.
+Review the changed Manifest, Lock, and generated files, such as the GitHub workflow. Stage the files. Commit them together. A later commit builds any newly selected hook environments. If the release needs a newer pre-commit, each developer updates pre-commit or runs setup for that release.
 
 ## Recover from an interrupted upgrade
 

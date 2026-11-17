@@ -7,7 +7,9 @@ workflow, the Lock, and the files it checks come from one commit. Its jobs
 never change with the selection: the gate runs the ci stage of the native
 configuration, so a tool that runs only in CI needs no workflow branch.
 Every value the Lock supplies is a JSON-quoted YAML scalar and reaches a script
-only through env.
+only through env. A new push to a pull request cancels its older run, while
+every other run gets a concurrency group of its own, so it never cancels or
+waits for another.
 """
 
 import json
@@ -132,6 +134,10 @@ def workflow(ci: CI, pin: GatesealPin, source: Source) -> bytes:
         '    - cron: "37 4 * * 1"',
         "permissions:",
         "  contents: read",
+        "concurrency:",
+        "  group: gateseal-${{ github.event_name }}-"
+        "${{ github.event.pull_request.number || github.run_id }}",
+        "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
         "jobs:",
         "  gateseal:",
         "    name: ${{ github.event_name == 'push' && 'gateseal-push' || 'gateseal' }}",

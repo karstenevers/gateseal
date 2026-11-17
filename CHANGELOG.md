@@ -58,6 +58,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   `core.hooksPath` is set or mise's install at first use is off.
 - The generated GitHub workflow runs `gateseal setup`, `gateseal check` and
   `gateseal gate`.
+- A new push to a pull request cancels the older run of the generated GitHub
+  workflow for that pull request. Runs for pushes, merge groups, manual starts
+  and the schedule never cancel each other. A repository gets the new workflow
+  when it moves to this release.
 - A Tool Definition's `stages` is `["commit", "run", "ci"]` or `["ci"]`.
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
   it names. It needed Python 3.14.10 or a later 3.14 release before.
