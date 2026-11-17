@@ -5,6 +5,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from typing import cast
 
 from gateseal import __version__
 from gateseal.compiler_release import PRE_COMMIT
@@ -16,7 +17,8 @@ from gateseal.policy import (
     choice_parser,
     require_compatible,
 )
-from gateseal.policy_tools import CAPABILITY
+from gateseal.policy_tools import CAPABILITY, SKIP
+from gateseal.repository_hooks import RepositoryHook, parse_hooks, require_own_ids
 from gateseal.tools.model import Hook, Origin, Tool, require_local_hooks
 from gateseal.validation import (
     fields,
@@ -165,11 +167,14 @@ def _ci(value: object) -> CI:
 
 @dataclass(frozen=True)
 class Manifest:
+    """A parsed gateseal.toml. hooks are its Repository Hooks, in file order."""
+
     capabilities: tuple[str, ...]
     source: Source
     choices: Mapping[str, Mapping[str, object]]
     exceptions: tuple[ExceptionRequest, ...]
     ci: CI | None
+    hooks: tuple[RepositoryHook, ...]
 
 
 def capabilities(names: list[object]) -> tuple[str, ...]:
@@ -243,7 +248,7 @@ def parse_manifest(data: bytes) -> Manifest:
     doc = fields(
         document,
         {"schema", "capabilities", "policy", "choices", "exceptions"}
-        | ({"ci"} & set(document)),
+        | ({"ci", "hooks"} & set(document)),
         "manifest",
     )
     schema(doc["schema"])
@@ -260,6 +265,7 @@ def parse_manifest(data: bytes) -> Manifest:
             for name, value in mapping(doc["exceptions"], "exceptions").items()
         ),
         _ci(doc["ci"]) if "ci" in doc else None,
+        parse_hooks(doc.get("hooks", {})),
     )
 
 
@@ -327,19 +333,23 @@ class Selection:
     """What a Manifest selects from one policy: the inputs a Lock records.
 
     tools holds every tool the capabilities use, in capability order, each at
-    its selected version with exceptions applied and running only the chosen
-    alternatives. ci is the Manifest's.
+    its selected version with exceptions applied and running only the hooks
+    that the choices keep. ci and repository_hooks are the Manifest's.
     """
 
     choices: Mapping[str, Mapping[str, ChoiceValue]]
     exceptions: Mapping[str, VersionException]
     tools: tuple[Tool, ...]
     ci: CI | None
+    repository_hooks: tuple[RepositoryHook, ...]
 
     @property
     def hooks(self) -> tuple[Hook, ...]:
         """Return every hook the selection runs, in configuration order."""
-        return tuple(hook for tool in self.tools for hook in tool.use.hooks)
+        return (
+            *(hook for tool in self.tools for hook in tool.use.hooks),
+            *(hook.hook for hook in self.repository_hooks),
+        )
 
 
 def resolve(manifest: Manifest, policy: Policy) -> Selection:
@@ -350,9 +360,15 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
     the releases with every exception applied must meet each other's
     requirements, and the pre-commit this compiler runs must run every hook.
     Each tool's release must accept the value of every choice its definition
-    declares, the policy's default included.
+    declares, the policy's default included. No Repository Hook may take the
+    ID or name of a hook of the policy, selected or not, so selecting another
+    capability never clashes.
     """
     _require_offered(manifest, policy)
+    require_own_ids(
+        manifest.hooks,
+        (hook for tool in policy.tools.values() for hook in tool.use.hooks),
+    )
     choices = _choice_values(manifest, policy)
     used = _chosen(policy, manifest.capabilities, choices)
     exceptions = {
@@ -378,7 +394,13 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
         PRE_COMMIT,
     )
     _require_accepted(tools, choices)
-    return Selection(choices, dict(sorted(exceptions.items())), tools, manifest.ci)
+    return Selection(
+        choices,
+        dict(sorted(exceptions.items())),
+        tools,
+        manifest.ci,
+        manifest.hooks,
+    )
 
 
 def _require_offered(manifest: Manifest, policy: Policy) -> None:
@@ -394,18 +416,30 @@ def _require_offered(manifest: Manifest, policy: Policy) -> None:
             f"The selected policy offers no {', '.join(missing)} capability.",
         )
     for capability, values in manifest.choices.items():
-        for name in values:
+        for name, value in values.items():
             if (capability, name) not in policy.choices:
-                raise GatesealError(
-                    "unsupported_choice",
-                    f"The policy exposes no choice {capability}.{name}.",
-                )
+                raise _unexposed(capability, name, value)
         if capability not in selected:
             raise GatesealError(
                 "unused_choice",
                 f"choices.{capability} applies to {capability}, which the Manifest "
                 "does not select.",
             )
+
+
+def _unexposed(capability: str, name: str, value: object) -> GatesealError:
+    """Return the refusal of a choice the policy does not expose.
+
+    A skip names the hooks it would skip.
+    """
+    message = f"The policy exposes no choice {capability}.{name}."
+    if name == SKIP and isinstance(value, list) and value:
+        listed = ", ".join(map(str, cast(list[object], value)))
+        message += (
+            f" It marks no hook of {capability} as optional, so {MANIFEST} cannot "
+            f"skip {listed}."
+        )
+    return GatesealError("unsupported_choice", message)
 
 
 def _choice_values(
@@ -451,7 +485,7 @@ def _version_exception(
             "unused_exception" if offered else "unsupported_component",
             f"exceptions.{request.component} names a component that "
             + (
-                "the selected capabilities and alternatives do not use."
+                "the selected capabilities and choices do not use."
                 if offered
                 else "the policy does not offer."
             ),
@@ -497,17 +531,18 @@ def _chosen(
     selected: tuple[str, ...],
     choices: Mapping[str, Mapping[str, ChoiceValue]],
 ) -> dict[str, Tool]:
-    """Return the tools of the selected capabilities, without unchosen alternatives.
+    """Return the tools of the selected capabilities, without the hooks they drop.
 
-    A tool loses the hooks of every alternative a choice did not pick, and a
-    tool left without hooks is not used.
+    A tool loses each hook that a hook choice drops: an alternative the
+    choice did not pick, or an optional hook it skips. A tool left without
+    hooks is not used, so it has no configuration, no Lock entry and no
+    history scan.
     """
     dropped = {
         hook
-        for (capability, name), alternatives in policy.alternatives.items()
+        for (capability, name), offer in policy.hook_choices.items()
         if capability in selected
-        for hook in alternatives.hooks
-        if hook != choices[capability][name]
+        for hook in offer.dropped(choices[capability][name])
     }
     used: dict[str, Tool] = {}
     for name, tool in policy.tools.items():

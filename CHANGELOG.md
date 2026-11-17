@@ -29,6 +29,18 @@ change the manifest, policy or lock format, and its entry says how to move.
   team policy that reviews Betterleaks stops loading until you run `gateseal
   policy lock` on its directory again, which records these SHA-256s, and
   release it.
+- Repository hooks. A `[hooks.<id>]` table in `gateseal.toml` runs a script
+  of the repository after every policy hook, at a commit, in `gateseal run`
+  and in the CI gate. It only adds a check: an ID or a name that a policy hook
+  uses is refused.
+- Optional hooks. `optional` in a capability of `policy.toml` lists hooks that
+  a repository may leave out with `skip` in `[choices.<capability>]`. A
+  skipped hook leaves the generated configuration, so a commit and the CI
+  gate both skip it. gateseal reserves `skip` in every capability, as
+  `exclude`.
+- A page on how to adjust a setup, which lists each way to change the checks
+  and who makes the change, and a section on hooks of your own in Work in a
+  configured repository.
 
 ### Changed
 

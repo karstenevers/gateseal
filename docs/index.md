@@ -17,6 +17,7 @@ those same tools in CI.
 
 ## Manage checks
 
+- [Adjust a setup](adjust-a-setup.md): add a script of the repository as a check, skip an optional hook, or add a hook for yourself.
 - [Run checks in GitHub Actions](github-ci.md) or [upgrade a tool, policy, or compiler](upgrade.md).
 - [Adopt a team policy](adopt-a-team-policy.md), [write a policy](author-a-policy.md), or [add a tool](add-a-tool.md).
 

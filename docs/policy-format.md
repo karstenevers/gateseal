@@ -38,7 +38,8 @@ exclude = []
 | `capabilities.<name>.tools.<tool>.reviewed` | Every version the policy's authors reviewed, each once. |
 | `capabilities.<name>.tools.<tool>.requires.<version>` | Optional. The minimum versions of other tools that a reviewed version needs. |
 | `capabilities.<name>.alternatives.<choice>` | Optional. Two or more distinct hooks from this capability. Expose a choice with a default to [select one of them](#alternatives). |
-| `capabilities.<name>.choices.<choice>` | Exposes a choice with its default. Use the compiler's [`exclude`](#exclude), a tool's declared choice, or a capability's alternatives. Omit the table if the capability exposes none. |
+| `capabilities.<name>.optional` | Optional. Distinct hooks from this capability that a repository may [skip](#optional-hooks). Expose `skip` with its default. |
+| `capabilities.<name>.choices.<choice>` | Exposes a choice with its default. Use the compiler's [`exclude`](#exclude) or [`skip`](#optional-hooks), a tool's declared choice, or a capability's alternatives. Omit the table if the capability exposes none. |
 
 ## Capabilities
 
@@ -83,6 +84,37 @@ repository selected, run `gateseal status` or `gateseal doctor`.
 | A choice lacks two distinct hooks or a default. Its name can also conflict with a tool or compiler choice. | `invalid_field` |
 | The manifest selects a value outside the list of hooks. | `invalid_choice` |
 
+### Optional hooks
+
+Mark hooks as optional when a repository may do without them. These tables
+let a repository that selects `hygiene` leave out `check-yaml` and keep the
+other hooks of `pre-commit-hooks`.
+
+<!-- policy tables: optional -->
+```toml
+[capabilities.hygiene]
+optional = ["check-yaml"]
+
+[capabilities.hygiene.choices]
+exclude = []
+skip = []
+```
+
+With the default `[]`, every hook runs until a repository
+[skips some](policy-contract.md#skip-optional-hooks). A skipped hook leaves
+the generated configuration, so a commit and the CI gate skip it alike. If
+the skip leaves a tool with no hooks, gateseal skips its configuration and
+Lock entry. The CI gate then runs no history scan of it, and a Version
+Exception for that tool gives `unused_exception`.
+
+| Problem | Code |
+| --- | --- |
+| `optional` names a hook the capability does not run. | `unsupported_hook` |
+| An alternative also names an optional hook. | `duplicate_identifier` |
+| `optional` lacks one or more distinct hooks, or the capability exposes no `skip` default. | `invalid_field` |
+| The capability exposes `skip` without `optional`. | `unsupported_choice` |
+| The manifest skips a hook that `optional` does not list, or names one twice. | `invalid_choice` |
+
 ## Tools
 
 Every tool belongs to exactly one capability, as a table under its
@@ -100,7 +132,7 @@ its file.
 | A `hook_ids` entry is missing from the definition. | `unsupported_hook` |
 
 Each tool choice needs a unique name within its capability. The compiler
-reserves `exclude` in every capability.
+reserves `exclude` and `skip` in every capability.
 
 ### Exclude
 

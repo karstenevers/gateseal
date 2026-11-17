@@ -21,6 +21,9 @@ A named set of tools that a **Policy** defines and a **Manifest** selects, such 
 <a id="policy-choice"></a>**Policy Choice**:
 A parameter that a Policy exposes for a repository to select, such as its formatter or SQL dialect.
 
+<a id="optional-hook"></a>**Optional Hook**:
+A hook that a **Policy** marks as one that a repository may leave out. A repository lists those it leaves out in the `skip` **Policy Choice** of the hook's **Capability**. A commit and the **CI Gate** then both skip them.
+
 <a id="reviewed-version"></a>**Reviewed Version**:
 A version of one component that a **Policy** lists as reviewed with its rules. It is either the pin or an alternative that a **Version Exception** may select.
 
@@ -36,7 +39,7 @@ The person who maintains a team's **Policy** repository, reviews its tool versio
 ### Repositories
 
 <a id="manifest"></a>**Manifest**:
-The repository-owned definition of one selected Policy release, its quality capabilities, its Policy Choices, and its Version Exceptions.
+The repository-owned definition of one selected Policy release, its quality capabilities, its Policy Choices, its Version Exceptions, and its **Repository Hooks**.
 
 <a id="lock"></a>**Lock**:
 The committed record of the exact resolved gateseal inputs, such as the gateseal pin and the policy release, and the ownership ledger for the generated checks configuration.
@@ -49,6 +52,12 @@ The **Lock** in the index that a commit records. It alone selects the compiler t
 
 <a id="repository-maintainer"></a>**Repository Maintainer**:
 The person who edits one repository's **Manifest**.
+
+<a id="repository-hook"></a>**Repository Hook**:
+A hook that a **Manifest**'s `[hooks]` table adds to run a script of the repository. It runs after every hook of the **Policy**, at a commit, in `gateseal run` and in the **CI Gate**. It only adds a check, and gateseal installs nothing for it.
+
+<a id="personal-hook"></a>**Personal Hook**:
+A hook that one developer adds in Git's configuration or in a clone's hooks folder. It touches no file that gateseal writes, and the **CI Gate** does not run it.
 
 ### Tools
 
@@ -94,6 +103,8 @@ A tool's scan of every commit in a revision range, which the **CI Gate** runs so
 - Each gateseal release names exactly one **Compiler Runtime**, which no **Policy** or **Version Exception** changes.
 - **Setup** installs the **Compiler Runtime** and the **Launcher** on a machine. A commit needs only a **Launcher** and a pre-commit. It builds gateseal's own hook from the commit that the **Staged Lock** pins.
 - A **Capability** may offer alternatives as a **Policy Choice**, whose value names the one hook of its tools that runs.
+- A **Capability** may offer **Optional Hooks** that a **Manifest** skips with a **Policy Choice**. A **Manifest** can skip no other hook of the **Policy**.
+- A change that the **CI Gate** must run goes in the **Policy** or the **Manifest**, such as a **Repository Hook**, and the **Lock** records it. A change for one developer is a **Personal Hook** in Git.
 - A **Policy Lock** belongs to one **Policy** release and is part of its content digest.
 - Each **Built-in Tool** is a **Tool Definition** of one **Tool Kind**.
 - A **Policy** defines its **Capabilities**, and each tool belongs to one. A **Team-defined Tool** never takes a **Built-in Tool**'s name.

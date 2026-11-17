@@ -35,6 +35,7 @@ from gateseal.manifest import (
     tool_note,
 )
 from gateseal.policy import Policy, load_bundled_policy
+from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.validation import (
@@ -91,18 +92,18 @@ def compile_outputs(
     capability order, and declares its own outputs, which its capability's
     choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it, so a file is kept from a tool only by a
-    policy that exposes exclude in that tool's capability. A Manifest's [ci]
-    adds the provider's workflow, which names
-    the gateseal commit CI installs and the policy repository its credential
-    helper serves.
+    policy that exposes exclude in that tool's capability. The Manifest's
+    Repository Hooks come last. A Manifest's [ci] adds the provider's
+    workflow, which names the gateseal commit CI installs and the policy
+    repository its credential helper serves.
     """
-    config = {
-        "minimum_pre_commit_version": PRE_COMMIT,
-        "repos": [
-            pin.hook_repository(),
-            *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
-        ],
-    }
+    repositories = [
+        pin.hook_repository(),
+        *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
+    ]
+    if selection.repository_hooks:
+        repositories.append(repository_entry(selection.repository_hooks))
+    config = {"minimum_pre_commit_version": PRE_COMMIT, "repos": repositories}
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
@@ -283,7 +284,7 @@ def acquire(
 
 
 def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
-    """Name the policy release, gateseal, tools, choices and exceptions."""
+    """Name the policy release, gateseal, tools, hooks, choices and exceptions."""
     source, policy, pin = locked.source, locked.policy, locked.pin
     if isinstance(source, BundledSource):
         origin = f"bundled with gateseal {pin.version}"
@@ -307,6 +308,7 @@ def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
         identity,
         release,
         *map(tool_note, locked.selection.tools),
+        *(hook.note() for hook in locked.selection.repository_hooks),
         *notes(locked.selection, today or date.today()),
     )
 
@@ -722,6 +724,7 @@ def configure(
         manifest = _new_manifest(capability, request, git, preparation, ci)
     parsed = parse_manifest(manifest)
     _assert_flags(parsed, capability, request, ci)
+    require_files(root, parsed.hooks)
     previous = _optional(root, LOCK)
     if previous is None:
         recorded: dict[str, object] = {}

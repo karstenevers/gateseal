@@ -52,6 +52,7 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Set up a repository:
       - Configure a repository: configure-a-repository.md
+      - Adjust a setup: adjust-a-setup.md
       - GitHub CI: github-ci.md
       - Upgrade and roll back: upgrade.md
   - Use a team policy:
@@ -90,6 +91,7 @@ nav:
       - design/0012-fail-gateseal-pull-requests-on-surviving-mutants.md
       - design/0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md
       - design/0014-write-each-tool-once-under-its-capability.md
+      - design/0015-keep-adjustments-where-the-ci-gate-sees-them.md
   - Contribute:
       - Build and verify: verification.md
 
