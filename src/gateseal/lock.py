@@ -366,8 +366,8 @@ def _other_gateseal(pin: GatesealPin) -> GatesealError:
         "selected_compiler_required",
         f"{LOCK} pins gateseal {pin.version} from {pin.repository} at commit "
         f"{pin.commit}, not this gateseal {__version__}.",
-        next_step=f"Install gateseal {pin.version}, or run gateseal upgrade to "
-        f"move {LOCK} to gateseal {__version__}.",
+        next_step=f"Run gateseal {pin.version} with uvx gateseal@{pin.version}, "
+        f"or run gateseal upgrade to move {LOCK} to gateseal {__version__}.",
     )
 
 

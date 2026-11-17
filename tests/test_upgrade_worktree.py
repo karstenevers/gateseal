@@ -183,8 +183,8 @@ def test_a_gateseal_move_reads_only_the_ledger_of_another_releases_lock(consumer
     assert path.read_bytes() == current
     old, new = f"9.0.0 at {'9' * 40}", f"{__version__} at {PIN.commit}"
     assert moves(result) == {"gateseal": (old, new, "rollback")}
-    install, review = result.next_steps
-    assert f"install gateseal {__version__}" in install
+    setup, review = result.next_steps
+    assert f"uvx gateseal@{__version__} setup" in setup
     assert "git diff" in review
 
 

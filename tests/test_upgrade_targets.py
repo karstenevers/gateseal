@@ -396,17 +396,17 @@ def test_an_exception_entry_names_the_version_and_the_pin(policies):
     assert all(value in entry["message"] for value in named)
 
 
-def test_a_gateseal_move_names_the_install_and_gateseal_setup(policies):
+def test_a_gateseal_move_names_setup_of_the_new_release(policies):
     after = lock_document(policies["bundled"])
     before = released(after, "0.0.9", "a" * 40)
     result = upgrade._result(
         before, upgrade.Plan({LOCK: canonical(after)}, ()), (LOCK,)
     )
     assert (result.code, result.changed) == ("upgraded", (LOCK,))
-    install, review = result.next_steps
-    assert install == (
-        f"Have each developer install gateseal {__version__} and run gateseal "
-        "setup, so git commit runs pre-commit 4.7.0."
+    setup, review = result.next_steps
+    assert setup == (
+        f"Have each developer run uvx gateseal@{__version__} setup, so git commit "
+        "runs pre-commit 4.7.0."
     )
     assert "git diff" in review
     moved = f"gateseal 0.0.9 at {'a' * 40} to {__version__} at {PIN.commit}: upgrade."

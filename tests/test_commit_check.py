@@ -112,7 +112,9 @@ def test_a_lock_of_another_gateseal_names_it(staged, capsys):
         1,
         "gateseal.lock pins gateseal 9.9.9",
     )
-    assert step.startswith("Install gateseal 9.9.9, or run gateseal upgrade")
+    assert step.startswith(
+        "Run gateseal 9.9.9 with uvx gateseal@9.9.9, or run gateseal upgrade"
+    )
 
 
 def test_a_lock_that_lists_a_file_gateseal_never_writes_fails(staged, capsys):

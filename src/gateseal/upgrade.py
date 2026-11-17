@@ -508,8 +508,8 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
     steps: list[str] = []
     if lock.ledger_pin(before) != lock.ledger_pin(after):
         steps.append(
-            f"Have each developer install gateseal {__version__} and run gateseal "
-            f"setup, so git commit runs pre-commit {PRE_COMMIT}."
+            f"Have each developer run uvx gateseal@{__version__} setup, so git "
+            f"commit runs pre-commit {PRE_COMMIT}."
         )
     if written:
         steps.append("Review git diff, then stage and commit the changed files.")

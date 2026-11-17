@@ -71,6 +71,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   format, its gateseal pin, the Manifest's SHA-256, the policy's digest and
   the files it lists. A listed file that the release never writes stops the
   move, and so does a bundled policy with other content under the same label.
+- When `gateseal.lock` pins another gateseal release, the next step of
+  `selected_compiler_required` runs that release with `uvx gateseal@VERSION`
+  instead of asking you to install it. After a move to another release,
+  `gateseal upgrade` asks each developer to run `uvx gateseal@VERSION setup`.
 - The Lock no longer records the CPython and pre-commit that gateseal runs.
 - A hook repository record in the Lock no longer has `tools`.
 
