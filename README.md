@@ -5,198 +5,66 @@
   </picture>
 </p>
 
-<h3 align="center">One policy for your team's commit checks.</h3>
-
-<p align="center">Built on pre-commit and mise, enforced the same way on every machine and in CI.</p>
-
 <p align="center">
   <a href="https://github.com/karstenevers/gateseal/actions?query=branch%3Amain"><img alt="Status of every CI check on main" src="https://img.shields.io/github/check-runs/karstenevers/gateseal/main?label=CI&logo=github"></a>
   <a href="https://gateseal.readthedocs.io/"><img alt="Documentation build status" src="https://img.shields.io/readthedocs/gateseal?logo=readthedocs&logoColor=white&label=docs"></a>
-  <a href="docs/tested-platforms.md"><img alt="platforms macOS arm64 and Linux x86-64" src="https://img.shields.io/badge/platforms-macOS%20arm64%20%7C%20Linux%20x86--64-3e6fa8"></a>
-  <a href="docs/tested-platforms.md#prerequisite-floors"><img alt="requires Git 2.54 and uv 0.13.6 or later" src="https://img.shields.io/badge/requires-Git%202.54%2B%20%7C%20uv%200.13.6%2B-3e6fa8"></a>
+  <a href="docs/install.md#requirements"><img alt="platforms macOS arm64 and Linux x86-64" src="https://img.shields.io/badge/platforms-macOS%20arm64%20%7C%20Linux%20x86--64-3e6fa8"></a>
+  <a href="docs/install.md#requirements"><img alt="requires Git 2.54 and uv 0.13.6 or later" src="https://img.shields.io/badge/requires-Git%202.54%2B%20%7C%20uv%200.13.6%2B-3e6fa8"></a>
 </p>
 
-<p align="center">
-  <a href="#install"><b>Install</b></a> ·
-  <a href="#quick-start">Quick start</a> ·
-  <a href="docs/demo.md">Demo</a> ·
-  <a href="#documentation">Documentation</a>
-</p>
 
-## Why gateseal
+gateseal keeps one reviewed set of commit checks in every repository, on developer machines and in CI.
 
-pre-commit runs the hooks, and mise installs the release binaries. gateseal
-gives them one reviewed policy and checks that every clone and CI run follow
-it.
+## Who it is for
 
-- **One policy for every repository.** Tools, versions, rules, and CI inputs
-  come from one reviewed release. No more copying configuration files into
-  each repository and updating them by hand.
-- **Exact versions.** Your commits and CI use the tool versions recorded in
-  `gateseal.lock`. pre-commit and mise install those versions and ignore the
-  tools installed on your machine. Two repositories on the same machine can
-  use different versions of a tool, such as Betterleaks 1.9.0 and 1.10.0,
-  without conflict.
-- **Fewer CI failures.** gateseal generates the CI workflow from the same Lock.
-  A formatting error or a secret stops the commit on your machine, so fewer CI
-  runs fail and you wait less for CI.
+- **Platform teams** review a policy release once and roll it out to many repositories.
+- **Repository maintainers** adopt a release and see when the repository drifts from it.
+- **Developers and coding agents** commit as usual. pre-commit runs the pinned checks.
 
-## Who gateseal is for
+## Why use it
 
-**Developers:** commit as usual. pre-commit runs the checks that the Lock
-pins, gateseal's own among them, so you never install gateseal.
+- **One source of truth.** A versioned policy records tool versions, rules, binary checksums, and CI settings.
+- **Drift detection.** Each commit and CI run compares the generated files with the Lock.
+- **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock.
+- **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries must match recorded checksums.
+- **Fast CI out of the box.** The generated workflow checks only what a pull request changed. With the secrets checks on, Betterleaks scans its commits. A scheduled run checks every file. You do not have to maintain this logic. [How it works](docs/github-ci.md#what-the-gate-checks).
+- **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and list the next command when one exists.
 
-**Repository owners:** pin one policy release in `gateseal.lock`, and plain
-`gateseal` shows whether the repository matches it.
+## When not to use it
 
-**Platform teams:** review a policy release once and adopt it in every
-repository through a reviewed pull request.
+For one or two repos, a pre-commit config and a CI job that runs `pre-commit run --all-files` cover most needs. Use gateseal when you also want drift checks, pinned binaries, or one standard across many repos.
 
-**Coding agents:** get non-interactive commands whose `--json` results name
-what failed and what to run next.
+A team standard needs a policy repository plus a Manifest and a Lock in each repository. The bundled policy needs no policy repository.
 
-## What it supports
+## Get started
 
-### Built-in checks
-
-Built-in checks ship in the bundled policy, so a repository needs no policy of
-its own to use them. It turns each one on by its capability, such as
-`--capability hygiene`.
-
-- Supported:
-  - `hygiene`: trailing whitespace, file endings, YAML
-  - `python`: Ruff
-  - `secrets`: Betterleaks
-- Planned:
-  - Semgrep
-  - SQL
-  - Infrastructure security
-  - Dependency audits
-
-### Tools you can add
-
-Your own tools go in a team policy. It can add a tool of any supported kind
-without a new gateseal release, as [Add a tool](docs/add-a-tool.md) shows.
-
-- Supported:
-  - Python pre-commit hook repositories
-  - Release binaries on GitHub
-- Planned:
-  - Node packages, such as Prettier and ESLint
-  - Release binaries from other hosts, such as Terraform
-  - Release binaries that ship as one file, such as Biome
-  - Tools that use the project's own dependencies, such as mypy and tsc
-  - Tested examples for shell, Dockerfile, GitHub Actions, spelling and YAML tools
-
-### CI
-
-- Supported: GitHub Actions
-- Planned: Azure Pipelines
-
-## Install
-
-gateseal runs on macOS on arm64 and on Linux on x86-64 with glibc. Native
-Windows is not supported yet, and support is planned. The generated GitHub
-Actions workflow runs on GitHub's Linux runner `ubuntu-24.04`. You cannot
-choose another runner yet.
-
-**A developer never installs gateseal.** pre-commit builds gateseal's own
-check from the commit that the Lock pins. You need:
-
-- Git 2.54.0 or later
-- pre-commit, which `gateseal setup` installs once per machine with uv
-  0.13.6 or later. Your own pre-commit 4.7.0 or later works too.
-- mise 2026.10.19 or later, when the policy uses a release binary such as
-  Betterleaks
-
-**A Repository Maintainer** also runs gateseal, to configure and upgrade a
-repository. `uvx gateseal` runs it without an install, and
-`uv tool install gateseal` keeps one.
-
-[Install gateseal](docs/install.md) explains each step, and what to do when you
-already use Git's `init.templateDir` or `core.hooksPath`.
-
-## Quick start
-
-Adopt the bundled policy in a repository. Select one or more capabilities,
-and leave out `--ci github` if you do not use GitHub Actions:
+Install Git 2.54.0 or later, pre-commit 4.7.0 or later, [mise](https://mise.jdx.dev/) 2026.10.19 or later, and [uv](https://docs.astral.sh/uv/). From a Git repository, run:
 
 ```sh
 uv tool install gateseal
-gateseal setup --refresh
-gateseal configure \
-  --capability hygiene \
-  --capability python \
-  --capability secrets \
-  --ci github
+gateseal configure --capability hygiene --capability secrets --ci github
+pre-commit install
 ```
 
-setup installs pre-commit on this machine. It adds the commit launcher to this
-clone and to every clone you make later. configure pins gateseal by the commit
-of its release tag, which it reads with your Git. To keep no gateseal install,
-skip the first command and write `uvx gateseal` for `gateseal`.
+This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff.
 
-Review and commit `gateseal.toml`, `gateseal.lock`, `.pre-commit-config.yaml`,
-`.github/workflows/gateseal.yml`, and, with `python` or `secrets`, the
-generated `.gateseal` directory.
+Review the generated files and commit them together. `gateseal.toml`, the Manifest, selects the policy and checks. `gateseal.lock`, the Lock, records that selection and the generated files. See [Install gateseal](docs/install.md) for requirements and [Configure a repository](docs/configure-a-repository.md) for each step.
 
-From then on, every `git commit` in that clone runs the checks that the Lock
-pins. GitHub Actions runs the same checks on each pull request and each push to
-`main`. A teammate runs setup of the release that the Lock pins once per
-machine, such as `uvx gateseal@0.2.0 setup`. Every clone made afterwards then
-checks its commits.
+Teammates need Git, pre-commit and, for release binaries such as Betterleaks, mise, but not gateseal. See [Work in a configured repository](docs/work-in-a-configured-repository.md).
 
-When a commit stops, its last lines say why. A hook that fixed a file leaves
-the fix in the worktree, so review it, stage it, and commit again.
-[Configure a repository](docs/configure-a-repository.md) explains each
-capability, and [GitHub CI](docs/github-ci.md) explains the workflow.
+## What it supports
 
-## How it fits together
-
-**Manifest:** `gateseal.toml` selects a reviewed policy, its capabilities, and
-its choices. `configure` compiles it into the Lock, `gateseal.lock`, and a
-native `.pre-commit-config.yaml`, which you review and commit.
-
-**Setup:** installs pre-commit once per machine and makes Git add its commit
-launcher to every new clone. It writes nothing that Git tracks.
-`pre-commit install` in each clone is enough for commits. `gateseal run`,
-`status` and `doctor` still need setup's pre-commit.
-
-**Commit:** pre-commit runs the generated configuration on what each commit
-stages. Its first hook, `gateseal-check`, stops a commit whose generated files
-differ from the Lock, or whose installed Betterleaks is not the program that
-the Lock records. At the first use, pre-commit builds each hook
-repository's environment, gateseal's included, and mise installs each release
-binary and checks its SHA-256. Every repository on the machine shares them.
-
-**CI and upgrades:** CI runs the same Lock in a generated GitHub Actions
-workflow, and `upgrade` moves the policy, a tool, or the gateseal release
-forward or back.
-
-A policy is reviewed data that pins every tool to an exact version, by commit
-or SHA-256. gateseal bundles one, and a team can publish its own as a tagged
-directory in a Git repository. [Architecture](docs/architecture.md) shows who
-owns each part, what gateseal trusts, the key decisions, and how the tests
-prove it works.
+- **Bundled checks:** file hygiene, Ruff for Python, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
+- **CI:** GitHub Actions.
+- **Platforms:** macOS on arm64 and Linux on x86-64.
+- **Planned:** upgrade pull requests for new tool releases, Windows, and Azure DevOps.
 
 ## Documentation
 
-| Goal | Start here |
-| --- | --- |
-| Work in a repository that uses gateseal | [Work in a configured repository](docs/work-in-a-configured-repository.md) · [Troubleshooting](docs/troubleshooting.md) |
-| Set up a repository | [Configure a repository](docs/configure-a-repository.md) · [GitHub CI](docs/github-ci.md) · [Upgrade and roll back](docs/upgrade.md) |
-| See it work | [Demo](docs/demo.md) |
-| Use a team's policy | [Adopt a team policy](docs/adopt-a-team-policy.md) · [Authenticate to a private policy](docs/authenticate.md) |
-| Write a team policy | [Author a team policy](docs/author-a-policy.md) · [Add a tool](docs/add-a-tool.md) · [Policy format](docs/policy-format.md) |
-| Understand how it works | [How a commit runs](docs/how-a-commit-runs.md) · [Architecture](docs/architecture.md) · [Vision](VISION.md) |
-| Look up commands and files | [Commands and results](docs/commands-and-results.md) · [Manifest and Lock](docs/policy-contract.md) · [Glossary](GLOSSARY.md) |
-| See how gateseal is tested | [What the tests prove](docs/what-the-tests-prove.md) · [Build and verify](docs/verification.md) |
+- [Try gateseal](docs/demo.md) in a scratch repository.
+- [Adjust checks](docs/adjust-a-setup.md), [enable CI](docs/github-ci.md), or [upgrade](docs/upgrade.md).
+- [Adopt a team policy](docs/adopt-a-team-policy.md) or [author one](docs/author-a-policy.md).
+- [Troubleshoot](docs/troubleshooting.md), look up [commands](docs/commands-and-results.md), or read [how gateseal works](docs/architecture.md).
+- [Contribute](CONTRIBUTING.md) or report a vulnerability as [SECURITY.md](SECURITY.md) describes.
 
-## Contributing
-
-[CONTRIBUTING.md](CONTRIBUTING.md) says which changes fit and how to run the
-checks. Report a vulnerability as [SECURITY.md](SECURITY.md) says.
-
-## License
-
-[MIT](LICENSE)
+[MIT license](LICENSE)

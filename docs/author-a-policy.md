@@ -1,188 +1,80 @@
 # Author a team policy
 
-Keep your team's checks in a Git repository and tag the commits that other
-repositories can adopt. You choose the rules and review each tool version.
-gateseal records the upstream commits, archive URLs, and checksums in
-`policy.lock`.
-
-Use Git and the gateseal release your repositories use. The `policy add`
-and `policy lock` commands need network access to the tool repositories
-and release downloads.
+Create a Git repository for the reviewed checks that other repositories can adopt. Use the gateseal release that those repositories use. The `policy add` and `policy lock` commands need network access to upstream releases.
 
 ```mermaid
 flowchart LR
     accTitle: The life of a team policy
-    accDescr: Start the policy once. Then review a new version, try the candidate, and release it with a tag. Repeat for each new version.
-    start[Start the policy] --> review[Review a new version]
-    review --> try[Try the candidate]
+    accDescr: Start the policy once. Then review a new version, test a candidate, and release it with a tag. Repeat for each new version.
+    start[Start a policy] --> review[Review a tool version]
+    review --> try[Test a candidate]
     try --> release[Release with a tag]
     release --> review
 ```
 
-## Start the policy
+## Start a policy
 
-1. Create a Git repository and copy the bundled policy into a new or empty
-   `policy/` directory.
-
-    ```sh
-    git init -b main team-gateseal-policy
-    cd team-gateseal-policy
-    gateseal policy init policy
-    ```
-
-2. In `policy/policy.toml`, set `release` to a label such as
-   `"team-2026.11"`. The label can contain up to 128 printable characters.
-   Each tool is one table under its capability, such as
-   `[capabilities.python.tools.ruff]`, with its hooks, rule file, pin and
-   reviewed versions. Keep at least one capability.
-
-3. If you remove a capability, remove every table whose header starts with
-   its name, and its rule files. For example, to remove `python`, delete
-   `[capabilities.python.tools.ruff]`, `[capabilities.python.choices]` and
-   `rules/ruff.toml`. Run `gateseal policy lock policy` to drop those
-   versions from the lock.
-
-4. Edit the remaining rule files under `policy/rules/`. Use UTF-8 TOML with
-   LF line endings. A rule file cannot extend another configuration.
-   To add a tool of your own, see [Add a tool](add-a-tool.md).
-
-5. Check the policy and commit it so you can review future changes with Git.
-
-    ```sh
-    gateseal policy check policy
-    git add policy
-    git commit -m "Start team policy"
-    ```
-
-`policy/README.md` contains instructions for the next author.
-The [policy format](policy-format.md) describes the fields you can edit.
-
-## Review a new version
-
-1. Read the tool's release notes. Choose the exact released version you want
-   to review. This example adds Betterleaks 1.8.1 for a team that uses
-   the 1.8 series. Substitute the release your team wants to review.
-
-2. Add the version to the policy.
-
-    ```sh
-    gateseal policy add betterleaks 1.8.1 policy
-    ```
-
-    gateseal checks each reviewed version against upstream. For a binary,
-    it downloads each new archive and verifies the published checksum before
-    it writes `policy.toml` and `policy.lock`.
-
-3. If the version requires a minimum version of another tool, add that
-   requirement to its tool's table. For example,
-   `requires."1.8.1" = { ruff = "0.17.1" }` makes Betterleaks 1.8.1 require
-   Ruff 0.17.1 or later.
-
-4. Review `git diff -- policy`. Look for the version in the tool's
-   `reviewed` list in `policy.toml` and the matching record in `policy.lock`. To make this version the
-   default for repositories that adopt your policy, pin it.
-
-    ```sh
-    gateseal policy pin betterleaks 1.8.1 policy
-    gateseal policy check policy
-    ```
-
-A pin must name a reviewed version and meet the other pins' requirements.
-The previous version stays available through a Version Exception. To remove
-a reviewed version, move its pin first if necessary. Delete it from
-`reviewed`, with any `requires` entry for it, and run
-`gateseal policy lock policy`.
-
-Add and pin preserve comments and table order. If the command reports
-`policy_edit_unsupported`, make the change by hand. Run `gateseal policy
-lock policy` after adding a version or `gateseal policy check policy`
-after changing a pin. See the [Policy Lock reference](policy-lock.md).
-
-## Automate a version bump
-
-A scheduled workflow or Renovate can propose a version in a pull request.
-Give the job access to GitHub and pass it the exact version from the release
-you want to review. For example, the job can run these commands.
+Create a repository and copy the bundled policy into a new directory:
 
 ```sh
-gateseal policy add betterleaks 1.8.1 policy
-gateseal policy pin betterleaks 1.8.1 policy
+git init -b main team-gateseal-policy
+cd team-gateseal-policy
+gateseal policy init policy
+```
+
+Edit the `release` label in `policy/policy.toml`. Edit its capabilities, tool versions, and rule files for your team. See [Policy format](policy-format.md) for field rules and [Add a tool](add-a-tool.md) for complete examples.
+
+If you remove a capability, remove its tables and rule files. Run `gateseal policy lock policy` after changing reviewed versions or tools. The generated `policy.lock` records the reviewed upstream commits and archive checksums. Check the policy. Then commit it:
+
+```sh
+gateseal policy check policy
+git add policy
+git commit -m 'Start team policy'
+```
+
+## Review a tool version
+
+Read the tool's release notes and choose an exact release. For example, to review a Betterleaks release newer than the bundled 1.9.0 in the bundled policy copy, run the commands below. Replace `<version>` with the release you chose.
+
+```sh
+gateseal policy add betterleaks <version> policy
+gateseal policy pin betterleaks <version> policy
 gateseal policy check policy
 ```
 
-If `policy add` exits 4, check upstream access and retry the same command.
-If it exits 2 with an `upstream_` code, investigate the missing or changed
-release data. Review the release notes and both policy files before merging.
-Then [test the candidate](#try-a-candidate-policy-before-you-tag-it) and
-[tag the release](#release-the-policy).
+The first command checks the reviewed releases against upstream and updates `policy.lock`. The second selects the reviewed version as the default. Review both files before committing. To remove a reviewed version, move its pin first if necessary. Remove it from `reviewed` and any `requires` entry. Run `gateseal policy lock policy`.
 
-## Handle a fact that upstream changed
+If a tag or checksum changed upstream, `policy lock` reports `upstream_changed`. Investigate the change before accepting it. If you approve it, delete `policy/policy.lock`. Regenerate it and review every change before committing. See [Policy lock](policy-format.md#policy-lock) for errors.
 
-If a release tag moves or a published checksum changes, `policy lock`
-reports `upstream_changed`, the affected version, and both values.
-Investigate the change with the publisher. A replaced archive or tag can
-indicate tampering.
+## Test a candidate
 
-If you approve the replacement, delete `policy/policy.lock`, then run
-`gateseal policy lock policy`. gateseal resolves all reviewed versions and
-downloads the archives again. Review every change in `git diff -- policy/policy.lock`
-before you commit.
+Commit the policy changes. In the policy repository, create a local candidate tag:
 
-## Try a candidate policy before you tag it
+```sh
+git tag candidate-team-2026.11
+```
 
-Test a candidate with a local tag and a disposable consumer repository. Keep
-the candidate tag and the consumer repository on your machine.
+Create a disposable Git repository for the consumer. From its root, run the following command. Replace `$HOME/src/team-gateseal-policy` with the absolute path to your policy repository. Replace the example URL with its real HTTPS URL. The Git rewrite applies only to this command.
 
-1. In the policy repository, commit your changes and tag the commit you want
-   to test. If the changes are already committed, start with the tag command.
+```sh
+GIT_CONFIG_COUNT=1 \
+GIT_CONFIG_KEY_0="url.file://$HOME/src/team-gateseal-policy.insteadOf" \
+GIT_CONFIG_VALUE_0=https://github.com/team/gateseal-policy.git \
+gateseal configure --capability hygiene \
+  --policy https://github.com/team/gateseal-policy.git \
+  --policy-path policy --policy-tag candidate-team-2026.11
+```
 
-    ```sh
-    git add policy
-    git commit -m "Prepare team-2026.11"
-    git tag candidate-team-2026.11
-    ```
-
-2. From the root of a disposable Git repository that does not use gateseal
-   yet, select the candidate. Substitute your policy repository's real HTTPS
-   URL and local absolute path below. The Git rewrite applies only to this
-   command.
-
-    ```sh
-    GIT_CONFIG_COUNT=1 \
-    GIT_CONFIG_KEY_0="url.file://$HOME/src/team-gateseal-policy.insteadOf" \
-    GIT_CONFIG_VALUE_0=https://github.com/team/gateseal-policy.git \
-    gateseal configure --capability hygiene --capability secrets \
-      --policy https://github.com/team/gateseal-policy.git \
-      --policy-path policy --policy-tag candidate-team-2026.11
-    ```
-
-    Select only capabilities you kept in the policy. gateseal checks the
-    local tag, commit, and policy lock. The consumer manifest records the
-    real URL with the local candidate tag.
-
-3. In the consumer repository, review and stage the generated files with a
-   sample change. Run `git commit` to test the checks a contributor will run.
-
-4. Remove the disposable consumer repository. In the policy repository, run
-   `git tag -d candidate-team-2026.11` to remove the local test tag.
+Select a capability in your policy. Review and stage the generated files. Make a test commit. Delete the disposable consumer when finished. In the policy repository, delete the local candidate tag with `git tag -d candidate-team-2026.11`.
 
 ## Release the policy
 
-1. From the policy repository, run the offline check.
+In the policy repository, check the committed policy and publish a tag. Replace the example branch and tag with your team's names:
 
-    ```sh
-    gateseal policy check policy
-    ```
+```sh
+gateseal policy check policy
+git tag -a team-2026.11 -m 'Release team-2026.11'
+git push origin main team-2026.11
+```
 
-2. Make sure the policy files you tested are committed and that `HEAD` is
-   the release commit. With `origin` set to your team's repository and
-   `main` as the release branch, publish the tag.
-
-    ```sh
-    git tag -a team-2026.11 -m "Release team-2026.11"
-    git push origin main team-2026.11
-    ```
-
-3. Give repository maintainers the repository URL, policy path, and release
-   tag. They can now [adopt the release](adopt-a-team-policy.md). Their
-   repositories stay on the reviewed commit until they select another release.
+Give repository maintainers the URL, policy directory, and tag. They can [adopt the release](adopt-a-team-policy.md). A consumer stays on its selected commit until it adopts another release.

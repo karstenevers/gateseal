@@ -153,8 +153,10 @@ jobs:
           version: "0.13.6"
           python-version: "3.14.10"
           enable-cache: false
-      - name: Install the tested mise floor
-        uses: ./.github/actions/install-mise
+      - name: Install the oldest pre-commit that gateseal supports
+        run: |
+          uv tool install --python 3.14.10 pre-commit==4.7.0
+          uv tool dir --bin >> "$GITHUB_PATH"
       - name: Download the wheel TestPyPI serves
         env:
           VERSION: ${{ needs.version.outputs.version }}
