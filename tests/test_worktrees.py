@@ -1,23 +1,11 @@
 import os
-import subprocess
 
 import pytest
-from conftest import (
-    TRACKED,
-    commit_hygiene,
-    git_path,
-    prepared_state,
-    published_origin,
-    snapshot,
-)
+from conftest import TRACKED, commit_hygiene, git_path, on_machine, published_origin
 from installation import process, success
 
 pytestmark = pytest.mark.integration
 
-UNPREPARED = (
-    "gateseal: This worktree has no usable preparation.\n"
-    "Next: Run gateseal activate, then retry.\n"
-)
 MINIMAL_PATH = {"PATH": "/usr/bin:/bin", "PYTHONPATH": "/nonexistent"}
 
 
@@ -26,47 +14,27 @@ def add_worktree(clone, path, branch):
     return path
 
 
-def installed_hook(installed):
-    script = "import sys, gateseal.bootstrap as b; sys.stdout.buffer.write(b.HOOK)"
-    return subprocess.run(
-        [installed.python, "-I", "-B", "-c", script],
-        capture_output=True,
-        env=installed.environment,
-        check=True,
-    ).stdout
-
-
 @pytest.fixture(scope="module")
 def linked(installed, prepared, tmp_path_factory):
-    """An activated linked worktree of prepared."""
+    """A linked worktree of prepared."""
     path = tmp_path_factory.mktemp("linked parent ü").resolve() / "linked wt ü"
-    add_worktree(prepared, path, "linked-fixture")
-    installed.cli(path, "activate")
+    with on_machine(installed):
+        add_worktree(prepared, path, "linked-fixture")
     yield path
-    success(["git", "worktree", "remove", "--force", path], prepared)
+    with on_machine(installed):
+        success(["git", "worktree", "remove", "--force", path], prepared)
 
 
-def test_linked_worktree_of_a_prepared_clone(installed, prepared, tmp_path):
-    before = snapshot(prepared)
+def test_linked_worktree_commits_with_its_clones_launcher(
+    installed, prepared, tmp_path
+):
     status = success(["git", "status", "--porcelain"], prepared).stdout
     worktree = add_worktree(prepared, tmp_path.resolve() / "linked wt ü", "linked")
     try:
-        (worktree / "linked.txt").write_text("linked\n")
-        success(["git", "add", "linked.txt"], worktree)
-        unprepared = process(["git", "commit", "-m", "Unprepared"], worktree)
-        assert unprepared.returncode != 0
-        assert unprepared.stderr == UNPREPARED
-        assert installed.cli(worktree, "status")["code"] == "needs_activation"
-        local = git_path(worktree, "gateseal")
-        assert local.is_relative_to(prepared / ".git" / "worktrees")
-        activated = installed.cli(worktree, "activate")
-        assert activated["code"] == "prepared"
-        assert activated["changed"] == [str(local / "current")]
-        assert prepared_state(worktree)["root"] == str(worktree)
-        assert snapshot(prepared) == before
-        assert success(["git", "status", "--porcelain"], prepared).stdout == status
+        assert installed.cli(worktree, "status")["code"] == "healthy"
         minimal = dict(installed.environment, **MINIMAL_PATH, UV_PYTHON="/nonexistent")
         commit_hygiene(worktree, minimal)
+        assert success(["git", "status", "--porcelain"], prepared).stdout == status
         part = worktree / "part.txt"
         part.write_text("staged\n")
         success(["git", "add", part.name], worktree)
@@ -76,20 +44,17 @@ def test_linked_worktree_of_a_prepared_clone(installed, prepared, tmp_path):
         assert part.read_text() == "staged\nunstaged\n"
         assert installed.cli(worktree, "doctor")["code"] == "healthy"
         assert installed.cli(prepared, "doctor")["code"] == "healthy"
-        original, moved = worktree, worktree.with_name("moved wt ü")
-        success(["git", "worktree", "move", original, moved], prepared)
+        moved = worktree.with_name("moved wt ü")
+        success(["git", "worktree", "move", worktree, moved], prepared)
         worktree = moved
-        stale = process(["git", "commit", "--allow-empty", "-m", "Moved"], moved)
-        assert stale.returncode != 0
-        assert f"gateseal: This preparation belongs to {original}." in stale.stderr
-        assert f"Next: Run gateseal activate in {moved}." in stale.stderr
-        assert installed.cli(moved, "activate")["code"] == "prepared"
-        success(["git", "commit", "--allow-empty", "-m", "Moved"], moved)
+        (moved / "moved.txt").write_text("moved\n")
+        success(["git", "add", "moved.txt"], moved)
+        committed = success(["git", "commit", "-m", "Moved"], moved)
+        assert "Passed" in committed.stdout + committed.stderr
+        assert installed.cli(moved, "doctor")["code"] == "healthy"
     finally:
         success(["git", "worktree", "remove", "--force", worktree], prepared)
-    assert not local.exists()
     success(["git", "commit", "--allow-empty", "-m", "Main"], prepared)
-    assert snapshot(prepared) == before
 
 
 def bare_linked_worktree(origin, tmp_path):
@@ -111,19 +76,17 @@ def separate_git_dir(origin, tmp_path):
 
 
 @pytest.mark.parametrize("layout", [bare_linked_worktree, separate_git_dir])
-def test_other_layouts_prepare_in_their_git_directory(installed, tmp_path, layout):
+def test_other_layouts_commit_with_the_launcher_of_their_git_directory(
+    installed, tmp_path, layout
+):
     origin = published_origin(installed, tmp_path)
     worktree, common = layout(origin, tmp_path.resolve())
     success(["git", "config", "user.name", "gateseal test"], worktree)
     success(["git", "config", "user.email", "gateseal@example.invalid"], worktree)
-    activated = installed.cli(worktree, "activate")
-    assert activated["code"] == "prepared"
-    hook = common / "hooks" / "pre-commit"
-    current = git_path(worktree, "gateseal") / "current"
-    assert activated["changed"] == [str(hook), str(current)]
-    assert hook.read_bytes() == installed_hook(installed)
+    launcher = (common / "hooks" / "pre-commit").read_bytes()
+    assert launcher == (git_path(origin, "hooks/pre-commit")).read_bytes()
     commit_hygiene(worktree)
-    assert installed.cli(worktree, "status")["code"] == "recorded"
+    assert installed.cli(worktree, "status")["code"] == "healthy"
     if layout is bare_linked_worktree:
         refused = installed.cli(common, "status", code=2)
         assert refused["code"] == "not_a_repository"
@@ -156,7 +119,9 @@ def unstaged_names(root):
         ("all", "linked"),
     ],
 )
-def test_commit_modes_check_the_index_they_commit(request, tmp_path, mode, where):
+def test_commit_modes_check_the_index_they_commit(
+    installed, request, tmp_path, mode, where
+):
     root = request.getfixturevalue(where)
     modes, other, notes = (
         root / f"{mode}-{name}.txt" for name in ("modes", "other", "notes")
@@ -205,7 +170,7 @@ def test_commit_modes_check_the_index_they_commit(request, tmp_path, mode, where
         other.unlink(missing_ok=True)
 
 
-COMMANDS = ("status", "check", "run", "doctor", "activate", "configure")
+COMMANDS = ("status", "check", "run", "gate", "doctor", "configure")
 
 
 def test_public_commands_refuse_an_alternate_index(
@@ -217,35 +182,24 @@ def test_public_commands_refuse_an_alternate_index(
         prepared,
         dict(os.environ, GIT_INDEX_FILE=str(alternate)),
     )
-    before = snapshot(prepared)
     tracked = {name: (prepared / name).read_bytes() for name in TRACKED}
     env = dict(installed.environment, GIT_INDEX_FILE=str(alternate))
     for command in COMMANDS:
         refused = installed.cli(prepared, command, code=2, env=env)
         assert refused["code"] == "alternate_index", command
         assert refused["next_steps"] == ["Unset GIT_INDEX_FILE, then retry."]
-    assert snapshot(prepared) == before
     assert tracked == {name: (prepared / name).read_bytes() for name in TRACKED}
     default = dict(installed.environment, GIT_INDEX_FILE=".git/index")
-    assert installed.cli(prepared, "status", env=default)["code"] == "recorded"
+    assert installed.cli(prepared, "status", env=default)["code"] == "healthy"
     own = dict(installed.environment, GIT_INDEX_FILE=str(git_path(linked, "index")))
-    assert installed.cli(linked, "status", env=own)["code"] == "recorded"
+    assert installed.cli(linked, "status", env=own)["code"] == "healthy"
 
 
-def test_linked_worktree_path_the_hook_cannot_pass_is_refused(
+def test_linked_worktree_whose_path_has_shell_characters_commits(
     installed, configured, tmp_path
 ):
     success(["git", "add", *TRACKED], configured)
     success(["git", "commit", "-m", "Adopt hygiene"], configured)
-    worktree = add_worktree(configured, tmp_path.resolve() / "wt a=b", "eq")
-    local = git_path(worktree, "gateseal")
-    result = installed.cli(worktree, "activate", code=2)
-    assert result["code"] == "unsupported_path"
-    assert result["diagnostics"][0]["message"].startswith(
-        f"gateseal prepares in {local.parent}, whose path contains ="
-    )
-    assert result["next_steps"][0].startswith(
-        "Remove this worktree with git worktree remove"
-    )
-    assert not (local / "current").is_symlink()
-    assert not (configured / ".git/hooks/pre-commit").exists()
+    worktree = add_worktree(configured, tmp_path.resolve() / "wt a=b $c 'd'", "eq")
+    commit_hygiene(worktree)
+    assert installed.cli(worktree, "doctor")["code"] == "healthy"

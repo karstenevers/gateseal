@@ -4,10 +4,9 @@ People write policy.toml, so an edit keeps every other byte: comments, order
 and line endings. Python reads TOML but cannot write it, so each edit changes
 the lines it finds and then proves itself: the edited file must parse to
 exactly the document the change intends. An edit it cannot prove, such as in
-a file that writes its versions as an inline table, fails and writes nothing.
+a file that writes a tool as an inline table, fails and writes nothing.
 """
 
-import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -19,9 +18,8 @@ from gateseal.validation import parse_toml, version_key
 
 LINE = re.compile(r"[^\n]*\n|[^\n]+\Z")
 
-STRING = re.compile(r"""\s*("(?:[^"\\\n]|\\.)*"|'[^'\n]*').*""", re.DOTALL)
-"""A one-line TOML string value and the rest of its line. A version needs no
-escape in either quote."""
+STRING = re.compile(r"""\s*("(?:[^"\\\n]|\\.)*"|'[^'\n]*')""")
+"""A one-line TOML string value. A version needs no escape in either quote."""
 
 
 @dataclass(frozen=True)
@@ -107,96 +105,152 @@ def tables(lines: list[str]) -> list[Table]:
     return tables
 
 
+def _tool_path(data: bytes, tool: str) -> tuple[str, ...]:
+    """Return the key path of tool's table in a policy that review_policy accepts."""
+    capabilities = cast(dict[str, dict[str, object]], parse_toml(data)["capabilities"])
+    [capability] = [
+        name
+        for name, table in capabilities.items()
+        if tool in cast(dict[str, object], table["tools"])
+    ]
+    return ("capabilities", capability, "tools", tool)
+
+
+def _value_start(lines: list[str], path: tuple[str, ...]) -> int | None:
+    """Return the offset in the joined lines where the value of key path starts.
+
+    The key may be written under its table's header or as a dotted key under
+    a parent table's. None means no line assigns it.
+    """
+    table: tuple[str, ...] = ()
+    offset = 0
+    for line in lines:
+        header = _header(line)
+        if header is not None:
+            table = header
+        elif (found := _assignment(line)) is not None and table + found[0] == path:
+            return offset + found[1] + 1
+        offset += len(line)
+    return None
+
+
 def _proven(
     data: bytes,
-    lines: list[str],
-    tool: str,
+    text: str,
+    path: tuple[str, ...],
     change: Callable[[dict[str, object]], None],
     failure: GatesealError,
 ) -> bytes:
-    """Return the edited lines, which must parse to data's document after change.
+    """Return text, which must parse to data's document after change.
 
-    change edits the parsed table of tool's component.
+    change edits the parsed table at path.
     """
     expected = parse_toml(data)
-    components = cast(dict[str, object], expected["components"])
-    change(cast(dict[str, object], components[tool]))
-    edited = "".join(lines)
+    table = expected
+    for key in path:
+        table = cast(dict[str, object], table[key])
+    change(table)
     try:
-        if parse_toml(edited.encode("utf-8")) == expected:
-            return edited.encode("utf-8")
+        if parse_toml(text.encode("utf-8")) == expected:
+            return text.encode("utf-8")
     except GatesealError:
         pass
     raise failure
 
 
-def _inserted(lines: list[str], at: int, added: list[str], newline: str) -> list[str]:
-    """Return lines with added at at, a blank line apart from the text around it."""
-    before, after = lines[:at], lines[at:]
-    if before and not before[-1].endswith("\n"):
-        before[-1] += newline
-    above = [newline] if before and before[-1].strip() else []
-    below = [newline] if after and after[0].strip() else []
-    return [*before, *above, *added, *below, *after]
+def _items(text: str, start: int) -> list[re.Match[str]] | None:
+    """Return the strings of the one-level array whose value starts at start.
 
-
-def _component_tables(lines: list[str], tool: str) -> tuple[Table | None, list[Table]]:
-    """Return tool's component table and its version tables in file order.
-
-    Each version table spans its subtables.
+    None means a value that is not such an array, or one that holds anything
+    but strings and comments, so the edit fails its proof.
     """
-    blocks: dict[str, Table] = {}
-    component = None
-    for table in tables(lines):
-        if table.path[:3] == ("components", tool, "versions") and len(table.path) > 3:
-            first = blocks.get(table.path[3], table)
-            # pytestmut: off[num.shift] -- only path[3] is read
-            blocks[table.path[3]] = Table(table.path[:4], first.start, table.end)
-            # pytestmut: on
-        elif table.path == ("components", tool):
-            component = table
-    return component, sorted(blocks.values(), key=lambda block: block.start)
+    opened = re.compile(r"\s*\[").match(text, start)
+    if opened is None:
+        return None
+    items: list[re.Match[str]] = []
+    position = opened.end()
+    while (token := ARRAY.match(text, position)) is not None:
+        if token["close"] is not None:
+            return items
+        if token["string"] is not None:
+            items.append(token)
+        position = token.end()
+    return None
 
 
-def _version_position(lines: list[str], tool: str, version: str) -> int:
-    """Return the line where the table that reviews tool's version goes."""
-    component, ordered = _component_tables(lines, tool)
-    keys = [version_key(block.path[3]) for block in ordered]
-    # pytestmut: off[cmp.boundary] -- an existing version fails the proof
-    older = [b for b in ordered if version_key(b.path[3]) < version_key(version)]
-    # pytestmut: on
-    if not ordered:
-        return component.end if component else len(lines)
+ARRAY = re.compile(
+    r"""\s*(?:(?P<string>"[^"\\\n]*"|'[^'\n]*')|(?P<close>\])|,|\#[^\n]*)"""
+)
+"""One token of a one-level array of strings: a string, its end, a comma or a
+comment. A version needs no escape in either quote."""
+
+
+def _position(listed: list[str], version: str) -> int:
+    """Return where version goes among listed versions, which keep their order.
+
+    They run newest first as init writes them, or oldest first.
+    """
+    keys = [version_key(item) for item in listed]
+    new = version_key(version)
+    older = [
+        n
+        for n, key in enumerate(keys)
+        if key < new  # pytestmut: skip[cmp.boundary] -- add skips reviewed versions
+    ]
     if keys == sorted(keys, reverse=True):
-        return older[0].start if older else ordered[-1].end
-    return older[-1].end if older else ordered[0].start
+        return older[0] if older else len(listed)
+    return older[-1] + 1 if older else 0
+
+
+def _insert(text: str, items: list[re.Match[str]], version: str, newline: str) -> str:
+    """Return text with version among the array's items, at its position.
+
+    The new string takes its neighbor's quote. It takes its own line when the
+    neighbor has one, and the neighbor before it ends that line with a comma.
+    """
+    index = _position([item["string"][1:-1] for item in items], version)
+    neighbor = items[min(index, len(items) - 1)]
+    quote = neighbor["string"][0]
+    added = f"{quote}{version}{quote}"
+    start, end = neighbor.span("string")
+    line = text[:start].rfind("\n") + 1
+    indent = text[line:start]
+    own = not indent.strip()
+    if index < len(items):
+        if own:
+            return f"{text[:line]}{indent}{added},{newline}{text[line:]}"
+        return f"{text[:start]}{added}, {text[start:]}"
+    after = text.find("\n", end) + 1
+    if own and after and text[end:after].lstrip().startswith(","):
+        return f"{text[:after]}{indent}{added},{newline}{text[after:]}"
+    return f"{text[:end]}, {added}{text[end:]}"
 
 
 def reviewed(data: bytes, tool: str, version: str) -> bytes:
-    """Return policy.toml with an empty table that reviews tool's version.
-
-    The table goes beside the component's other versions and keeps their
-    order: they run newest first as init writes them, or oldest first.
-    """
-    lines = LINE.findall(data.decode("utf-8"))
+    """Return policy.toml with version in tool's list of Reviewed Versions."""
+    text = data.decode("utf-8")
+    lines = LINE.findall(text)
     newline = "\r\n" if lines[0].endswith("\r\n") else "\n"
-    header = f"[components.{tool}.versions.{json.dumps(version)}]{newline}"
-    at = _version_position(lines, tool, version)
-    lines = _inserted(lines, at, [header], newline)
+    path = _tool_path(data, tool)
+    start = _value_start(lines, (*path, "reviewed"))
+    items = _items(text, start) if start is not None else None
+    edited = _insert(text, items, version, newline) if items else text
 
     def change(table: dict[str, object]) -> None:
-        cast(dict[str, object], table["versions"])[version] = {}
+        listed = cast(list[str], table["reviewed"])
+        listed.insert(_position(listed, version), version)
 
+    table = ".".join(path)
     return _proven(
         data,
-        lines,
-        tool,
+        edited,
+        path,
         change,
         GatesealError(
             "policy_edit_unsupported",
             f"gateseal policy add cannot review {tool} {version} in {POLICY} as it "
             "is written.",
-            next_step=f'Add [components.{tool}.versions."{version}"] to {POLICY} '
+            next_step=f'Add "{version}" to reviewed under [{table}] in {POLICY} '
             "yourself, then run gateseal policy lock.",
         ),
     )
@@ -204,72 +258,29 @@ def reviewed(data: bytes, tool: str, version: str) -> bytes:
 
 def pinned(data: bytes, tool: str, version: str) -> bytes:
     """Return policy.toml with tool's pin set to version where it is written."""
-    lines = LINE.findall(data.decode("utf-8"))
-    table: tuple[str, ...] = ()
-    for index, line in enumerate(lines):
-        header = _header(line)
-        if header is not None:
-            table = header
-            continue
-        found = _assignment(line)
-        if found is None or table + found[0] != ("components", tool, "pin"):
-            continue
-        value = STRING.fullmatch(line, found[1] + 1)
-        if value is not None:
-            quote = value[1][0]
-            lines[index] = (
-                line[: value.start(1)] + quote + version + quote + line[value.end(1) :]
-            )
-        break
+    text = data.decode("utf-8")
+    path = _tool_path(data, tool)
+    start = _value_start(LINE.findall(text), (*path, "pin"))
+    value = STRING.match(text, start) if start is not None else None
+    edited = text
+    if value is not None:
+        quote = value[1][0]
+        edited = text[: value.start(1)] + quote + version + quote + text[value.end(1) :]
 
     def change(table: dict[str, object]) -> None:
         table["pin"] = version
 
+    table = ".".join(path)
     return _proven(
         data,
-        lines,
-        tool,
+        edited,
+        path,
         change,
         GatesealError(
             "policy_edit_unsupported",
             f"gateseal policy pin cannot set the pin of {tool} in {POLICY} as it "
             "is written.",
-            next_step=f'Set pin = "{version}" under [components.{tool}] in '
-            f"{POLICY} yourself, then run gateseal policy check.",
+            next_step=f'Set pin = "{version}" under [{table}] in {POLICY} '
+            "yourself, then run gateseal policy check.",
         ),
-    )
-
-
-def component(data: bytes, name: str, version: str) -> bytes:
-    """Return policy.toml with a new component name that pins and reviews version.
-
-    Its tables go after the last component's, or at the end of the file.
-    """
-    lines = LINE.findall(data.decode("utf-8"))
-    newline = "\r\n" if lines and lines[0].endswith("\r\n") else "\n"
-    found = [t.end for t in tables(lines) if t.path[:1] == ("components",)]
-    at = found[-1] if found else len(lines)
-    added = [
-        f"[components.{name}]{newline}",
-        f"pin = {json.dumps(version)}{newline}",
-        newline,
-        f"[components.{name}.versions.{json.dumps(version)}]{newline}",
-    ]
-    lines = _inserted(lines, at, added, newline)
-    expected = parse_toml(data)
-    components = cast(dict[str, object], expected.setdefault("components", {}))
-    components[name] = {"pin": version, "versions": {version: {}}}
-    edited = "".join(lines).encode("utf-8")
-    try:
-        if parse_toml(edited) == expected:
-            return edited
-    except GatesealError:
-        pass
-    raise GatesealError(
-        "policy_edit_unsupported",
-        f"gateseal policy add cannot add {name} {version} to {POLICY} as it is "
-        "written.",
-        next_step=f'Add [components.{name}] with pin = "{version}" and '
-        f'[components.{name}.versions."{version}"] to {POLICY} yourself, then '
-        "run gateseal policy lock.",
     )

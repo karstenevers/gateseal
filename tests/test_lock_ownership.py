@@ -4,15 +4,14 @@ import json
 import stat
 
 import pytest
+from conftest import PIN
 from gateseal import lock
 from test_lock_configure import (
-    CHECKSUM,
     CI_TABLE,
     CONFIG,
     LOCK,
     MANIFEST,
     RUFF,
-    SOURCE,
     WORKFLOW,
     configure,
     configured,
@@ -37,7 +36,7 @@ def conflicted(error, name):
 def test_a_file_gateseal_did_not_write_is_kept(tmp_path):
     root = worktree(tmp_path)
     (root / CONFIG).write_bytes(b"repos: []\n")
-    error = refused(configure, root, ["hygiene"], source=SOURCE, checksum=CHECKSUM)
+    error = refused(configure, root, ["hygiene"])
     conflicted(error, CONFIG)
     assert tracked(root) == {CONFIG: b"repos: []\n"}
 
@@ -112,8 +111,39 @@ def test_a_lock_cannot_name_another_file_for_deletion(tmp_path, name):
     (root / name).write_bytes(b"the team's own file\n")
     entry = {"sha256": sha(b"the team's own file\n")}
     edit_lock(root, lambda document: document["outputs"].update({name: entry}))
-    assert configure(root)[0] == (LOCK,)
-    assert (root / name).read_bytes() == b"the team's own file\n"
+    before = tracked(root)
+    error = refused(configure, root)
+    assert error.code == "ownership_conflict"
+    assert name in str(error)
+    assert "git revert" in error.next_step
+    assert tracked(root) == before
+
+
+def test_another_releases_lock_is_read_only_for_its_ledger(tmp_path):
+    """Ownership reads the Manifest digest and outputs, whatever else a Lock holds."""
+    root = worktree(tmp_path)
+    (root / MANIFEST).write_bytes(b"manifest\n")
+    (root / CONFIG).write_bytes(b"old config\n")
+    (root / ".gateseal").mkdir()
+    (root / ".gateseal/old.toml").write_bytes(b"dropped\n")
+    foreign = {
+        "schema": 2,
+        "gateseal": {**PIN.document(), "version": "9.0.0"},
+        "manifest_sha256": sha(b"manifest\n"),
+        "outputs": {
+            CONFIG: {"sha256": sha(b"old config\n")},
+            ".gateseal/old.toml": {"sha256": sha(b"dropped\n")},
+        },
+        "policy": 7,
+        "components": None,
+        "future": "a field this release does not know",
+    }
+    planned = {MANIFEST: b"manifest\n", LOCK: b"{}\n", CONFIG: b"new config\n"}
+    assert lock.owned_changes(root, planned, foreign) == lock.Changes(
+        {LOCK: b"{}\n", CONFIG: b"new config\n"}, (".gateseal/old.toml",)
+    )
+    (root / CONFIG).write_bytes(b"hand edit\n")
+    conflicted(refused(lock.owned_changes, root, planned, foreign), CONFIG)
 
 
 def test_an_upgrade_replaces_the_manifest_its_lock_records(tmp_path):

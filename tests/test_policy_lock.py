@@ -1,7 +1,7 @@
 """Refuse a Policy Lock that disagrees with policy.toml, before anything runs.
 
-Every load of a policy checks its lock, so configure, activation, adoption and
-gateseal policy check refuse it the same way.
+Every load of a policy checks its lock, so configure, adoption and gateseal
+policy check refuse it the same way.
 """
 
 import json
@@ -35,8 +35,9 @@ def test_a_newly_reviewed_version_makes_the_lock_stale(tmp_path):
     tree(tmp_path)
     path = tmp_path / "policy.toml"
     path.write_text(
-        path.read_text() + '\n[components.ruff.versions."0.17.0"]\n'
-        '\n[components.betterleaks.versions."1.7.0"]\n'
+        path.read_text()
+        .replace('["0.17.1"]', '["0.17.1", "0.17.0"]')
+        .replace('["1.9.0", "1.8.0"]', '["1.9.0", "1.8.0", "1.7.0"]')
     )
     error = refused(tmp_path)
     assert (error.code, str(error)) == (
@@ -49,9 +50,7 @@ def test_a_newly_reviewed_version_makes_the_lock_stale(tmp_path):
 def test_a_lock_that_lists_an_unreviewed_version_is_refused(tmp_path):
     tree(tmp_path)
     path = tmp_path / "policy.toml"
-    path.write_text(
-        path.read_text().replace('[components.pre-commit-hooks.versions."5.0.0"]\n', "")
-    )
+    path.write_text(path.read_text().replace('["6.0.0", "5.0.0"]', '["6.0.0"]'))
     error = refused(tmp_path)
     assert (error.code, str(error)) == (
         "policy_lock_unreviewed",

@@ -6,12 +6,8 @@ will try the bundled hygiene, Python, and secrets checks in a new repository.
 ## Install the command
 
 [Install gateseal from PyPI](install.md#install-from-pypi). You need Git, uv,
-mise, and network access for the first activation. Git must have a name and
+mise, and network access for the first commit. Git must have a name and
 email address to use for the demo commits.
-
-Copy the wheel's URL and SHA-256 for the same release from PyPI, as
-[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. You put them
-in the `configure` command below.
 
 ## Adopt the policy
 
@@ -23,16 +19,15 @@ cd gateseal-demo
 printf 'def greet(name):\n    return f"Hello, {name}!"\n' > greet.py
 ```
 
-Select the three capabilities and activate this worktree:
+Select the three capabilities, and add the commit launcher to this clone:
 
 ```sh
-gateseal configure --capability hygiene --capability python --capability secrets \
-  --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
-gateseal activate
+gateseal configure --capability hygiene --capability python --capability secrets
+gateseal setup --refresh
 ```
 
-Activation downloads the pinned tools. When it finishes, commit the
-configuration and the Python file. The checks should pass:
+Commit the configuration and the Python file. The first commit downloads the
+pinned tools, so it takes longer. The checks should pass:
 
 ```sh
 git add -A
@@ -112,6 +107,6 @@ the JSON output:
 gateseal run --json
 ```
 
-Run `gateseal status` to see whether this worktree is ready. Run
-`gateseal doctor` to verify the prepared tools and see their versions.
+Run `gateseal status` to see whether this clone is ready and which tool
+versions it selects.
 When you finish, you can delete the `gateseal-demo` directory.

@@ -1,10 +1,8 @@
 import hashlib
 import json
-import os
-import shutil
 
 import pytest
-from conftest import preserved, published
+from conftest import on_machine, preserved
 from gateseal.policy import load_bundled_policy
 from installation import clone, process, success
 
@@ -28,17 +26,12 @@ def configure(installed, root, *capabilities, code=0):
         root,
         "configure",
         *flags,
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         code=code,
     )
 
 
 def adopt(installed, root):
     configure(installed, root, "hygiene", "python")
-    assert installed.cli(root, "activate")["code"] == "prepared"
     success(["git", "add", *TRACKED], root)
     success(["git", "commit", "-m", "Adopt Python checks"], root)
     success(["git", "tag", "adopted"], root)
@@ -48,7 +41,8 @@ def adopt(installed, root):
 @pytest.fixture(scope="module")
 def module_checked(installed, tmp_path_factory):
     root = tmp_path_factory.mktemp("python consumer ü").resolve()
-    return adopt(installed, clone(root / "origin", root / "consumer space ü "))
+    with on_machine(installed):
+        return adopt(installed, clone(root / "origin", root / "consumer space ü "))
 
 
 @pytest.fixture
@@ -72,7 +66,7 @@ def commit(root, message="Change", env=None):
     return result, result.stdout + result.stderr
 
 
-def test_python_capability_locks_renders_and_prepares_ruff(installed, consumer):
+def test_python_capability_locks_and_renders_ruff(installed, consumer):
     configure(installed, consumer, "hygiene", "python")
     for name in TRACKED:
         assert not (consumer / name).stat().st_mode & 0o111, name
@@ -84,36 +78,13 @@ def test_python_capability_locks_renders_and_prepares_ruff(installed, consumer):
         "version": RUFF,
         "revision": "38bfb07c0c64c304f47eb52090f8288150c77730",
         "hook_ids": ["ruff-check", "ruff-format"],
-        "tools": {"ruff": RUFF},
     }
-    assert lock["components"]["pre-commit-hooks"]["tools"] == {}
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
-    ruff = config["repos"][1]
+    ruff = config["repos"][2]
     assert [hook["id"] for hook in ruff["hooks"]] == ["ruff-check", "ruff-format"]
     assert ruff["hooks"][0]["args"][-1] == "--"
     assert installed.cli(consumer, "check")["code"] == "consistent"
-    assert installed.cli(consumer, "activate")["code"] == "prepared"
-    executables = {
-        environment["component"]: [
-            os.path.relpath(path, os.path.dirname(environment["python"]))
-            for path in environment["executables"]
-        ]
-        for environment in json.loads(
-            (published(consumer) / "prepared.json").read_bytes()
-        )["hook_environments"].values()
-    }
-    assert executables == {
-        "pre-commit-hooks": [
-            "check-yaml",
-            "end-of-file-fixer",
-            "trailing-whitespace-fixer",
-        ],
-        "ruff": ["ruff"],
-    }
-    doctor = installed.cli(consumer, "doctor", "--verbose")
-    assert doctor["code"] == "healthy"
-    assert f"ruff {RUFF}" in json.dumps(doctor)
-    assert installed.cli(consumer, "activate")["code"] == "already_prepared"
+    assert installed.cli(consumer, "doctor")["code"] == "healthy"
 
 
 def test_hygiene_alone_renders_no_ruff(installed, configured):
@@ -192,19 +163,14 @@ def test_a_file_named_like_an_option_is_checked(installed, checked):
     assert "--exit-zero.py:1:9: F821" in output
 
 
-def test_repository_ruff_settings_and_variables_do_not_change_the_policy(
-    installed, checked
-):
+def test_repository_ruff_settings_do_not_change_the_policy(installed, checked):
     stage(checked, "ruff.toml", b'[lint]\nignore = ["F"]\n')
     stage(checked, "pyproject.toml", b'[tool.ruff.lint]\nignore = ["F"]\n')
     stage(checked, "nested/ruff.toml", b'[lint]\nignore = ["F"]\n')
     stage(checked, "nested/bad.py", UNDEFINED)
-    hidden = checked.parent / "ruff findings.json"
-    env = dict(os.environ, RUFF_OUTPUT_FORMAT="json", RUFF_OUTPUT_FILE=str(hidden))
-    result, output = commit(checked, env=env)
+    result, output = commit(checked)
     assert result.returncode == 1, output
     assert "nested/bad.py:1:9: F821" in output
-    assert not hidden.exists()
     assert (checked / "ruff.toml").read_bytes() == b'[lint]\nignore = ["F"]\n'
 
 
@@ -248,49 +214,6 @@ def test_run_reports_findings_as_structured_diagnostics(installed, checked):
     )
     assert human.returncode == 1
     assert "src/bad.py:1:9: F821 Undefined name `undefined_name`" in human.stdout
-
-
-def test_a_damaged_ruff_stops_commits_before_a_host_ruff_runs(
-    installed, consumer, tmp_path
-):
-    # Hooks search the directory of the Git that activation found, so a Ruff
-    # installed beside it would stand in for a damaged prepared Ruff.
-    host = tmp_path / "host bin"
-    host.mkdir()
-    (host / "git").symlink_to(shutil.which("git"))
-    ran = tmp_path / "host-ruff-ran"
-    (host / "ruff").write_text(f"#!/bin/sh\ntouch '{ran}'\n")
-    (host / "ruff").chmod(0o755)
-    path = f"{host}{os.pathsep}{installed.environment['PATH']}"
-    store = str(tmp_path / "store")
-    env = dict(installed.environment, PATH=path, GATESEAL_INTERPRETER_STORE=store)
-    configure(installed, consumer, "hygiene", "python")
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
-    record = json.loads((published(consumer) / "prepared.json").read_bytes())
-    assert record["paths"]["git"] == str(host / "git")
-    python = next(
-        environment["python"]
-        for environment in record["hook_environments"].values()
-        if environment["component"] == "ruff"
-    )
-    ruff = os.path.join(os.path.dirname(python), "ruff")
-    success(["git", "add", *TRACKED], consumer)
-    stage(consumer, "bad.py", UNDEFINED)
-    os.chmod(ruff, 0o644)
-    result, output = commit(consumer, env=env)
-    assert result.returncode != 0
-    assert f"Hook executable {ruff} is missing or not executable." in output
-    assert "gateseal activate" in output
-    assert not ran.exists()
-    damaged = installed.cli(consumer, "doctor", code=3)
-    assert damaged["code"] == "needs_activation"
-    assert ruff in damaged["diagnostics"][0]["message"]
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
-    assert installed.cli(consumer, "doctor")["code"] == "healthy"
-    result, output = commit(consumer, env=env)
-    assert result.returncode == 1
-    assert "bad.py:1:9: F821" in output
-    assert not ran.exists()
 
 
 def test_configure_adds_python_through_the_manifest(installed, configured):
@@ -356,16 +279,6 @@ def owned(root):
     return {name: (root / name).read_bytes() for name in TRACKED[1:]}
 
 
-def prepared_ruff(root):
-    environments = json.loads((published(root) / "prepared.json").read_bytes())
-    python = next(
-        environment["python"]
-        for environment in environments["hook_environments"].values()
-        if environment["component"] == "ruff"
-    )
-    return os.path.join(os.path.dirname(python), "ruff")
-
-
 def test_a_repository_on_an_older_python_gets_findings_for_newer_syntax(
     installed, consumer
 ):
@@ -400,7 +313,6 @@ def test_a_repository_on_an_older_python_gets_findings_for_newer_syntax(
         d["message"] for d in status["diagnostics"] if d["category"] == "policy_choice"
     ] == ["Choice hygiene.exclude: nothing.", "Choice python.target_version: py39."]
 
-    assert installed.cli(consumer, "activate")["code"] == "prepared"
     success(["git", "add", *TRACKED], consumer)
     success(["git", "commit", "-m", "Target Python 3.9"], consumer)
     path = stage(consumer, "newer.py", NEWER)
@@ -419,21 +331,7 @@ def test_a_repository_on_an_older_python_gets_findings_for_newer_syntax(
         "Target Python 3.9\n"
     )
     path.write_bytes(NEWER)
-    native = process(
-        [prepared_ruff(consumer), "check", "--config", ".gateseal/ruff.toml"]
-        + ["--no-cache", "--output-format", "concise", "newer.py"],
-        consumer,
-    )
-    assert native.returncode == 1, native.stdout + native.stderr
-    assert [line.split(" ", 2)[:2] for line in native.stdout.splitlines()[:4]] == [
-        ["newer.py:1:1:", "I001"],
-        ["newer.py:8:5:", "invalid-syntax:"],
-        ["newer.py:10:20:", "invalid-syntax:"],
-        ["newer.py:13:12:", "invalid-syntax:"],
-    ]
-
     choose_target(installed, consumer, manifest, '"py314"')
-    assert installed.cli(consumer, "activate")["code"] == "prepared"
     success(["git", "add", *TRACKED, "newer.py"], consumer)
     result, output = commit(consumer, "Target Python 3.14")
     assert result.returncode == 0, output

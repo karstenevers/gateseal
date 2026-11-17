@@ -8,7 +8,7 @@ def test_symlink_parent_never_writes_outside(tmp_path):
     outside.mkdir()
     (tmp_path / "link").symlink_to(outside)
     with pytest.raises(GatesealError):
-        write_atomic(tmp_path / "link" / "file", b"bad")
+        write_atomic(tmp_path / "link" / "file", b"bad", 0o644)
     assert not (outside / "file").exists()
-    write_atomic(outside / "file", b"good")
+    write_atomic(outside / "file", b"good", 0o644)
     assert (outside / "file").read_bytes() == b"good"

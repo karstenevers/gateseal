@@ -7,18 +7,16 @@ from dataclasses import dataclass
 from datetime import date
 
 from gateseal import __version__
-from gateseal.bootstrap import MANIFEST
-from gateseal.compiler_release import load_runtime
+from gateseal.compiler_release import PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note
-from gateseal.hook_python import HookPython
-from gateseal.managed_files import relative_name
+from gateseal.managed_files import MANIFEST, relative_name
 from gateseal.policy import (
     ChoiceValue,
     Policy,
     choice_parser,
     require_compatible,
 )
-from gateseal.policy_tools import CAPABILITY, HYGIENE
+from gateseal.policy_tools import CAPABILITY
 from gateseal.tools.model import Hook, Origin, Tool, require_local_hooks
 from gateseal.validation import (
     fields,
@@ -181,14 +179,14 @@ def capabilities(names: list[object]) -> tuple[str, ...]:
     """
     selected = [string(name, "capabilities") for name in names]
     if (
-        len(set(selected)) != len(selected)
+        not selected
+        or len(set(selected)) != len(selected)
         or not all(map(CAPABILITY.fullmatch, selected))
-        or HYGIENE not in selected
     ):
         raise GatesealError(
             "unsupported_capability",
-            f"Select {HYGIENE}, optionally with other capabilities the policy "
-            "offers, such as python and secrets, each at most once.",
+            "Select at least one capability that the policy offers, such as "
+            "hygiene, python or secrets, each at most once.",
         )
     return tuple(sorted(selected))
 
@@ -330,14 +328,12 @@ class Selection:
 
     tools holds every tool the capabilities use, in capability order, each at
     its selected version with exceptions applied and running only the chosen
-    alternatives. python is the policy's Hook Python when a selected tool
-    runs on Python. ci is the Manifest's.
+    alternatives. ci is the Manifest's.
     """
 
     choices: Mapping[str, Mapping[str, ChoiceValue]]
     exceptions: Mapping[str, VersionException]
     tools: tuple[Tool, ...]
-    python: HookPython | None
     ci: CI | None
 
     @property
@@ -379,17 +375,10 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
             if tool.definition.source.local
             for hook in tool.use.hooks
         ),
-        load_runtime().pre_commit,
+        PRE_COMMIT,
     )
     _require_accepted(tools, choices)
-    python = policy.hook_python
-    if python is not None and (
-        python.on_runtime or not any(tool.definition.source.python for tool in tools)
-    ):
-        python = None
-    return Selection(
-        choices, dict(sorted(exceptions.items())), tools, python, manifest.ci
-    )
+    return Selection(choices, dict(sorted(exceptions.items())), tools, manifest.ci)
 
 
 def _require_offered(manifest: Manifest, policy: Policy) -> None:
@@ -450,7 +439,7 @@ def _version_exception(
             "runtime_exception",
             "exceptions.pre-commit selects a pre-commit version, but each "
             f"gateseal release carries its own: gateseal {__version__} runs "
-            f"pre-commit {load_runtime().pre_commit}.",
+            f"pre-commit {PRE_COMMIT}.",
             next_step=f"Remove [exceptions.pre-commit] from {MANIFEST}, then run "
             "gateseal configure. A newer pre-commit comes with a newer gateseal "
             "release.",

@@ -8,10 +8,10 @@ this README and every other file.
 
 ## Edit
 
-- `policy.toml` names the tools of each capability and the hooks of each
-  tool, declares the choices a repository may make, and lists each
-  component's reviewed versions and its pin. Set `release` to a label of your
-  own for each release.
+- `policy.toml` holds a table for each tool, under its capability, with the
+  hooks it runs, its reviewed versions and its pin. Each capability's
+  `choices` gives the choices a repository may make and their defaults. Set
+  `release` to a label of your own for each release.
 - `tools/<name>.toml` defines a tool that gateseal does not ship, of a kind it
   implements. A tool named like one gateseal ships always runs gateseal's
   definition.
@@ -29,7 +29,7 @@ this README and every other file.
   `gateseal policy add` writes it the same way. Run lock after you add or
   remove a reviewed version by hand, and never edit `policy.lock` by hand.
 - `gateseal policy check` proves offline that `policy.lock` agrees with
-  `policy.toml`. Run it before you commit. Configure and activation refuse a
+  `policy.toml`. Run it before you commit. Configure and check refuse a
   policy that fails it.
 
 `gateseal policy lock` never changes a fact that `policy.lock` already

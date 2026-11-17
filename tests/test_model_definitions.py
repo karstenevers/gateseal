@@ -16,7 +16,6 @@ TOOL = f"""\
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -29,8 +28,6 @@ linux-x64 = "linux_x64"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{{version}}"
 
 [files.report]
 extension = "tmpl"
@@ -39,7 +36,6 @@ extension = "tmpl"
 [hooks.gitleaks]
 name = "Detect secrets with Gitleaks"
 args = ["dir", "--report-template", "{{report}}"]
-probe = ["gitleaks", "version"]
 output = "concise"
 """
 
@@ -79,22 +75,10 @@ def test_a_fixed_file_has_a_lowercase_name_and_lf_text(old, new, key):
     assert f"tools.gitleaks.files.{key}" in refusal(old, new).split()
 
 
-@pytest.mark.parametrize(
-    "old,new,hook",
-    [
-        ("[hooks.gitleaks]", "[hooks.Gitleaks]", "Gitleaks"),
-        ('probe = ["gitleaks", "version"]', "probe = []", "gitleaks"),
-    ],
-    ids=["uppercase id", "empty probe"],
-)
-def test_a_hook_has_a_lowercase_id_and_a_probe(old, new, hook):
-    assert f"tools.gitleaks.hooks.{hook}" in refusal(old, new).split()
-
-
-def test_every_probe_of_a_release_binary_starts_its_executable():
-    shell = '\n[hooks.shell]\nname = "Run a shell"\nprobe = ["sh"]\noutput = "plain"\n'
-    assert "executable" in refusal(
-        'output = "concise"\n', 'output = "concise"\n' + shell
+def test_a_hook_has_a_lowercase_id():
+    assert (
+        "tools.gitleaks.hooks.Gitleaks"
+        in refusal("[hooks.gitleaks]", "[hooks.Gitleaks]").split()
     )
 
 

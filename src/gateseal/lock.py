@@ -4,19 +4,19 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from gateseal import __version__, github, hook_python, sources
-from gateseal.bootstrap import CONFIG, LOCK, MANIFEST, sha, tracked_bytes
-from gateseal.compiler_release import (
-    CompilerArtifact,
-    artifact_from_flags,
-    load_runtime,
-)
+from gateseal import __version__, github, sources
+from gateseal.compiler_release import PRE_COMMIT, REPOSITORY, GatesealPin
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import (
+    CONFIG,
+    LOCK,
+    LOCK_FORMAT,
+    MANIFEST,
     make_parents,
     read,
     read_optional,
     remove,
+    tracked_bytes,
     write_atomic,
 )
 from gateseal.manifest import (
@@ -35,15 +35,15 @@ from gateseal.manifest import (
     tool_note,
 )
 from gateseal.policy import Policy, load_bundled_policy
-from gateseal.tools import release_binary
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
+from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.validation import (
     canonical,
     decode_json,
     digest,
     fields,
     mapping,
-    schema,
+    sha,
     string,
 )
 
@@ -59,7 +59,7 @@ class Snapshot:
 class Locked:
     root: Path
     policy: Policy
-    artifact: CompilerArtifact
+    pin: GatesealPin
     snapshot: Snapshot
     source: Source
     selection: Selection
@@ -81,44 +81,41 @@ def _exclude(selection: Selection, tool: Tool) -> str | None:
 
 
 def compile_outputs(
-    selection: Selection, artifact: CompilerArtifact, source: Source
+    selection: Selection, pin: GatesealPin, source: Source
 ) -> dict[str, bytes]:
     """Return every owned output of a selection, by name in Lock order.
 
-    Each tool renders its repository of the native configuration, in
+    The native configuration starts with gateseal's own repository at the
+    pinned commit, whose hook checks the staged files against the Lock before
+    any tool runs. Each tool renders its repository after it, in
     capability order, and declares its own outputs, which its capability's
-    choices may change; the release-binary kind adds the outputs it owns
-    across its tools. A capability's exclude choice applies to the hooks of
-    every tool the policy puts in it. Only hygiene defines one, so a file is
-    kept from Ruff or a secret scanner only by a policy that puts that tool in
-    hygiene. A Manifest's [ci] adds the provider's workflow, which names
-    the compiler CI installs and the policy repository its credential helper
-    serves. A Hook Python is each kind's to render, as its hooks'
-    language_version.
+    choices may change. A capability's exclude choice applies to the hooks of
+    every tool the policy puts in it, so a file is kept from a tool only by a
+    policy that exposes exclude in that tool's capability. A Manifest's [ci]
+    adds the provider's workflow, which names
+    the gateseal commit CI installs and the policy repository its credential
+    helper serves.
     """
-    python = None if selection.python is None else selection.python.name
     config = {
-        "minimum_pre_commit_version": load_runtime().pre_commit,
+        "minimum_pre_commit_version": PRE_COMMIT,
         "repos": [
-            tool.entry(_exclude(selection, tool), python) for tool in selection.tools
+            pin.hook_repository(),
+            *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
         ],
     }
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
-    outputs |= release_binary.outputs(selection.tools)
     if selection.ci is not None:
-        outputs[github.WORKFLOW] = github.workflow(selection.ci, artifact, source)
+        outputs[github.WORKFLOW] = github.workflow(selection.ci, pin, source)
     return dict(sorted(outputs.items()))
 
 
-def policy_record(
-    source: Source, policy: Policy, artifact: CompilerArtifact
-) -> dict[str, object]:
+def policy_record(source: Source, policy: Policy) -> dict[str, object]:
     """Return the Lock's identity of the selected policy release.
 
-    A bundled release is identified by its digest and the compiler wheel that
-    contains it, a Git release by its repository, directory, commit and digest.
+    A bundled release is identified by its digest within the gateseal that the
+    Lock pins, a Git release by its repository, directory, commit and digest.
     The tag is the label that adoption checked.
     """
     if isinstance(source, BundledSource):
@@ -126,7 +123,6 @@ def policy_record(
             "kind": "bundled",
             "release": policy.release,
             "digest": policy.content_digest,
-            "compiler_sha256": artifact.sha256,
         }
     return {
         "kind": "git",
@@ -143,7 +139,7 @@ def compile_lock(
     manifest: bytes,
     source: Source,
     policy: Policy,
-    artifact: CompilerArtifact,
+    pin: GatesealPin,
     selection: Selection,
 ) -> dict[str, object]:
     records: dict[LockSection, dict[str, object]] = {
@@ -153,14 +149,11 @@ def compile_lock(
     for tool in selection.tools:
         section, key, record = tool.lock_entry()
         records[section][key] = record
-    if selection.python is not None:
-        records["components"][hook_python.COMPONENT] = selection.python.lock_entry()
     inputs: dict[str, object] = {
-        "schema": 1,
+        "schema": LOCK_FORMAT,
         "manifest_sha256": sha(manifest),
-        "compiler": artifact.document(),
-        "policy": policy_record(source, policy, artifact),
-        "runtime": load_runtime().document(),
+        "gateseal": pin.document(),
+        "policy": policy_record(source, policy),
         "components": records["components"],
         "native_artifacts": records["native_artifacts"],
         "choices": selection.choices,
@@ -175,7 +168,7 @@ def compile_lock(
         "inputs_fingerprint": fingerprint,
         "outputs": {
             name: {"sha256": sha(content), "encoding": "utf-8", "executable": False}
-            for name, content in compile_outputs(selection, artifact, source).items()
+            for name, content in compile_outputs(selection, pin, source).items()
         },
     }
 
@@ -183,9 +176,8 @@ def compile_lock(
 LOCK_FIELDS = {
     "schema",
     "manifest_sha256",
-    "compiler",
+    "gateseal",
     "policy",
-    "runtime",
     "components",
     "native_artifacts",
     "choices",
@@ -259,7 +251,7 @@ def _policy(manifest: Manifest, recorded: object, preparation: Path) -> Policy:
         "policy_unavailable",
         f"Policy commit {source.commit} is not stored in this worktree yet.",
         3,
-        "gateseal activate",
+        "gateseal check",
     )
 
 
@@ -291,10 +283,10 @@ def acquire(
 
 
 def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
-    """Name the selected policy release, runtime, tools, choices and exceptions."""
-    source, policy = locked.source, locked.policy
+    """Name the policy release, gateseal, tools, choices and exceptions."""
+    source, policy, pin = locked.source, locked.policy, locked.pin
     if isinstance(source, BundledSource):
-        origin = f"bundled with gateseal {locked.artifact.version}"
+        origin = f"bundled with gateseal {pin.version}"
     else:
         origin = (
             f"from {source.repository} at commit {source.commit} (tag "
@@ -305,13 +297,15 @@ def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
         "policy",
         f"Policy {policy.release} {origin}, digest {policy.content_digest}.",
     )
-    python = locked.selection.python
-    if python is None and policy.hook_python and policy.hook_python.on_runtime:
-        python = policy.hook_python
+    release = Note(
+        "info",
+        "gateseal",
+        f"gateseal {pin.version} from {pin.repository} at commit {pin.commit}, "
+        f"with pre-commit {PRE_COMMIT}.",
+    )
     return (
         identity,
-        load_runtime().note(),
-        *(() if python is None else (python.note(),)),
+        release,
         *map(tool_note, locked.selection.tools),
         *notes(locked.selection, today or date.today()),
     )
@@ -328,19 +322,53 @@ def review_steps(found: tuple[Note, ...]) -> tuple[str, ...]:
     )
 
 
-def _locked_compiler(lock: dict[str, object]) -> CompilerArtifact:
-    """Return the Lock's compiler, which must be this one.
+def ledger_pin(lock: dict[str, object]) -> GatesealPin:
+    """Return the gateseal that a Lock of this format pins.
 
-    Commands read it first, so another compiler's Lock names that compiler
+    The format and the pin belong to the ownership ledger that every release
+    reads, so a Lock of another format is refused before any other field.
+    gateseal 0.1.0 wrote format 1, which no later release reads.
+    """
+    found = lock.get("schema")
+    if type(found) is not int or found != LOCK_FORMAT:
+        # pytestmut: off[cmp.boundary] -- LOCK_FORMAT itself never gets here
+        newer = type(found) is int and found > LOCK_FORMAT
+        # pytestmut: on
+        raise GatesealError(
+            "unsupported_schema",
+            f"{LOCK} uses Lock format {found!r}, and gateseal {__version__} reads "
+            f"only format {LOCK_FORMAT}.",
+            next_step=f"Install the newer gateseal that wrote {LOCK}."
+            if newer
+            else f"Delete {LOCK} and the files gateseal wrote ({CONFIG}, "
+            f"{OWNED}/ and {github.WORKFLOW}), then run gateseal configure.",
+        )
+    try:
+        return GatesealPin.parse(lock.get("gateseal"))
+    except GatesealError as exc:
+        raise _unreadable(exc) from exc
+
+
+def _locked_pin(lock: dict[str, object]) -> GatesealPin:
+    """Return the Lock's gateseal, which must be this one.
+
+    Commands read it first, so another release's Lock names that release
     rather than a field or a policy release this one cannot read.
     """
-    artifact = CompilerArtifact.parse(lock.get("compiler"))
-    if artifact.version != __version__:
-        raise GatesealError(
-            "selected_compiler_required",
-            f"Use the locked gateseal {artifact.version} compiler.",
-        )
-    return artifact
+    pin = ledger_pin(lock)
+    if not pin.running:
+        raise _other_gateseal(pin)
+    return pin
+
+
+def _other_gateseal(pin: GatesealPin) -> GatesealError:
+    return GatesealError(
+        "selected_compiler_required",
+        f"{LOCK} pins gateseal {pin.version} from {pin.repository} at commit "
+        f"{pin.commit}, not this gateseal {__version__}.",
+        next_step=f"Install gateseal {pin.version}, or run gateseal upgrade to "
+        f"move {LOCK} to gateseal {__version__}.",
+    )
 
 
 @dataclass(frozen=True)
@@ -348,7 +376,7 @@ class _LockInputs:
     """A Lock whose own fields are checked, and what its Manifest selects."""
 
     document: dict[str, object]
-    artifact: CompilerArtifact
+    pin: GatesealPin
     manifest: Manifest
     policy: Policy
     selection: Selection
@@ -357,47 +385,14 @@ class _LockInputs:
 def _lock_inputs(manifest: bytes, lock: bytes, preparation: Path) -> _LockInputs:
     """Read a Lock and its Manifest, and the policy release they select."""
     document = decode_json(lock)
-    artifact = _locked_compiler(document)
+    pin = _locked_pin(document)
     document = fields(document, LOCK_FIELDS, "lock")
-    schema(document["schema"])
     parsed = parse_manifest(manifest)
     policy = _policy(parsed, document["policy"], preparation)
-    return _LockInputs(document, artifact, parsed, policy, resolve(parsed, policy))
+    return _LockInputs(document, pin, parsed, policy, resolve(parsed, policy))
 
 
-def validate_snapshot(root: Path, snapshot: Snapshot, preparation: Path) -> Locked:
-    """Check a Manifest, Lock and outputs against the selected policy."""
-    inputs = _lock_inputs(snapshot.manifest, snapshot.lock, preparation)
-    return _check_snapshot(root, snapshot, inputs)
-
-
-def _check_snapshot(root: Path, snapshot: Snapshot, inputs: _LockInputs) -> Locked:
-    policy, selection = inputs.policy, inputs.selection
-    expected = compile_lock(
-        snapshot.manifest, inputs.manifest.source, policy, inputs.artifact, selection
-    )
-    if canonical(inputs.document) != canonical(expected):
-        raise GatesealError(
-            "lock_mismatch",
-            "Lock inputs or ownership disagree with the selected policy.",
-            next_step="gateseal configure",
-        )
-    outputs = compile_outputs(selection, inputs.artifact, inputs.manifest.source)
-    if snapshot.outputs.keys() != outputs.keys():
-        raise GatesealError(
-            "lock_mismatch", "Owned outputs disagree with the Manifest's capabilities."
-        )
-    for name, content in outputs.items():
-        if snapshot.outputs[name] != content:
-            raise GatesealError(
-                "ownership_conflict", f"Restore the owned {name}; it has been edited."
-            )
-    return Locked(
-        root, policy, inputs.artifact, snapshot, inputs.manifest.source, selection
-    )
-
-
-def _tracked(root: Path, name: str) -> bytes:
+def tracked(root: Path, name: str) -> bytes:
     return tracked_bytes(read(root, name, non_executable=True))
 
 
@@ -412,6 +407,53 @@ def _recorded(lock: dict[str, object], name: str, data: bytes) -> bool:
     return isinstance(entry, dict) and cast(dict[str, object], entry).get(
         "sha256"
     ) == sha(data)
+
+
+@dataclass(frozen=True)
+class Ledger:
+    """What the commit check reads of a Lock that this gateseal wrote.
+
+    files holds the Manifest's SHA-256 and each owned output's, by path, from
+    the ownership ledger. programs holds each executable checked at commit
+    on the machine's platform.
+    """
+
+    files: dict[str, str]
+    programs: tuple[InstalledProgram, ...]
+
+
+def own_ledger(lock: bytes, platform: str | None) -> Ledger:
+    """Return what the commit check reads of a Lock that this gateseal wrote.
+
+    Reading it needs no policy and no network. A path this gateseal never
+    writes means the Lock was edited, as it does for _obsolete. platform is
+    the machine's mise platform, or None on a machine gateseal does not
+    support, where no executable is checked.
+    """
+    document = _readable(lock)
+    _locked_pin(document)
+    try:
+        manifest = digest(document.get("manifest_sha256"), "manifest_sha256")
+        outputs = {
+            name: digest(
+                mapping(record, f"outputs.{name}").get("sha256"),
+                f"outputs.{name}.sha256",
+            )
+            for name, record in mapping(document.get("outputs"), "outputs").items()
+        }
+        native = mapping(document.get("native_artifacts"), "native_artifacts")
+        programs = () if platform is None else checked_programs(native, platform)
+    except GatesealError as exc:
+        raise _unreadable(exc) from exc
+    for name in outputs:
+        if not _ownable(name):
+            raise GatesealError(
+                "ownership_conflict",
+                f"{LOCK} lists {name} as a file gateseal wrote, but gateseal "
+                f"{__version__} never writes it.",
+                next_step=f"Restore {LOCK} from Git, then run gateseal configure.",
+            )
+    return Ledger({MANIFEST: manifest, **outputs}, programs)
 
 
 def _optional(root: Path, name: str) -> bytes | None:
@@ -432,7 +474,7 @@ def _recorded_lock(data: bytes | None) -> dict[str, object]:
 def ensure_policy(root: Path, preparation: Path, git: str) -> None:
     """Store the Git release the worktree's Lock records, if it is not stored.
 
-    Activation, check and upgrade run this, so a fresh clone or worktree
+    Every command but status runs this, so a fresh clone or worktree
     acquires its policy without configure. Only the locked commit is fetched,
     and its content must have the digest the Lock records. A Lock that names
     another release than the Manifest is left for load to report.
@@ -446,7 +488,7 @@ def ensure_policy(root: Path, preparation: Path, git: str) -> None:
     recorded = document.get("policy")
     if not isinstance(source, GitSource) or not _records_release(recorded, source):
         return
-    _locked_compiler(document)
+    _locked_pin(document)
     locked = _locked_digest(recorded)
     with contextlib.suppress(GatesealError):
         if sources.stored(preparation, source, locked) is not None:
@@ -466,17 +508,31 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
     owned_changes decides what it may replace.
     """
     try:
-        manifest = _tracked(root, MANIFEST)
-        lock = _tracked(root, LOCK)
+        manifest = tracked(root, MANIFEST)
+        lock = tracked(root, LOCK)
         inputs = _lock_inputs(manifest, lock, preparation)
-        names = compile_outputs(
-            inputs.selection, inputs.artifact, inputs.manifest.source
-        )
+        source, policy = inputs.manifest.source, inputs.policy
+        pin, selection = inputs.pin, inputs.selection
+        compiled = compile_outputs(selection, pin, source)
         found = {
-            name: _tracked(root, name) if outputs else content
-            for name, content in names.items()
+            name: tracked(root, name) if outputs else content
+            for name, content in compiled.items()
         }
-        return _check_snapshot(root, Snapshot(manifest, lock, found), inputs)
+        expected = compile_lock(manifest, source, policy, pin, selection)
+        if canonical(inputs.document) != canonical(expected):
+            raise GatesealError(
+                "lock_mismatch",
+                "Lock inputs or ownership disagree with the selected policy.",
+                next_step="gateseal configure",
+            )
+        for name, content in compiled.items():
+            if found[name] != content:
+                raise GatesealError(
+                    "ownership_conflict",
+                    f"Restore the owned {name}; it has been edited.",
+                )
+        snapshot = Snapshot(manifest, lock, found)
+        return Locked(root, policy, pin, snapshot, source, selection)
     except FileNotFoundError as exc:
         raise GatesealError(
             "missing_configuration", "Run gateseal configure before this command."
@@ -642,23 +698,12 @@ def write_tracked(root: Path, changes: Changes) -> None:
             write_atomic(root / name, changes.writes[name], 0o644)
 
 
-def _compiler_required(artifact: CompilerArtifact) -> GatesealError:
-    return GatesealError(
-        "selected_compiler_required",
-        f"Use the compiler that wrote {LOCK}: {artifact.filename} "
-        f"with SHA-256 {artifact.sha256}.",
-    )
-
-
 def configure(
     root: Path,
     git: str,
     preparation: Path,
     capability: list[str] | None,
     request: PolicyRequest,
-    wheel: str | None,
-    source: str | None,
-    checksum: str | None,
     ci: str | None,
 ) -> tuple[tuple[str, ...], tuple[Note, ...]]:
     """Converge the tracked files on the selected policy.
@@ -680,15 +725,22 @@ def configure(
     previous = _optional(root, LOCK)
     if previous is None:
         recorded: dict[str, object] = {}
-        artifact = _new_compiler(parsed, wheel, source, checksum)
+        pin = release_pin(git, preparation)
     else:
-        recorded, artifact = _pinned_compiler(previous, wheel, source, checksum)
+        recorded = _readable(previous)
+        pin = _locked_pin(recorded)
     policy, checks = acquire(parsed, recorded.get("policy"), preparation, git)
     selection = resolve(parsed, policy)
-    outputs = compile_outputs(selection, artifact, parsed.source)
-    document = compile_lock(manifest, parsed.source, policy, artifact, selection)
+    outputs = compile_outputs(selection, pin, parsed.source)
+    document = compile_lock(manifest, parsed.source, policy, pin, selection)
     if _other_build(recorded, document, parsed.source):
-        raise _compiler_required(artifact)
+        raise GatesealError(
+            "selected_compiler_required",
+            f"{LOCK} records a bundled policy that this build of gateseal "
+            f"{__version__} does not bundle.",
+            next_step=f"Install gateseal from commit {pin.commit} of "
+            f"{pin.repository}, the build that {LOCK} pins.",
+        )
     planned = {MANIFEST: manifest, LOCK: canonical(document), **outputs}
     changes = owned_changes(root, planned, recorded)
     if isinstance(parsed.source, GitSource):
@@ -697,7 +749,7 @@ def configure(
     locked = Locked(
         root,
         policy,
-        artifact,
+        pin,
         Snapshot(manifest, canonical(document), outputs),
         parsed.source,
         selection,
@@ -715,8 +767,8 @@ def _new_manifest(
     if capability is None:
         raise GatesealError(
             "missing_capability",
-            "Select explicitly with configure --capability hygiene, and add "
-            "--capability python to check Python with Ruff and --capability "
+            "Select at least one capability with configure --capability, such "
+            "as hygiene for file checks, python to check Python with Ruff and "
             "secrets to detect secrets.",
         )
     return render(
@@ -749,45 +801,50 @@ def _assert_flags(
         )
 
 
-def _new_compiler(
-    parsed: Manifest, wheel: str | None, source: str | None, checksum: str | None
-) -> CompilerArtifact:
-    artifact = artifact_from_flags(wheel, source, checksum)
-    if parsed.ci is not None and artifact.kind != "https-wheel":
-        raise GatesealError(
-            "ci_needs_network_compiler",
-            "The CI workflow downloads the compiler on a fresh runner, but "
-            "--compiler-wheel names a local wheel.",
-            next_step="Run gateseal configure with --compiler-source and "
-            "--compiler-sha256 instead of --compiler-wheel.",
-        )
-    return artifact
+def release_pin(git: str, preparation: Path) -> GatesealPin:
+    """Return this gateseal's pin: the commit its release tag names.
 
-
-def _pinned_compiler(
-    previous: bytes, wheel: str | None, source: str | None, checksum: str | None
-) -> tuple[dict[str, object], CompilerArtifact]:
-    """Return the existing Lock and its compiler pin, which flags may only repeat."""
+    The tag comes through the user's Git, as a policy release's does, so Git's
+    credentials and url.<base>.insteadOf apply.
+    """
+    tag = f"v{__version__}"
     try:
-        recorded = decode_json(previous)
-        artifact = CompilerArtifact.parse(recorded.get("compiler"))
+        with sources.remote(
+            git, preparation, REPOSITORY, subject="gateseal's repository"
+        ) as origin:
+            commit = origin.peeled(tag)
     except GatesealError as exc:
         raise GatesealError(
-            exc.code,
-            f"Cannot read the compiler pin from {LOCK}: {exc}",
-            next_step=f"Restore {LOCK} from Git, or move it aside and rerun "
-            "gateseal configure with --compiler-wheel or --compiler-source "
-            "and --compiler-sha256.",
+            "upstream_unavailable",
+            str(exc),
+            4,
+            f"Check that git ls-remote {REPOSITORY} works, then rerun the command.",
         ) from exc
-    if artifact.version != __version__:
-        raise _compiler_required(artifact)
-    if any(value is not None for value in (wheel, source, checksum)):
-        if artifact_from_flags(wheel, source, checksum) != artifact:
-            raise GatesealError(
-                "configure_assertion_failed",
-                "Configure preserves existing compiler pins and locators.",
-            )
-    return recorded, artifact
+    if commit is None:
+        raise GatesealError(
+            "upstream_tag_missing",
+            f"gateseal's repository {REPOSITORY} has no tag {tag} for this "
+            f"gateseal {__version__}.",
+            next_step="Install a released gateseal, then rerun the command.",
+        )
+    return GatesealPin(REPOSITORY, __version__, commit)
+
+
+def _readable(previous: bytes) -> dict[str, object]:
+    """Return the existing Lock's fields, naming the way out when it is not JSON."""
+    try:
+        return decode_json(previous)
+    except GatesealError as exc:
+        raise _unreadable(exc) from exc
+
+
+def _unreadable(exc: GatesealError) -> GatesealError:
+    return GatesealError(
+        exc.code,
+        f"Cannot read {LOCK}: {exc}",
+        next_step=f"Restore {LOCK} from Git, or delete it and the files gateseal "
+        "wrote, then run gateseal configure.",
+    )
 
 
 def _other_build(
@@ -795,7 +852,7 @@ def _other_build(
 ) -> bool:
     """Tell whether another build of this version wrote the existing Lock.
 
-    Two builds of one version can bundle different policy bytes or runtimes.
+    Two builds of one version can bundle different policy bytes.
     """
     kept = recorded.get("policy")
     return (
@@ -803,7 +860,7 @@ def _other_build(
         and cast(dict[str, object], kept).get("kind") == "bundled"
         and isinstance(source, BundledSource)
         and kept != document["policy"]
-    ) or recorded.get("runtime", document["runtime"]) != document["runtime"]
+    )
 
 
 def _obsolete(
@@ -813,17 +870,26 @@ def _obsolete(
 
     Each still holds the bytes that Lock records, so configure can delete it, as
     for the workflow that a removed [ci] would otherwise leave running. An
-    edited one stops configure, as an edited output it writes does. Only names
-    this compiler could own count, so an edited Lock cannot name another file.
+    edited one stops configure, as an edited output it writes does. A name this
+    gateseal could never own stops it too, so an edited Lock, or one that
+    another release wrote, cannot have it delete another file.
     """
     owned = recorded.get("outputs")
     names = [
         name
         for name in (cast(dict[str, object], owned) if isinstance(owned, dict) else {})
-        if name not in planned and _ownable(name)
+        if name not in planned
     ]
     obsolete: list[str] = []
     for name in sorted(names):
+        if not _ownable(name):
+            raise GatesealError(
+                "ownership_conflict",
+                f"{LOCK} lists {name} as a file gateseal wrote, but gateseal "
+                f"{__version__} never writes it.",
+                next_step=f"If a gateseal upgrade wrote {LOCK}, undo it with git "
+                "revert. Otherwise restore it from Git.",
+            )
         data = _optional(root, name)
         if data is None:
             continue

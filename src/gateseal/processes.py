@@ -1,11 +1,16 @@
 """Start the exact executables gateseal prepares or requires, without a shell."""
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
-from gateseal.bootstrap import MINIMUM_GIT, BootstrapError, require_git
 from gateseal.diagnostics import GatesealError
+from gateseal.environments import clean_environment
+
+MINIMUM_GIT = "2.54.0"
+"""The oldest Git that gateseal accepts. Git 2.54.0 added `git hook list`, which
+gateseal runs to read the hooks that Git's configuration defines."""
 
 
 def execute(
@@ -14,19 +19,11 @@ def execute(
     env: dict[str, str],
     *,
     allow_failure: bool = False,
-    next_step: str = "gateseal activate",
-    stdin: bytes | None = None,
-    inherit: tuple[int, ...] = (),
+    next_step: str = "",
 ) -> subprocess.CompletedProcess[bytes]:
     try:
         result = subprocess.run(
-            arguments,
-            cwd=root,
-            env=env,
-            input=stdin,
-            capture_output=True,
-            check=False,
-            pass_fds=inherit,
+            arguments, cwd=root, env=env, capture_output=True, check=False
         )
     except OSError as exc:
         raise GatesealError(
@@ -48,32 +45,29 @@ def find_tool(name: str) -> str:
 
 
 def find_git(root: Path) -> str:
-    """Return find_tool's git once it reports MINIMUM_GIT or later in root."""
+    """Return find_tool's git once it reports MINIMUM_GIT or later in root.
+
+    git answers in root, because a shim such as mise's picks its Git by folder.
+    """
     git = find_tool("git")
-    try:
-        require_git(Path(git), root)
-    except BootstrapError as exc:
-        raise GatesealError(
-            "git_version_mismatch",
-            str(exc),
-            4,
-            f"Install Git {MINIMUM_GIT} or later, then retry.",
-        ) from exc
-    return git
-
-
-def find_python(uv: str, root: Path, env: dict[str, str], request: str) -> str:
-    result = execute(
-        [uv, "python", "find", "--no-config", "--no-python-downloads", request],
-        root,
-        env,
+    printed = subprocess.run(
+        [git, "--version"],
+        cwd=root,
+        capture_output=True,
+        env=clean_environment(),
+        check=False,
+    ).stdout
+    found = re.match(rb"git version ([0-9]+)\.([0-9]+)\.([0-9]+)", printed)
+    release = tuple(int(part) for part in found.groups()) if found else ()
+    if release >= tuple(int(part) for part in MINIMUM_GIT.split(".")):
+        return git
+    version = "Git " + ".".join(map(str, release)) if release else "no Git version"
+    raise GatesealError(
+        "git_version_mismatch",
+        f"{git} reports {version}, and gateseal requires Git {MINIMUM_GIT} or later.",
+        4,
+        f"Install Git {MINIMUM_GIT} or later, then retry.",
     )
-    path = Path(result.stdout.decode().strip())
-    if not path.is_absolute() or not path.is_file():
-        raise GatesealError(
-            "invalid_preparation", "uv did not return an absolute Python executable.", 4
-        )
-    return str(path)
 
 
 def pre_commit_command(python: str, arguments: list[str]) -> list[str]:

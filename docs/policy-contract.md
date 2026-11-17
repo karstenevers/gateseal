@@ -27,11 +27,11 @@ Keep the `choices` and `exceptions` tables even when they are empty.
 
 ### Capabilities
 
-Select `hygiene` explicitly. Each other name must appear in the selected
-policy, and each name can appear only once. The bundled policy also offers
-`python` and `secrets`. gateseal runs tools in the order the policy defines.
-It does not infer capabilities from file types. A missing `hygiene`, a
-repeated name, or a name the policy does not offer fails with
+Select at least one capability. Each name must appear in the selected
+policy, and each name can appear only once. The bundled policy offers
+`hygiene`, `python` and `secrets`. gateseal runs tools in the order the policy
+defines. It does not infer capabilities from file types. An empty selection,
+a repeated name, or a name the policy does not offer fails with
 `unsupported_capability`.
 
 ### Policy
@@ -88,8 +88,9 @@ that the policy does not expose as choices, change the policy.
 
 ### Configure flags
 
-With a new repository, specify at least `--capability hygiene` and the compiler
-wheel or source and its SHA-256. The policy defaults to the bundled release.
+With a new repository, specify at least one `--capability`. configure pins
+the running gateseal by the commit of its release tag. The policy defaults to
+the bundled release.
 For a Git policy, supply `--policy` and `--policy-tag`. The path defaults to
 `.`, and the commit defaults to the commit at the tag during adoption.
 See [Configure a repository](configure-a-repository.md).
@@ -97,8 +98,8 @@ See [Configure a repository](configure-a-repository.md).
 With an existing Manifest, omitted options keep its settings. Supplied
 capabilities must match the complete selected set, and source flags must
 match the Manifest. Conflicting flags produce `configure_assertion_failed`.
-Edit the Manifest and run configure again. Configure and activation preserve
-an existing compiler pin and source.
+Edit the Manifest and run configure again. Configure preserves an existing
+gateseal pin.
 
 ## Flat policy
 
@@ -115,52 +116,42 @@ an existing compiler pin and source.
 
 | Field | Contents |
 | --- | --- |
-| `schema` | Integer `1`. |
+| `schema` | The Lock format, integer `2`. |
 | `manifest_sha256` | SHA-256 of the Manifest bytes after line-ending normalization. |
-| `compiler` | `name`, `version`, wheel `filename`, `sha256`, and `source`. |
-| `policy` | `kind`, `release`, and content `digest`. A bundled policy also records `compiler_sha256`. A Git policy records `repository`, `path`, `commit`, and `tag`. |
-| `runtime` | The compiler's `minimum_uv`, `python`, and `pre_commit` installation records. See [Compiler runtime](compiler-runtime.md). |
-| `components` | Selected hook repositories. When the policy selects a separate Hook Python for Python hooks, `python` records its version and platform downloads. |
-| `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. |
+| `gateseal` | gateseal's `repository`, its `version`, and the full `commit` that the version's release tag names. |
+| `policy` | `kind`, `release`, and content `digest`. A Git policy also records `repository`, `path`, `commit`, and `tag`. |
+| `components` | Selected hook repositories. |
+| `native_artifacts` | Each selected release binary's `version`, `minimum_mise`, and download records by platform. For an executable checked at commit, each record also holds the program's `executable_sha256`. |
 | `choices` | Values for selected capabilities, including defaults. |
 | `exceptions` | Each component's selected `version`, policy `pin`, `reason`, and `review_by`. |
 | `outputs` | Each generated path, its SHA-256, UTF-8 encoding, and `executable: false`. |
 | `inputs_fingerprint` | SHA-256 of the prefix `gateseal-inputs-v1`, a NUL byte, and the canonical JSON for the direct inputs before `outputs` and `inputs_fingerprint`. |
 
-Each hook repository record has `repository`, `version`, `revision`,
-`hook_ids`, and `tools`. The last field maps installed tool names to versions.
-For example, Ruff's hook repository installs `ruff` at its selected version.
+Each hook repository record has `repository`, `version`, `revision`, and
+`hook_ids`.
 
-gateseal reads the compiler pin before the policy or other Lock fields. A
-different compiler produces `selected_compiler_required`. The locked compiler
-interprets the rest of the Lock.
+### The ownership ledger
 
-### Compiler source
+Every gateseal release reads five fields of any Lock: `schema`, `gateseal`,
+`manifest_sha256`, the `digest` in `policy`, and `outputs`. Together they are
+the ownership ledger. The release that wrote a Lock owns its other fields.
 
-`compiler.source` records `kind` and `location`.
-
-- For `local-wheel`, the location is an absolute path to the wheel.
-- For `https-wheel`, the location is a URL whose file cannot change, on one
-  of two hosts. The URL must have no user information, port, query, fragment,
-  or dot segment.
-    - On `files.pythonhosted.org`, PyPI's file URL. The path is `/packages/`,
-      then the wheel's BLAKE2b-256 digest in folders of 2, 2, and 60 hex
-      characters, then the wheel filename.
-    - On `raw.githubusercontent.com`. The path must contain the owner,
-      repository, full 40-character commit ID, and wheel path.
-
-You can supply a local wheel to activation if the recorded location is
-unavailable. Its SHA-256 must match. The Lock keeps its original location.
+gateseal reads `schema` first. A Lock of another format produces
+`unsupported_schema`, and the format changes only when the ledger changes.
+Then gateseal reads the pin. A different release produces
+`selected_compiler_required` from every command except `gateseal upgrade`,
+which moves the Lock to the running release, as
+[Move to another gateseal release](upgrade.md#move-to-another-gateseal-release)
+explains.
 
 ## Owned outputs
 
 | Generated file | What to review |
 | --- | --- |
-| `.pre-commit-config.yaml` | The selected hooks in policy order. The file uses JSON syntax that pre-commit accepts as YAML. |
+| `.pre-commit-config.yaml` | gateseal's repository at the pinned commit with its `gateseal-check` hook, then the selected hooks in policy order, each with its stages. The entry of a release binary names its version and each platform's URL and checksum. The file uses JSON syntax that pre-commit accepts as YAML. |
 | `.gateseal/ruff.toml` | The selected target version and the policy's Ruff rules. |
 | `.gateseal/betterleaks.toml` | The policy's secret detection rules. |
 | `.gateseal/betterleaks-report.tmpl`, `.gateseal/betterleaks-history-report.tmpl` | Redacted findings. The history report also names the commit. |
-| `.gateseal/mise.toml` | Release binary versions, URLs, and checksums. |
 | `.github/workflows/gateseal.yml` | The CI workflow when enabled. |
 | `.gateseal/<tool>.<format>`, `.gateseal/<tool>-<key>.<extension>` | Configuration and fixed files declared by a team-defined tool. |
 
@@ -174,7 +165,10 @@ column, and rule. `ruff-format` formats matching files. Both use
 `.gateseal/ruff.toml` for Python files, stubs, and notebooks, including
 files under directories with their own Ruff configuration.
 
-The Betterleaks hook runs the prepared `gateseal-betterleaks` executable.
+The Betterleaks hook starts `betterleaks` through mise, which installs the
+version in the hook's entry at the first use. At each commit, the
+`gateseal-check` hook compares the installed program with the SHA-256 that
+the Lock records.
 It ignores repository ignore files and inline allow comments. Its report
 shows the location and rule without the line of source that held the
 secret. Both Ruff and Betterleaks treat filenames that start with a hyphen

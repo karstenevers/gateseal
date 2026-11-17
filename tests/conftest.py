@@ -1,17 +1,14 @@
 import contextlib
 import dataclasses
-import json
 import os
 import re
-import shutil
-import socket
 import stat
 import tempfile
 from pathlib import Path
 
 import pytest
-from gateseal.tools import built_in_tools
-from gateseal.tools.pre_commit_repository import PreCommitRepository
+from gateseal import __version__, lock
+from gateseal.compiler_release import REPOSITORY, GatesealPin
 from installation import (
     clone,
     install,
@@ -19,10 +16,14 @@ from installation import (
     package_version,
     process,
     success,
+    tag_release,
     versioned_package,
 )
 
 TRACKED = ("gateseal.toml", "gateseal.lock", ".pre-commit-config.yaml")
+
+PIN = GatesealPin(REPOSITORY, __version__, "5ea1" + "0" * 36)
+"""The gateseal release that the tests run in this process pin."""
 
 
 def overwrite(path, data, info=None):
@@ -35,26 +36,6 @@ def overwrite(path, data, info=None):
     path.write_bytes(data)
     path.chmod(stat.S_IMODE(info.st_mode))
     os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns))
-
-
-def remove_file(path):
-    """Delete path from its folder, even a read-only one."""
-    parent = path.parent.stat()
-    path.parent.chmod(stat.S_IMODE(parent.st_mode) | stat.S_IWUSR)
-    path.unlink()
-    path.parent.chmod(stat.S_IMODE(parent.st_mode))
-
-
-def disguise(path, text):
-    """Replace path's bytes with text, keeping its size, mode and mtime.
-
-    Commits compare a store entry's metadata, so only such an edit of a hook
-    environment reaches pre-commit. A comment line pads text to the size.
-    """
-    data = text.encode()
-    padding = path.stat().st_size - len(data) - 2
-    assert padding >= 0, f"{text!r} is longer than {path}"
-    overwrite(path, data + b"#" * (padding + 1) + b"\n")
 
 
 @contextlib.contextmanager
@@ -84,31 +65,6 @@ def git_path(root, name):
     return Path(success(arguments, root).stdout.removesuffix("\n"))
 
 
-def published(root):
-    local = git_path(root, "gateseal")
-    return local / os.readlink(local / "current")
-
-
-def snapshot(root):
-    """Return what another activation must not change in root's preparation."""
-    local = git_path(root, "gateseal")
-    return (
-        published(root).name,
-        sorted(entry.name for entry in local.iterdir()),
-        (published(root) / "prepared.json").read_bytes(),
-    )
-
-
-def prepared_state(root):
-    return json.loads((published(root) / "prepared.json").read_bytes())
-
-
-def recorded_tree(state, name):
-    """Return the recorded tree that holds paths[name], such as interpreter."""
-    path = Path(state["paths"][name])
-    return next(Path(tree) for tree in state["trees"] if path.is_relative_to(tree))
-
-
 def commit_hygiene(root, env=None):
     """Commit a file with trailing whitespace: the hook fixes it, the fix commits."""
     bad = root / "hygiene.txt"
@@ -121,45 +77,99 @@ def commit_hygiene(root, env=None):
     success(["/usr/bin/git", "commit", "-m", "Fixed hygiene"], root, env)
 
 
-HOOK_REPOSITORIES = tuple(
-    tool.source.repository
-    for tool in built_in_tools().values()
-    if isinstance(tool.source, PreCommitRepository)
-)
+MACHINE = ("HOME", "GIT_CONFIG_GLOBAL", "PRE_COMMIT_HOME")
+"""The variables that name a home, its global Git configuration and its hooks."""
+
+
+def home_environment(home):
+    return dict(
+        HOME=str(home),
+        GIT_CONFIG_GLOBAL=str(home / ".gitconfig"),
+        PRE_COMMIT_HOME=str(home / "pre-commit home"),
+    )
 
 
 def pytest_configure(config):
     """Set up the environment that every test inherits.
 
-    The interpreter store stays under pytest's temporary root. --basetemp or
-    PYTEST_DEBUG_TEMPROOT chooses that root, and xdist workers inherit the
-    variable, so no test reaches the user's real store.
-
-    Git runs no background maintenance in the suite's repositories, so a
-    fixture that copies one right after a commit sees only files that stay.
+    Every test process gets an empty home under pytest's temporary root, which
+    --basetemp or PYTEST_DEBUG_TEMPROOT chooses, so no test reads or writes
+    the developer's Git configuration, pre-commit or mise. gateseal setup never
+    runs in this home. The installed fixture makes a second home for it. uv
+    keeps the developer's cache and Pythons.
     """
     root = config.option.basetemp or os.environ.get(
         "PYTEST_DEBUG_TEMPROOT", tempfile.gettempdir()
     )
-    store = Path(root).resolve() / "gateseal interpreter store"
-    os.environ.setdefault("GATESEAL_INTERPRETER_STORE", str(store))
-    if git_settings(os.environ).get("maintenance.auto") != "false":
-        os.environ.update(with_git_config(os.environ, {"maintenance.auto": "false"}))
+    worker = os.environ.get("PYTEST_XDIST_WORKER", "main")
+    home = Path(root).resolve() / f"gateseal home {worker}"
+    kept = {"UV_CACHE_DIR": "cache", "UV_PYTHON_INSTALL_DIR": "python"}
+    for name, command in kept.items():
+        if name not in os.environ:
+            os.environ[name] = success(
+                ["uv", command, "dir"], Path.cwd()
+            ).stdout.strip()
+    for name in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+        os.environ.pop(name, None)
+    os.environ.update(home_environment(home))
+
+
+def make_home(home):
+    """Make home, where Git runs no background maintenance.
+
+    A fixture that copies a repository right after a commit then sees only
+    files that stay.
+    """
+    home.mkdir(parents=True, exist_ok=True)
+    success(["git", "config", "--global", "maintenance.auto", "false"], home)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def home(tmp_path_factory):
+    """Make the home that pytest_configure names, once pytest emptied its root."""
+    tmp_path_factory.getbasetemp()
+    make_home(Path.home())
+
+
+@contextlib.contextmanager
+def on_machine(installation):
+    """Run the block in installation's home, where gateseal setup ran."""
+    with pytest.MonkeyPatch.context() as patch:
+        for name in MACHINE:
+            patch.setenv(name, installation.environment[name])
+        yield
+
+
+@pytest.fixture(scope="session", autouse=True)
+def release_tag():
+    """Let configure and upgrade in this process pin PIN without reading a tag.
+
+    Session scope covers the fixtures of every scope that configure. The
+    installed command reads its tag from gateseal_origin instead.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(lock, "release_pin", lambda git, preparation: PIN)
+        yield
+
+
+@pytest.fixture(autouse=True)
+def machine_home(request):
+    """Give a test of the installed command the home that gateseal setup ran in.
+
+    Its Git then copies the commit launcher into each new clone, and a commit
+    runs the pre-commit of that home.
+    """
+    if "installed" not in request.fixturenames:
+        yield
+        return
+    with on_machine(request.getfixturevalue("installed")):
+        yield
 
 
 def pytest_collection_modifyitems(items):
     for item in items:
         if "installed" in item.fixturenames:
             item.add_marker(pytest.mark.integration)
-
-
-def git_settings(environment):
-    """Return the settings that environment's GIT_CONFIG_* entries give Git."""
-    count = int(environment.get("GIT_CONFIG_COUNT", "0"))
-    return {
-        environment[f"GIT_CONFIG_KEY_{index}"]: environment[f"GIT_CONFIG_VALUE_{index}"]
-        for index in range(count)
-    }
 
 
 def with_git_config(environment, settings):
@@ -172,52 +182,54 @@ def with_git_config(environment, settings):
     return result
 
 
-def mirrored(environment, directory):
-    """Return environment with Git cloning the hook repositories from mirrors.
+@pytest.fixture(scope="session")
+def gateseal_origin(tmp_path_factory):
+    """Return the stand-in for gateseal's repository, with this release's tag."""
+    origin = tmp_path_factory.mktemp("gateseal origin").resolve() / "gateseal"
+    tag_release(origin, package_version())
+    return origin
 
-    Activation clones each hook repository once per interpreter store, into
-    its hook entry, from mirrors in directory instead of GitHub.
+
+@pytest.fixture(scope="session")
+def installed(gateseal_origin, tmp_path_factory):
+    """Install the wheel, and set up a home of its own as gateseal setup does.
+
+    The home's Git reaches gateseal's repository at gateseal_origin.
     """
-    settings = {}
-    for url in HOOK_REPOSITORIES:
-        mirror = directory / url.rsplit("/", 1)[1]
-        success(["git", "clone", "--mirror", "--quiet", url, mirror], directory)
-        settings[f"url.{mirror.as_uri()}.insteadOf"] = url
-    return with_git_config(environment, settings)
+    base = tmp_path_factory.mktemp("installed wheel ü").resolve()
+    with pytest.MonkeyPatch.context() as patch:
+        for name, value in home_environment(base / "home ü").items():
+            patch.setenv(name, value)
+        make_home(Path.home())
+        success(
+            ["git", "config", "--global"]
+            + [f"url.{gateseal_origin.as_uri()}.insteadOf", REPOSITORY],
+            Path.home(),
+        )
+        installation = install(base)
+        installation.cli(Path.home(), "setup")
+    return installation
 
 
 @pytest.fixture(scope="session")
-def installed(tmp_path_factory):
-    installation = install(tmp_path_factory.mktemp("installed wheel ü").resolve())
-    environment = mirrored(
-        installation.environment, tmp_path_factory.mktemp("hook mirrors")
-    )
-    return dataclasses.replace(installation, environment=environment)
+def next_installed(installed, gateseal_origin, tmp_path_factory):
+    """Install the next release, a second gateseal sharing installed's uv cache.
 
-
-@pytest.fixture(scope="session")
-def next_installed(installed, tmp_path_factory):
-    """Install the next release, a second compiler sharing installed's uv cache."""
+    gateseal_origin gets its release tag too.
+    """
     directory = tmp_path_factory.mktemp("next wheel ü").resolve()
-    package = versioned_package(directory / "package", next_release(package_version()))
+    version = next_release(package_version())
+    package = versioned_package(directory / "package", version)
+    tag_release(gateseal_origin, version, package)
     return dataclasses.replace(
         install(directory, package), environment=installed.environment
     )
 
 
 def adopt(installation, root):
-    """Configure root with installation's compiler, activate it and commit."""
-    installation.cli(
-        root,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--compiler-wheel",
-        str(installation.wheel),
-        "--compiler-sha256",
-        installation.checksum,
-    )
-    installation.cli(root, "activate")
+    """Configure root with installation's gateseal and commit its files."""
+    installation.cli(root, "configure", "--capability", "hygiene")
+    installation.cli(root, "setup", "--refresh")
     success(["git", "add", *TRACKED], root)
     success(["git", "commit", "-m", "Adopt hygiene"], root)
     return root
@@ -230,29 +242,21 @@ def consumer(tmp_path):
 
 @pytest.fixture
 def configured(installed, consumer):
-    installed.cli(
-        consumer,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--compiler-wheel",
-        str(installed.wheel),
-        "--compiler-sha256",
-        installed.checksum,
-    )
+    installed.cli(consumer, "configure", "--capability", "hygiene")
     return consumer
 
 
 @pytest.fixture(scope="module")
 def prepared(installed, tmp_path_factory):
     root = tmp_path_factory.mktemp("prepared consumer ü").resolve()
-    return adopt(installed, clone(root / "origin", root / "consumer space ü "))
+    with on_machine(installed):
+        return adopt(installed, clone(root / "origin", root / "consumer space ü "))
 
 
 @pytest.fixture
 def adopted(installed, configured):
     (configured / "notes.txt").write_bytes(b"original\n")
-    installed.cli(configured, "activate")
+    installed.cli(configured, "setup", "--refresh")
     success(["git", "add", *TRACKED, "notes.txt"], configured)
     success(["git", "commit", "-m", "Adopt hygiene"], configured)
     return configured
@@ -263,16 +267,7 @@ def published_origin(installed, tmp_path):
     success(["git", "init", "--bare", "--initial-branch=main", origin], tmp_path)
     first = tmp_path / "first"
     success(["git", "clone", origin, first], tmp_path)
-    installed.cli(
-        first,
-        "configure",
-        "--capability",
-        "hygiene",
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
-    )
+    installed.cli(first, "configure", "--capability", "hygiene")
     success(["git", "add", *TRACKED], first)
     success(
         ["git", "-c", "user.name=First", "-c", "user.email=first@example.invalid"]
@@ -281,66 +276,3 @@ def published_origin(installed, tmp_path):
     )
     success(["git", "push", "origin", "main"], first)
     return origin
-
-
-INTERRUPT = """
-import os
-import sys
-from gateseal import runtime
-from gateseal.cli import main
-step = sys.argv[1]
-replace, write = os.replace, runtime.write_atomic
-def interrupted_replace(source, destination, **options):
-    if step == "publish" and destination == "current":
-        os._exit(90)
-    return replace(source, destination, **options)
-def interrupted_write(path, content, mode=0o600):
-    if step == "record" and path.name == "prepared.json":
-        os._exit(90)
-    return write(path, content, mode)
-os.replace = interrupted_replace
-runtime.write_atomic = interrupted_write
-raise SystemExit(main(["--repo", os.getcwd(), "activate"]))
-"""
-
-
-def interrupt_activation(installed, root, step):
-    result = process(
-        [installed.python, "-I", "-B", "-c", INTERRUPT, step],
-        root,
-        installed.environment,
-    )
-    assert result.returncode == 90, result.stdout + result.stderr
-
-
-def attempts(root):
-    return {path.name for path in git_path(root, "gateseal").glob("attempt-*")}
-
-
-def unreachable(environment):
-    """Return environment with every HTTPS connection refused before it leaves."""
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        proxy = f"http://127.0.0.1:{probe.getsockname()[1]}"
-    return dict(
-        environment, HTTPS_PROXY=proxy, https_proxy=proxy, NO_PROXY="", no_proxy=""
-    )
-
-
-def uv_shim(installed, tmp_path, python_install):
-    """Return an environment whose uv runs python_install for `uv python install`.
-
-    The environment has an interpreter store of its own, so activation installs
-    the interpreter instead of reusing installed's.
-    """
-    shims = tmp_path / "uv shim"
-    shims.mkdir(exist_ok=True)
-    real = shutil.which("uv", path=installed.environment["PATH"])
-    (shims / "uv").write_text(
-        '#!/bin/sh\nif [ "$1 $2" = "python install" ]; then\n  shift 2\n'
-        f'  {python_install.format(uv=real)}\nfi\nexec {real!r} "$@"\n'
-    )
-    (shims / "uv").chmod(0o755)
-    path = os.pathsep.join([str(shims), installed.environment["PATH"]])
-    store = str(shims / "interpreter store")
-    return dict(installed.environment, PATH=path, GATESEAL_INTERPRETER_STORE=store)

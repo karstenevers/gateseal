@@ -9,16 +9,13 @@ dictionaries, where gateseal policy lock and add would reach GitHub.
 import hashlib
 import json
 import subprocess
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
+from conftest import PIN
 from gateseal import authoring, checks, upgrade
 from gateseal.ci import Scope
-from gateseal.compiler_release import CompilerArtifact
 from gateseal.diagnostics import GatesealError
-from gateseal.environments import pre_commit_environment
 from gateseal.hook_results import hook_results
 from gateseal.lock import Locked, Snapshot, compile_lock, compile_outputs, describe
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
@@ -28,7 +25,6 @@ from gateseal.policy import (
     load_policy_stream,
     load_policy_tree,
 )
-from gateseal.tools import release_binary
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
@@ -41,45 +37,34 @@ CAVEAT = (
 COMMIT = "c0ffee" + "0" * 34
 
 POLICY = """\
-schema = 4
+schema = 5
 release = "team-1"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["pre-commit-hooks", "yamllint"]
-
-[capabilities.secrets]
-tools = ["gitleaks"]
-
-[tools.pre-commit-hooks]
+[capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["check-yaml"]
-
-[tools.yamllint]
-
-[tools.gitleaks]
-configuration = "rules/gitleaks.toml"
-
-[choices.hygiene.exclude]
-default = []
-
-[components.pre-commit-hooks]
 pin = "6.0.0"
+reviewed = ["6.0.0"]
 
-[components.pre-commit-hooks.versions."6.0.0"]
-
-[components.yamllint]
+[capabilities.hygiene.tools.yamllint]
 pin = "1.37.1"
+reviewed = ["1.37.1"]
 
-[components.yamllint.versions."1.37.1"]
+[capabilities.hygiene.choices]
+exclude = []
 
-[components.gitleaks]
+[capabilities.secrets.tools.gitleaks]
+configuration = "rules/gitleaks.toml"
 pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
+reviewed = ["8.30.0"]
 """
 
-YAMLLINT_COMPONENT = (
-    '[components.yamllint]\npin = "1.37.1"\n\n[components.yamllint.versions."1.37.1"]\n'
+YAMLLINT_TABLE = (
+    '[capabilities.hygiene.tools.yamllint]\npin = "1.37.1"\nreviewed = ["1.37.1"]\n\n'
+)
+GITLEAKS_TABLE = (
+    '[capabilities.secrets.tools.gitleaks]\nconfiguration = "rules/gitleaks.toml"\n'
+    'pin = "8.30.0"\nreviewed = ["8.30.0"]\n'
 )
 
 
@@ -89,7 +74,6 @@ def hook_tool(repository, hook, extra=""):
 kind = "pre-commit-repository"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["{hook.upper()}_"]
 {extra}
 [source]
 repository = "{repository}"
@@ -98,7 +82,6 @@ tag = "v{{version}}"
 [hooks.{hook}]
 name = "{hook} check"
 args = ["--strict"]
-probe = ["{hook}", "--version"]
 output = "plain"
 """
 
@@ -107,7 +90,6 @@ GITLEAKS_TOOL = """\
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -124,8 +106,6 @@ format = "toml"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{version}"
 
 [files.report]
 extension = "tmpl"
@@ -136,7 +116,6 @@ content = '''
 [hooks.gitleaks]
 name = "Detect secrets with Gitleaks"
 args = ["dir", "--config", "{configuration}", "--redact", "--report-path", "-"]
-probe = ["gitleaks", "version"]
 output = "concise"
 
 [history]
@@ -202,13 +181,11 @@ def consumer(policy, capabilities, extra=""):
     """Return what configure compiles for capabilities: selection and Lock."""
     source = BundledSource(policy.release)
     manifest = render(capabilities, source) + extra.encode()
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
     selection = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, selection)
-    outputs = compile_outputs(selection, artifact, source)
+    lock = compile_lock(manifest, source, policy, PIN, selection)
+    outputs = compile_outputs(selection, PIN, source)
     snapshot = Snapshot(manifest, b"", outputs)
-    return Locked(Path(), policy, artifact, snapshot, source, selection), lock
+    return Locked(Path(), policy, PIN, snapshot, source, selection), lock
 
 
 def test_team_tools_lock_add_pin_and_check_like_built_in_tools(tmp_path, upstream):
@@ -253,13 +230,13 @@ def test_a_consumer_compiles_and_labels_team_tools(tmp_path, upstream):
         "version": "1.37.1",
         "revision": COMMIT,
         "hook_ids": ["yamllint"],
-        "tools": {},
     }
     assert set(lock["components"]) == {"pre-commit-hooks", "yamllint"}
     assert set(lock["native_artifacts"]) == {"gitleaks"}
     outputs = locked.snapshot.outputs
     config = json.loads(outputs[".pre-commit-config.yaml"])
     assert [repository["repo"] for repository in config["repos"]] == [
+        PIN.repository,
         HOOKS,
         YAMLLINT,
         "local",
@@ -310,25 +287,14 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     root = team(tmp_path)
     authoring.lock(root)
     locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    prepared = Path("/attempt")
-    paths = SimpleNamespace(
-        pre_commit_python=prepared / "pre-commit/bin/python",
-        pre_commit_home=prepared / "pre-commit-home",
-        tools=prepared / "tools",
-        git=Path("/usr/bin/git"),
-    )
-
-    @contextmanager
-    def pinned(worktree, pinned_lock):
-        yield SimpleNamespace(paths=paths)
 
     def execute(command, root, env, allow_failure):
-        if command[0] == str(paths.tools / "gateseal-gitleaks"):
+        if command[:2] == ["mise", "--no-config"] and "gitleaks" in command:
             line = f"leak.env:3:1: team-token (A team token) in commit {'a' * 40}\n"
             return subprocess.CompletedProcess(command, 1, line.encode(), b"")
         return subprocess.CompletedProcess(command, 0, b"", b"")
 
-    monkeypatch.setattr(checks.runtime, "pinned", pinned)
+    monkeypatch.setattr(checks.setup, "require_pre_commit", lambda: "/python")
     monkeypatch.setattr(checks, "execute", execute)
     result = checks.gate(None, locked, Scope(None, "a..b", None, "Scanned."))
     assert result.code == "checks_failed"
@@ -378,25 +344,12 @@ def test_a_built_in_name_is_reserved(tmp_path, upstream):
 
 @pytest.mark.parametrize("name", ["pre-commit", "python"])
 def test_the_compiler_runtimes_names_are_reserved(tmp_path, upstream, name):
-    policy = POLICY.replace('"yamllint"', f'"{name}"').replace(
-        "[tools.yamllint]", f"[tools.{name}]"
-    )
+    policy = POLICY.replace("tools.yamllint]", f"tools.{name}]")
     root = team(tmp_path, policy, {f"tools/{name}.toml": hook_tool(YAMLLINT, "x")})
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == "reserved_tool_name"
     assert "name the Compiler Runtime" in str(failure.value)
-
-
-@pytest.mark.parametrize("prefix", ["GIT_", "GIT_INDEX_"])
-def test_a_team_tool_cannot_drop_the_index_a_commit_names(tmp_path, upstream, prefix):
-    definition = GITLEAKS_TOOL.replace('["GITLEAKS_"]', f'["GITLEAKS_", "{prefix}"]')
-    root = team(tmp_path, files={"tools/gitleaks.toml": definition})
-    with pytest.raises(GatesealError) as failure:
-        authoring.lock(root)
-    assert failure.value.code == "invalid_field"
-    assert "none may remove GIT_DIR or GIT_INDEX_FILE" in str(failure.value)
-    assert not (root / "policy.lock").exists()
 
 
 def test_a_tool_neither_gateseal_nor_the_policy_defines_is_unknown(tmp_path):
@@ -433,51 +386,56 @@ def test_a_policys_tools_claim_distinct_hooks_and_repositories(
 @pytest.mark.parametrize(
     "old,new,code",
     [
-        ("[capabilities.hygiene]", "[capabilities.tidy]", "invalid_field"),
         (
-            'tools = ["gitleaks"]',
-            'tools = ["gitleaks", "yamllint"]',
+            GITLEAKS_TABLE,
+            YAMLLINT_TABLE.replace("hygiene", "secrets") + GITLEAKS_TABLE,
             "duplicate_identifier",
         ),
+        (GITLEAKS_TABLE, "[capabilities.secrets]\ntools = {}\n", "invalid_field"),
         (
-            'tools = ["gitleaks"]',
-            'tools = ["gitleaks", "gitleaks"]',
-            "duplicate_identifier",
-        ),
-        ('tools = ["gitleaks"]', "tools = []", "invalid_field"),
-        (
-            "[tools.yamllint]\n",
-            "[tools.yamllint]\n\n[tools.semgrep]\n",
-            "invalid_field",
-        ),
-        ("[tools.yamllint]\n", "", "invalid_field"),
-        (
-            "[tools.yamllint]\n",
-            '[tools.yamllint]\nhook_ids = ["ruff"]\n',
+            YAMLLINT_TABLE,
+            YAMLLINT_TABLE.replace("pin", 'hook_ids = ["ruff"]\npin'),
             "unsupported_hook",
         ),
-        (YAMLLINT_COMPONENT, "", "unsupported_component"),
         ('hook_ids = ["check-yaml"]', 'hook_ids = ["yamllint"]', "unsupported_hook"),
     ],
     ids=[
-        "no hygiene",
         "tool in two capabilities",
-        "tool twice",
         "no tools",
-        "tools table without a capability",
-        "tool without a table",
         "hook of another tool",
-        "components that differ from the tools",
         "hook of another tool in hygiene",
     ],
 )
-def test_policy_schema_4_structure_is_validated(tmp_path, upstream, old, new, code):
+def test_policy_structure_is_validated(tmp_path, upstream, old, new, code):
     assert old in POLICY
     root = team(tmp_path, POLICY.replace(old, new, 1))
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == code
     assert not (root / "policy.lock").exists()
+
+
+def test_a_policy_defines_at_least_one_capability(tmp_path):
+    root = team(tmp_path, POLICY.split("\n\n")[0] + "\n\n[capabilities]\n")
+    with pytest.raises(GatesealError) as failure:
+        authoring.lock(root)
+    assert failure.value.code == "invalid_field"
+    assert "no capability" in str(failure.value)
+
+
+def test_a_policy_without_hygiene_compiles_a_selection_of_secrets(tmp_path, upstream):
+    policy = POLICY.replace("[capabilities.hygiene.choices]\nexclude = []\n\n", "")
+    policy = policy.replace("[capabilities.hygiene.", "[capabilities.files.")
+    root = team(tmp_path, policy)
+    assert authoring.lock(root).code == "locked"
+    locked, lock = consumer(load_policy_tree(root), ("secrets",))
+    assert locked.policy.capabilities == ("files", "secrets")
+    assert (lock["components"], set(lock["native_artifacts"])) == ({}, {"gitleaks"})
+    config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
+    assert [repository["repo"] for repository in config["repos"]] == [
+        PIN.repository,
+        "local",
+    ]
 
 
 def test_omitted_hook_ids_run_every_hook_in_definition_order(tmp_path, upstream):
@@ -492,29 +450,21 @@ def test_omitted_hook_ids_run_every_hook_in_definition_order(tmp_path, upstream)
 
 
 PYTHON = """
-[capabilities.python]
-tools = ["strict-ruff"]
-
-[tools.strict-ruff]
+[capabilities.python.tools.strict-ruff]
 hook_ids = ["ruff-check"]
 configuration = "rules/ruff.toml"
-
-[choices.python.target_version]
-default = "py311"
-
-[components.strict-ruff]
 pin = "0.17.1"
+reviewed = ["0.17.1"]
 
-[components.strict-ruff.versions."0.17.1"]
+[capabilities.python.choices]
+target_version = "py311"
 """
 
 
 def python_policy(tmp_path, extra=""):
     ruff = (bundled_root().parent / "tools/ruff.tool.toml").read_text()
     rules = (bundled_root() / "rules/ruff.toml").read_text()
-    policy = POLICY.replace(
-        "\n[tools.pre-commit-hooks]", PYTHON + extra + "\n[tools.pre-commit-hooks]", 1
-    )
+    policy = POLICY + PYTHON + extra
     files = {"tools/strict-ruff.toml": ruff, "rules/ruff.toml": rules}
     return team(tmp_path, policy, files)
 
@@ -533,28 +483,26 @@ def test_a_team_definition_choice_renders_into_its_configuration(tmp_path, upstr
     assert policy.tools["strict-ruff"].definition.origin == "team-defined"
 
 
-def test_two_tools_of_a_capability_cannot_declare_one_choice(tmp_path, upstream):
+@pytest.mark.parametrize("name", ["target_version", "exclude"])
+def test_a_tool_cannot_declare_a_choice_its_capability_has(tmp_path, upstream, name):
+    """strict-ruff declares target_version, and gateseal declares exclude."""
     other = hook_tool(
         "https://github.com/team/pyfmt",
         "pyfmt",
-        '[configuration]\nformat = "toml"\n\n[choices.target_version]\n'
+        f'[configuration]\nformat = "toml"\n\n[choices.{name}]\n'
         'key = "target"\nsince = { py311 = "1.0.0" }\n',
     )
     extra = (
-        '\n[tools.pyfmt]\nconfiguration = "rules/pyfmt.toml"\n\n'
-        '[components.pyfmt]\npin = "1.0.0"\n\n[components.pyfmt.versions."1.0.0"]\n'
+        '\n[capabilities.python.tools.pyfmt]\nconfiguration = "rules/pyfmt.toml"\n'
+        'pin = "1.0.0"\nreviewed = ["1.0.0"]\n'
     )
     root = python_policy(tmp_path, extra)
-    policy = root / "policy.toml"
-    policy.write_text(
-        policy.read_text().replace('["strict-ruff"]', '["strict-ruff", "pyfmt"]')
-    )
     (root / "tools/pyfmt.toml").write_text(other)
     (root / "rules/pyfmt.toml").write_text("")
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == "invalid_field"
-    assert "declares the choice target_version" in str(failure.value)
+    assert f"tools.pyfmt declares the choice {name}," in str(failure.value)
 
 
 @pytest.mark.parametrize(
@@ -575,36 +523,13 @@ def test_an_exception_names_a_tool_the_policy_offers(
     assert failure.value.code == code
 
 
-def test_processes_drop_the_settings_of_the_selected_team_tools(
-    tmp_path, upstream, monkeypatch
-):
-    root = team(tmp_path)
-    authoring.lock(root)
-    locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    for key in ("YAMLLINT_CONFIG_FILE", "RUFF_CONFIG", "TEAM_SETTING"):
-        monkeypatch.setenv(key, "x")
-    paths = SimpleNamespace(
-        pre_commit_home=Path("/home"),
-        tools=Path("/tools"),
-        pre_commit_python=Path("/python/bin/python"),
-        git=Path("/usr/bin/git"),
-    )
-    environment = pre_commit_environment(paths, locked.selection.tools)
-    assert "TEAM_SETTING" in environment
-    assert not {"YAMLLINT_CONFIG_FILE", "RUFF_CONFIG"} & set(environment)
-
-
 def test_upgrade_targets_a_tool_that_the_new_release_adds(tmp_path, upstream):
-    first = (
-        POLICY.replace('"pre-commit-hooks", "yamllint"', '"pre-commit-hooks"')
-        .replace("[tools.yamllint]\n\n", "")
-        .replace(YAMLLINT_COMPONENT, "")
-    )
+    first = POLICY.replace(YAMLLINT_TABLE, "")
     old, new = team(tmp_path / "v1", first), team(tmp_path / "v2")
     authoring.lock(old)
     authoring.lock(new)
     current, _ = consumer(load_policy_tree(old), ("hygiene",))
-    request = upgrade.Request(None, None, {"yamllint": None}, None, None, False)
+    request = upgrade.Request(None, {"yamllint": None}, None, None)
     assert upgrade._exception_changes(
         parse_manifest(current.snapshot.manifest),
         current,
@@ -626,22 +551,6 @@ def test_upgrade_names_each_lock_record_by_its_tool():
         "hygiene": "5.0.0",
         "gitleaks": "8.30.0",
     }
-
-
-def test_a_release_binary_probe_runs_on_empty_input(tmp_path, upstream, monkeypatch):
-    root = team(tmp_path)
-    authoring.lock(root)
-    locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    given = []
-
-    def execute(arguments, root, env, **options):
-        given.append((arguments[1:], options.get("stdin")))
-        return SimpleNamespace(stdout=b"8.30.0\n")
-
-    monkeypatch.setattr(release_binary, "execute", execute)
-    (gitleaks,) = (t for t in locked.selection.tools if t.definition.name == "gitleaks")
-    release_binary._probe(gitleaks, "8.30.0", Path("/gateseal-gitleaks"), Path(), {})
-    assert given == [(["version"], b""), (["version"], b"")]
 
 
 def test_a_team_choice_cannot_make_its_configuration_load_another(tmp_path, upstream):

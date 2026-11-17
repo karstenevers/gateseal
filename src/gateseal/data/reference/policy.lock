@@ -6,11 +6,13 @@
           "platforms": {
             "linux-x64": {
               "executable": "betterleaks",
+              "executable_sha256": "a6b1e16132a59f18dafffd3a1922c32b2bb3cfa426b234f4cb90a4864023c593",
               "sha256": "bc7fc7da4044f4c30c5b5c4cf3354e07e8ca09e135b9da9ef1f767d1de4daa01",
               "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.8.0/betterleaks_1.8.0_linux_x64.tar.gz"
             },
             "macos-arm64": {
               "executable": "betterleaks",
+              "executable_sha256": "8e648d25e61400862f2f5746cf5050b9aa1d1d7b5231b6ad72a072d506f743aa",
               "sha256": "a0f304958f6175c4db2f17de0d7b4125d3fa4348dc7a0d6c44baec545d711cfa",
               "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.8.0/betterleaks_1.8.0_darwin_arm64.tar.gz"
             }
@@ -20,11 +22,13 @@
           "platforms": {
             "linux-x64": {
               "executable": "betterleaks",
+              "executable_sha256": "0ace40b41652344608f89967fe93c6caf4faae9a4df20423632c7efb02a4d4e1",
               "sha256": "f8b185a39ffcece2a1ca82bf3a4e7435cd81963ffd16b7a9128daf75f35f6de7",
               "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/betterleaks_1.9.0_linux_x64.tar.gz"
             },
             "macos-arm64": {
               "executable": "betterleaks",
+              "executable_sha256": "70d2103c2915aababa0e1eea121bd3db0ff0da86bee40ddc6f5982181acaf6d0",
               "sha256": "83dd7eaab13d44a1e8e347a17064cdef153a1478db473276d41b38d55613d3f2",
               "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/betterleaks_1.9.0_darwin_arm64.tar.gz"
             }

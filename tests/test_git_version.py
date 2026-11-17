@@ -3,10 +3,9 @@ import shlex
 import shutil
 
 import pytest
-from conftest import TRACKED, published
 from gateseal.diagnostics import GatesealError
 from gateseal.worktree import locate_worktree
-from installation import process, success
+from installation import success
 
 FLOOR = "and gateseal requires Git 2.54.0 or later."
 INSTALL = "Install Git 2.54.0 or later, then retry."
@@ -101,45 +100,15 @@ def test_a_per_folder_git_is_asked_in_the_repository(
     assert locate_worktree(repository).git == str(git)
 
 
-def test_older_git_stops_commands_and_commits_until_replaced(
-    installed, configured, tmp_path
-):
+def test_older_git_stops_every_worktree_command(installed, configured, tmp_path):
     shims = tmp_path / "git shims"
     shims.mkdir()
-    git = stand_in(shims)
+    git = stand_in(shims, "git version 2.43.0")
     path = os.pathsep.join([str(shims), installed.environment["PATH"]])
     shimmed = dict(installed.environment, PATH=path)
-    assert installed.cli(configured, "activate", env=shimmed)["code"] == "prepared"
-    attempt = published(configured)
-
-    stand_in(shims, "git version 2.43.0")
     message = f"{git} reports Git 2.43.0, {FLOOR}"
-    for command in (
-        "configure",
-        "check",
-        "activate",
-        "run",
-        "gate",
-        "status",
-        "doctor",
-    ):
+    for command in ("configure", "check", "run", "gate", "status", "doctor"):
         result = installed.cli(configured, command, code=4, env=shimmed)
         assert result["code"] == "git_version_mismatch", command
         assert result["diagnostics"][0]["message"] == message
         assert result["next_steps"] == [INSTALL]
-    assert published(configured) == attempt
-    success(["git", "add", *TRACKED], configured)
-    committed = process(["git", "commit", "-m", "Adopt hygiene"], configured)
-    assert committed.returncode != 0
-    assert (
-        f"gateseal: {message}\n"
-        "Next: Install Git 2.54.0 or later, run gateseal activate, then retry.\n"
-    ) in committed.stderr
-
-    status = installed.cli(configured, "status")
-    assert status["code"] == "needs_activation"
-    assert status["diagnostics"][0]["message"] == message
-    assert installed.cli(configured, "doctor", code=3)["code"] == "needs_activation"
-    assert installed.cli(configured, "activate")["code"] == "prepared"
-    success(["git", "commit", "-m", "Adopt hygiene"], configured)
-    assert installed.cli(configured, "doctor")["code"] == "healthy"

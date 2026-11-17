@@ -15,7 +15,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
-from gateseal import hook_python, policy_toml, sources
+from gateseal import policy_toml, sources
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.managed_files import open_directory, read, read_optional, write_atomic
 from gateseal.policy import (
@@ -236,14 +236,6 @@ def _resolve(
                     for version in sorted(catalog.requires)
                 }
             }
-        if review.python is not None:
-            kept = recorded.get(hook_python.COMPONENT, {})
-            components[hook_python.COMPONENT] = {
-                "versions": {
-                    version: hook_python.lock(version, kept.get(version), upstream)
-                    for version in sorted(review.python.requires)
-                }
-            }
     data = canonical({"components": components, "generated_by": LOCK_COMMAND})
     return data, load_policy(lambda name: data if name == LOCK else reader(name))
 
@@ -264,21 +256,14 @@ def lock(root: Path) -> Result:
     )
 
 
-def _parse_request(
-    review: Review, tool: str, requested: str
-) -> tuple[Catalog | None, str]:
-    """Return tool's catalog and the exact version requested, a stable release.
-
-    A policy without a Hook Python has no catalog of it, so its catalog is
-    None.
-    """
-    catalog = review.components.get(tool)
-    if catalog is None and tool != hook_python.COMPONENT:
+def _parse_request(review: Review, tool: str, requested: str) -> tuple[Catalog, str]:
+    """Return tool's catalog and the exact version requested, a stable release."""
+    catalog = review.catalogs.get(tool)
+    if catalog is None:
         raise GatesealError(
             "unknown_component",
-            f"{POLICY} has no component {tool}; it lists "
-            f"{', '.join(sorted(review.catalogs))}, and "
-            f"{hook_python.COMPONENT} pins a Hook Python.",
+            f"{POLICY} has no tool {tool}; it lists "
+            f"{', '.join(sorted(review.catalogs))}.",
         )
     try:
         return catalog, stable_version(requested, "version")
@@ -290,13 +275,9 @@ def _parse_request(
         ) from None
 
 
-def _pin_step(catalog: Catalog | None, tool: str, exact: str) -> tuple[str, ...]:
-    """Return the step that makes exact tool's pin, or none when it is.
-
-    catalog is tool's catalog before the add, None when the add started tool
-    with exact as its pin.
-    """
-    if catalog is None or catalog.pin == exact:
+def _pin_step(catalog: Catalog, tool: str, exact: str) -> tuple[str, ...]:
+    """Return the step that makes exact tool's pin, or none when it is."""
+    if catalog.pin == exact:
         return ()
     return (
         f"Review the diff of {LOCK}. To make {tool} {exact} the pin, run "
@@ -307,19 +288,16 @@ def _pin_step(catalog: Catalog | None, tool: str, exact: str) -> tuple[str, ...]
 def add(root: Path, tool: str, requested: str) -> Result:
     """Review an exact version of tool, and lock its facts from upstream.
 
-    The version's table goes into policy.toml and its facts into the lock,
-    resolved as gateseal policy lock resolves them. Both files are written
-    only after every fact checks, policy.toml first, so an interrupted add
-    leaves a stale lock that gateseal policy lock completes.
+    The version goes into the tool's reviewed list in policy.toml and its
+    facts into the lock, resolved as gateseal policy lock resolves them. Both
+    files are written only after every fact checks, policy.toml first, so an
+    interrupted add leaves a stale lock that gateseal policy lock completes.
     """
     snapshot = Snapshot(root)
     catalog, exact = _parse_request(review_policy(snapshot.read), tool, requested)
     source = snapshot.read(POLICY)
-    new = catalog is None or exact not in catalog.requires
-    if catalog is None:
-        edited = policy_toml.component(source, tool, exact)
-    else:
-        edited = policy_toml.reviewed(source, tool, exact) if new else source
+    new = exact not in catalog.requires
+    edited = policy_toml.reviewed(source, tool, exact) if new else source
     command = f"gateseal policy add {tool} {exact}"
     try:
         data, policy = _resolve(
@@ -355,7 +333,7 @@ def pin(root: Path, tool: str, requested: str) -> Result:
     snapshot = Snapshot(root)
     review = review_policy(snapshot.read)
     catalog, exact = _parse_request(review, tool, requested)
-    if catalog is None or exact not in catalog.requires:
+    if exact not in catalog.requires:
         raise GatesealError(
             "version_unreviewed",
             f"{POLICY} does not review {tool} {exact}, so it cannot be the pin.",
@@ -364,7 +342,7 @@ def pin(root: Path, tool: str, requested: str) -> Result:
         )
     pins = {
         name: Release(other.pin, other.requires[other.pin])
-        for name, other in review.components.items()
+        for name, other in review.catalogs.items()
     }
     require_compatible(
         pins | {tool: Release(exact, catalog.requires[exact])},
@@ -376,12 +354,8 @@ def pin(root: Path, tool: str, requested: str) -> Result:
     edited = policy_toml.pinned(source, tool, exact) if moved else source
     policy = load_policy(lambda name: edited if name == POLICY else snapshot.read(name))
     kept = (
-        f" {catalog.pin} stays reviewed"
-        + (
-            "."
-            if tool == hook_python.COMPONENT
-            else ", so a repository may keep it through a Version Exception."
-        )
+        f" {catalog.pin} stays reviewed, so a repository may keep it through a "
+        "Version Exception."
         if moved
         else ""
     )

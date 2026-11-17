@@ -2,35 +2,27 @@ from importlib.resources import files
 
 import pytest
 import yaml
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError
 from gateseal.github import CHECKOUT, MISE_SHA256, MISE_URL, UV_SHA256, UV_URL
 from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import CI as Table
 from gateseal.manifest import BundledSource, git_source, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy
+from gateseal.setup import PYTHON
 from gateseal.tools import load_definition
 from gateseal.tools.model import HOOK_STAGES, Origin, Stage
 
 WORKFLOW = ".github/workflows/gateseal.yml"
-WHEEL = "gateseal-0.1.0-py3-none-any.whl"
-NETWORK = CompilerArtifact(
-    "https-wheel",
-    f"https://raw.githubusercontent.com/example/wheels/{'a' * 40}/artifacts/" + WHEEL,
-    WHEEL,
-    "b" * 64,
-    "0.1.0",
-)
-LOCAL = CompilerArtifact("local-wheel", f"/wheels/{WHEEL}", WHEEL, "b" * 64, "0.1.0")
 CI = '\n[ci]\nprovider = "github"\ndefault_branch = "release/2.x"\n'
 GIT = "https://github.com/team/gateseal-policy.git"
 POLICY = load_bundled_policy()
 
 
-def outputs(manifest, artifact=NETWORK, source=None):
+def outputs(manifest, source=None):
     parsed = parse_manifest(manifest)
     return compile_outputs(
-        resolve(parsed, POLICY), artifact, source or BundledSource(POLICY.release)
+        resolve(parsed, POLICY), PIN, source or BundledSource(POLICY.release)
     )
 
 
@@ -71,7 +63,10 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     assert checkout["uses"] == CHECKOUT
     assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
     assert gate["env"]["GATESEAL_HEAD"] == "${{ github.sha }}"
-    assert prepare["run"].rstrip().endswith('"$command/bin/gateseal" activate')
+    assert prepare["run"].splitlines()[-2:] == [
+        '"$command/bin/gateseal" setup',
+        '"$command/bin/gateseal" check',
+    ]
     assert (
         gate["run"]
         .rstrip()
@@ -80,7 +75,7 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     assert "TOKEN" not in str(gate["env"])
 
 
-def test_preparation_pins_its_tools_and_the_locked_compiler():
+def test_preparation_pins_its_tools_and_the_locked_gateseal():
     _, job = workflow()
     env = job["steps"][1]["env"]
     assert (env["GATESEAL_UV_URL"], env["GATESEAL_UV_SHA256"]) == (UV_URL, UV_SHA256)
@@ -88,10 +83,15 @@ def test_preparation_pins_its_tools_and_the_locked_compiler():
         MISE_URL,
         MISE_SHA256,
     )
-    assert env["GATESEAL_COMPILER"] == (
-        f"gateseal @ {NETWORK.location} --hash=sha256:{NETWORK.sha256}"
+    assert (env["GATESEAL_REPOSITORY"], env["GATESEAL_COMMIT"]) == (
+        PIN.repository,
+        PIN.commit,
     )
-    assert env["GATESEAL_PYTHON"].startswith("3.14.")
+    assert env["GATESEAL_PYTHON"] == PYTHON
+    assert (
+        '"gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"'
+        in job["steps"][1]["run"]
+    )
     assert not any("TOKEN" in key or key.startswith("GIT_CONFIG") for key in env)
     assert "NETRC" not in job["steps"][1]["run"]
 
@@ -120,23 +120,14 @@ def test_only_a_github_https_policy_gets_a_scoped_token(repository, helped):
 
 def test_a_manifest_without_ci_has_no_workflow():
     assert WORKFLOW not in outputs(bundled(""))
-    assert WORKFLOW not in outputs(bundled(""), LOCAL)
 
 
 def test_the_lock_records_the_workflow():
     manifest = bundled()
     source = BundledSource(POLICY.release)
     selection = resolve(parse_manifest(manifest), POLICY)
-    lock = compile_lock(manifest, source, POLICY, NETWORK, selection)
+    lock = compile_lock(manifest, source, POLICY, PIN, selection)
     assert WORKFLOW in lock["outputs"]
-
-
-def test_a_local_wheel_compiler_cannot_run_in_ci():
-    with pytest.raises(GatesealError) as failure:
-        outputs(bundled(), LOCAL)
-    assert failure.value.code == "ci_needs_network_compiler"
-    assert "--compiler-source" in failure.value.next_step
-    assert "--compiler-sha256" in failure.value.next_step
 
 
 def test_the_workflow_passes_its_own_hygiene():

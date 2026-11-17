@@ -20,3 +20,4 @@ links forward to it.
 | [0011](0011-share-sealed-hook-environments-through-the-interpreter-store.md) | 2026-11-05 | Each hook environment is built once per machine in the interpreter store and shared by every repository. Replaced by 0013. |
 | [0012](0012-fail-gateseal-pull-requests-on-surviving-mutants.md) | 2026-11-09 | A pull request fails while a mutant survives in its changed lines or those lines score below 90%. |
 | [0013](0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md) | 2026-11-14 | pre-commit starts the hooks, mise supplies the binaries, CI is the gate, and gateseal runs as one hook pinned by commit. |
+| [0014](0014-write-each-tool-once-under-its-capability.md) | 2026-11-16 | `policy.toml` writes each tool once under its capability, and any capability without a history scan can expose `exclude`. |

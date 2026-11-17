@@ -49,12 +49,11 @@ class Installation:
 
 
 def environment(directory):
-    """Return the environment whose caches and interpreter store are directory's."""
+    """Return the environment whose uv and mise caches are directory's."""
     result = dict(
         os.environ,
         UV_CACHE_DIR=str(directory / "uv-cache"),
         MISE_CACHE_DIR=str(directory / "mise-cache"),
-        GATESEAL_INTERPRETER_STORE=str(directory / "interpreter store ü"),
     )
     result.pop("PYTHONPATH", None)
     return result
@@ -195,7 +194,8 @@ def versioned_package(destination, version, package=PACKAGE):
         destination / "src",
         ignore=shutil.ignore_patterns("__pycache__"),
     )
-    shutil.copy(package / "README.md", destination / "README.md")
+    for name in ("README.md", "LICENSE", ".pre-commit-hooks.yaml"):
+        shutil.copy(package / name, destination / name)
     for name, key in (
         ("pyproject.toml", "version"),
         ("src/gateseal/__init__.py", "__version__"),
@@ -209,6 +209,43 @@ def versioned_package(destination, version, package=PACKAGE):
         assert count == 1, f"{name} must hold exactly one {key}"
         (destination / name).write_text(text)
     return destination
+
+
+BUILD_INPUTS = (
+    "src",
+    "README.md",
+    "pyproject.toml",
+    "LICENSE",
+    ".pre-commit-hooks.yaml",
+)
+"""The files of a package that its wheel is built from, and its hook definition."""
+
+
+def tag_release(origin, version, package=PACKAGE):
+    """Commit package's build inputs in origin, tag them v<version>, return the commit.
+
+    origin stands in for gateseal's repository, which a test's Git reaches
+    through url.<base>.insteadOf, so configure reads the release's commit from
+    its tag there and pre-commit and CI can build gateseal at that commit.
+    """
+    if not origin.exists():
+        origin.mkdir(parents=True)
+        success(["git", "init", "--initial-branch=main"], origin)
+    for name in BUILD_INPUTS:
+        target = origin / name
+        if target.is_dir():
+            shutil.rmtree(target)
+        if (package / name).is_dir():
+            shutil.copytree(
+                package / name, target, ignore=shutil.ignore_patterns("__pycache__")
+            )
+        elif (package / name).exists():
+            shutil.copy(package / name, target)
+    identity = ["-c", "user.name=Release", "-c", "user.email=r@example.invalid"]
+    success(["git", "add", "-A"], origin)
+    success(["git", *identity, "commit", "-q", "-m", f"Release {version}"], origin)
+    success(["git", "tag", f"v{version}"], origin)
+    return success(["git", "rev-parse", "HEAD"], origin).stdout.strip()
 
 
 def clone(origin, root):

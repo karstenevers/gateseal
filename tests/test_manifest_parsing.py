@@ -1,14 +1,12 @@
 """A Repository Maintainer's gateseal.toml is parsed and resolved exactly.
 
-Each test renders a Manifest for the bundled policy, or one that also pins a
-Hook Python, and parses, resolves or describes it in process.
+Each test renders a Manifest for the bundled policy, and parses, resolves or
+describes it in process.
 """
 
-import shutil
 from datetime import date
 
 import pytest
-from black_policy import add_black
 from gateseal.diagnostics import GatesealError
 from gateseal.manifest import (
     REASON_LIMIT,
@@ -20,7 +18,7 @@ from gateseal.manifest import (
     render,
     resolve,
 )
-from gateseal.policy import bundled_root, load_bundled_policy, load_policy_tree
+from gateseal.policy import load_bundled_policy
 
 POLICY = load_bundled_policy()
 MANIFEST = render(("hygiene", "secrets"), BundledSource(POLICY.release)).decode()
@@ -39,15 +37,11 @@ def refused(text):
     return raised.value.code
 
 
-@pytest.mark.parametrize(
-    "names",
-    [["hygiene", "hygiene"], ["hygiene", "Python"], ["python"], ["secrets", "python"]],
-)
-def test_a_selection_names_hygiene_and_each_capability_once(names):
+@pytest.mark.parametrize("names", [[], ["secrets", "secrets"], ["hygiene", "Python"]])
+def test_a_selection_names_at_least_one_capability_each_once(names):
     with pytest.raises(GatesealError) as raised:
         capabilities(names)
     assert raised.value.code == "unsupported_capability"
-    assert "hygiene" in str(raised.value)
 
 
 def test_a_selection_is_sorted_by_name():
@@ -56,6 +50,7 @@ def test_a_selection_is_sorted_by_name():
         "python",
         "secrets",
     )
+    assert capabilities(["secrets", "python"]) == ("python", "secrets")
 
 
 @pytest.mark.parametrize(
@@ -104,14 +99,3 @@ def test_an_exception_due_today_is_not_overdue():
     ]
     later = notes(resolve(manifest, POLICY), date(2026, 10, 28))
     assert later[1].category == "overdue_exception"
-
-
-def test_a_hook_python_runs_hooks_beside_a_tool_that_needs_no_python(tmp_path):
-    root = tmp_path / "policy"
-    shutil.copytree(bundled_root(), root, ignore=shutil.ignore_patterns("*.md"))
-    add_black(root, python=True, locked=True)
-    policy = load_policy_tree(root)
-    selected = render(("hygiene", "secrets"), BundledSource(policy.release))
-    selection = resolve(parse_manifest(selected), policy)
-    assert selection.python == policy.hook_python
-    assert selection.python.version == "3.15.2"

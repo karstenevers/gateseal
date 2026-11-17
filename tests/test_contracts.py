@@ -3,11 +3,10 @@ import json
 import shutil
 
 import pytest
-from gateseal import bootstrap
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
-from gateseal.lock import Snapshot, compile_outputs, validate_snapshot
+from gateseal.lock import compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import (
     Asset,
@@ -80,17 +79,21 @@ def test_digest_has_independent_known_vector():
 
 
 HOOKS = 'hook_ids = ["trailing-whitespace", "end-of-file-fixer", "check-yaml"]'
-HYGIENE = "[capabilities.hygiene]"
-PINNED_HOOKS = '[components.pre-commit-hooks.versions."6.0.0"]'
+HYGIENE = "[capabilities.hygiene.tools.pre-commit-hooks]"
+PINNED_HOOKS = 'pin = "6.0.0"'
 RULES = 'configuration = "rules/betterleaks.toml"'
-TARGET = '[choices.python.target_version]\ndefault = "py311"\n'
+TARGET = '[capabilities.python.choices]\ntarget_version = "py311"\n'
+PYTHON = (
+    '[capabilities.python.tools.ruff]\nhook_ids = ["ruff-check", "ruff-format"]\n'
+    'configuration = "rules/ruff.toml"\npin = "0.17.1"\nreviewed = ["0.17.1"]\n\n'
+)
 
 
 @pytest.mark.parametrize(
     "change,replacement,category",
     [
-        ("schema = 4", "schema = 3", "unsupported_schema"),
-        ("schema = 4", "schema = 5\nsurprise = 1", "unsupported_schema"),
+        ("schema = 5", "schema = 4", "unsupported_schema"),
+        ("schema = 5", "schema = 6\nsurprise = 1", "unsupported_schema"),
         (
             'minimum_compiler = "0.1.0"',
             'minimum_compiler = "99.0.0"\nsurprise = 1',
@@ -108,31 +111,20 @@ TARGET = '[choices.python.target_version]\ndefault = "py311"\n'
         (RULES, RULES + "\nhook_ids = []", "unsupported_hook"),
         (PINNED_HOOKS, PINNED_HOOKS + '\nrevision = "3e8a87"', "invalid_field"),
         ('pin = "1.9.0"', 'pin = "1.7.0"', "invalid_field"),
-        ("[components.betterleaks]", "[components.black]", "unsupported_component"),
-        (
-            "[components.ruff]",
-            '[components.pre-commit]\npin = "4.6.2"\n\n'
-            '[components.pre-commit.versions."4.6.2"]\n\n[components.ruff]',
-            "unsupported_component",
-        ),
         (
             PINNED_HOOKS,
-            PINNED_HOOKS + '\nrequires = { pre-commit = "3.2.0" }',
+            PINNED_HOOKS + '\nrequires."6.0.0" = { pre-commit = "3.2.0" }',
             "invalid_field",
         ),
         (
             PINNED_HOOKS,
-            PINNED_HOOKS + '\nrequires = { ruff = "9.0.0" }',
+            PINNED_HOOKS + '\nrequires."6.0.0" = { ruff = "9.0.0" }',
             "incompatible_policy",
         ),
-        (
-            "[choices.hygiene.exclude]",
-            "[choices.hygiene.hook_ids]",
-            "unsupported_choice",
-        ),
-        ("default = []", 'default = ["/etc"]', "invalid_choice"),
-        ('default = "py311"', 'default = "py27"', "invalid_choice"),
-        ('default = "py311"', "default = []", "invalid_choice"),
+        ("exclude = []", "hook_ids = []", "unsupported_choice"),
+        ("exclude = []", 'exclude = ["/etc"]', "invalid_choice"),
+        ('target_version = "py311"', 'target_version = "py27"', "invalid_choice"),
+        ('target_version = "py311"', "target_version = []", "invalid_choice"),
     ],
     ids=lambda value: value if isinstance(value, str) and "_" in value else None,
 )
@@ -266,14 +258,7 @@ def test_secret_rules_cannot_extend_another_configuration(tmp_path):
 def test_policy_without_secrets_still_loads(tmp_path):
     bundled = tree(tmp_path)
     path = tmp_path / "policy.toml"
-    text = path.read_text()
-    for table in (
-        '[capabilities.secrets]\ntools = ["betterleaks"]\n\n',
-        '[tools.betterleaks]\nconfiguration = "rules/betterleaks.toml"\n\n',
-    ):
-        assert table in text
-        text = text.replace(table, "")
-    path.write_text(text.split("[components.betterleaks]")[0])
+    path.write_text(path.read_text().split("\n[capabilities.secrets.")[0])
     (tmp_path / "rules" / "betterleaks.toml").unlink()
     relock(tmp_path, lambda components: components.pop("betterleaks"))
     policy = load_policy_tree(tmp_path)
@@ -291,16 +276,8 @@ def test_policy_without_python_offers_no_python(tmp_path):
     tree(tmp_path)
     path = tmp_path / "policy.toml"
     text = path.read_text()
-    for table in (
-        '[capabilities.python]\ntools = ["ruff"]\n\n',
-        '[tools.ruff]\nhook_ids = ["ruff-check", "ruff-format"]\n'
-        'configuration = "rules/ruff.toml"\n\n',
-        TARGET,
-    ):
-        assert table in text
-        text = text.replace(table, "")
-    before, ruff = text.split("[components.ruff]\n")
-    path.write_text(before + ruff[ruff.index("[components.betterleaks]") :])
+    assert PYTHON + TARGET + "\n" in text
+    path.write_text(text.replace(PYTHON + TARGET + "\n", ""))
     (tmp_path / "rules" / "ruff.toml").unlink()
     relock(tmp_path, lambda components: components.pop("ruff"))
     policy = load_policy_tree(tmp_path)
@@ -315,7 +292,7 @@ def test_policy_without_python_offers_no_python(tmp_path):
     assert failure.value.code == "unsupported_capability"
 
 
-RUFF_PIN = '[components.ruff.versions."0.17.1"]'
+RUFF_PIN = 'reviewed = ["0.17.1"]'
 RUFF = 'configuration = "rules/ruff.toml"'
 
 
@@ -330,10 +307,16 @@ RUFF = 'configuration = "rules/ruff.toml"'
         (('"ruff-check", "ruff-format"', '"check-yaml"'), "unsupported_hook"),
         (('pin = "0.17.1"', 'pin = "0.17"'), "invalid_field"),
         (('pin = "0.17.1"\n', ""), "invalid_field"),
-        (('versions."0.17.1"]', 'versions."0.17"]'), "invalid_field"),
+        ((RUFF_PIN, 'reviewed = ["0.17"]'), "invalid_field"),
+        ((RUFF_PIN, 'reviewed = ["0.17.1", "0.17.1"]'), "invalid_field"),
+        ((RUFF_PIN, "reviewed = []"), "invalid_field"),
         (
-            (RUFF_PIN, RUFF_PIN + '\nrequires = { betterleaks = "9.0.0" }'),
+            (RUFF_PIN, RUFF_PIN + '\nrequires."0.17.1" = { betterleaks = "9.0.0" }'),
             "incompatible_policy",
+        ),
+        (
+            (RUFF_PIN, RUFF_PIN + '\nrequires."0.17.1" = { ruff = "0.1.0" }'),
+            "invalid_field",
         ),
         (
             (RUFF, 'configuration = "rules/../ruff.toml"'),
@@ -349,7 +332,10 @@ RUFF = 'configuration = "rules/ruff.toml"'
         "pin",
         "no pin",
         "version",
+        "version twice",
+        "no version",
         "requirement",
+        "requirement of itself",
         "path",
         "no configuration",
         "schema 1 field",
@@ -371,10 +357,8 @@ def ruff_toml(policy, extra=""):
     manifest = parse_manifest(
         render(("hygiene", "python"), BundledSource(policy.release)) + extra.encode()
     )
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact("local-wheel", f"/{wheel}", wheel, "a" * 64, "0.1.0")
     outputs = compile_outputs(
-        resolve(manifest, policy), artifact, BundledSource(policy.release)
+        resolve(manifest, policy), PIN, BundledSource(policy.release)
     )
     return outputs[".gateseal/ruff.toml"]
 
@@ -404,7 +388,7 @@ def test_a_ruff_configuration_cannot_set_the_target_version_it_exposes(tmp_path)
     assert failure.value.code == "invalid_field"
     assert str(failure.value) == (
         "The ruff configuration sets target-version, which "
-        "choices.python.target_version sets for each repository."
+        "capabilities.python.choices.target_version sets for each repository."
     )
 
 
@@ -412,9 +396,9 @@ def pin_ruff_0_4_0(tmp_path, default):
     path = tmp_path / "policy.toml"
     path.write_text(
         path.read_text()
-        .replace('default = "py311"', f'default = "{default}"')
+        .replace('target_version = "py311"', f'target_version = "{default}"')
         .replace('pin = "0.17.1"', 'pin = "0.4.0"')
-        .replace(RUFF_PIN, RUFF_PIN + '\n\n[components.ruff.versions."0.4.0"]')
+        .replace(RUFF_PIN, 'reviewed = ["0.17.1", "0.4.0"]')
     )
 
     def review(components):
@@ -430,8 +414,8 @@ def test_a_ruff_pin_must_accept_the_default_target_version(tmp_path):
         load_policy_tree(tmp_path)
     assert failure.value.code == "invalid_choice"
     assert str(failure.value).startswith(
-        "choices.python.target_version.default is py314, which ruff 0.4.0 does "
-        "not accept. ruff 0.4.0 accepts py37, py38, py39, py310, py311, py312."
+        "capabilities.python.choices.target_version is py314, which ruff 0.4.0 "
+        "does not accept. ruff 0.4.0 accepts py37, py38, py39, py310, py311, py312."
     )
 
 
@@ -517,13 +501,9 @@ def test_all_contracts_reject_unknown_or_boolean_schema(installed, configured):
     for key, value in (("schema", True), ("surprise", "value")):
         document = json.loads(locked.snapshot.lock)
         document[key] = value
-        snapshot = Snapshot(
-            locked.snapshot.manifest,
-            json.dumps(document).encode(),
-            locked.snapshot.outputs,
-        )
+        (configured / "gateseal.lock").write_text(json.dumps(document))
         with pytest.raises(GatesealError):
-            validate_snapshot(configured, snapshot, preparation)
+            load(configured, preparation)
 
 
 def test_diagnostics_redact_complete_output():
@@ -580,12 +560,6 @@ def test_diagnostics_keep_the_port_and_the_ssh_user():
     assert "https://host:8443/team/policy.git" in rendered
     assert "ssh://host/x" in rendered
     assert "token" not in rendered and "secret" not in rendered
-
-
-def test_hook_bytes_are_pinned():
-    assert hashlib.sha256(bootstrap.HOOK).hexdigest() == (
-        "c8b954813d52fc7394d2f9d5f8a3915525ac3132cc23cb7aa58154600e3050f6"
-    ), "Changed hook bytes make every installed gateseal hook unmanaged."
 
 
 RUN_OUTPUT = """\

@@ -3,14 +3,13 @@ import re
 from importlib.resources import files
 
 import pytest
-from gateseal.compiler_release import CompilerArtifact
+from conftest import PIN
 from gateseal.diagnostics import GatesealError
-from gateseal.environments import tool_environment
 from gateseal.lock import compile_lock
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy
 from gateseal.tools import built_in_tools, load_definition
-from gateseal.tools.model import Executable, Origin
+from gateseal.tools.model import Origin
 from gateseal.validation import canonical
 
 BETTERLEAKS_1_8 = (
@@ -23,71 +22,65 @@ RUFF = ".gateseal/ruff.toml"
 RULES = ".gateseal/betterleaks.toml"
 REPORT = ".gateseal/betterleaks-report.tmpl"
 HISTORY_REPORT = ".gateseal/betterleaks-history-report.tmpl"
-MISE = ".gateseal/mise.toml"
 SECRETS = {
     RULES: "183ff997bc28f117c430b0b47903b9ddc92f697e8d421dc126e191fdc583c26e",
     REPORT: "e90202b5add329ed4cc8e507dacdda7bbdc9cb72b37aa717a8f31897bf53cdf9",
     HISTORY_REPORT: (
         "6a78914b3697c6e2a5baa53330b760938a191b367afc428947eb9ca4465c6aa6"
     ),
-    MISE: "13ebf309b67d09cdd07bbf992c25ebc6de299e5ccfc3667dc3e7b43d3bcf881f",
-}
-SECRETS_1_8 = {
-    **SECRETS,
-    MISE: "9961b0e2c557e9d96c55061a8cfa614298d37a2d3e71ddc5e3a42a415d707954",
 }
 PYTHON = {RUFF: "ffcf7d3c282f374519e8110da535fbde8e4d9dd0d81b7dad32db64a6979f8c2c"}
-ALL = "d606081ed4765af042fbf593dc1ef9b80304e8e149f706238cb2a983b5915f85"
+ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "7eb888b2709ebe52be7c23b5412fd5f3c38f61f4ccf0eb8a1712c3d9851eee7a"
+            "412d09bbbe99d2550651f44835bd7d717189841c43169d6dcd9e5f9d8a6e643e"
         ),
-        CONFIG: "842259ac89e0fee4ef0d6ee5937b000111eafd8755a097bad7c7f6a2b82de9ad",
+        CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "6bf4ecf1db2d858bbc4a80b10816fd8ac83b6035b31aeae5372f27a841e6ab97"
+            "4398d56e0f6e3a5bf985dfb86abafe6073c02e3c74a92664bed37d63732c21f9"
         ),
-        CONFIG: "47c023313666cec98b4418a3d7bd24a691abfb45faf18530c4e9bff6ddc19f6d",
+        CONFIG: "0b1cc4d5b9a12df9e44c94893c455d35b6a087c44c95143f0334148d8e2cf451",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "0b574ad4336c2d975f1212fa9876d10a46670d8dca3bca88316a85446549122f"
+            "4053ca24ef02d03c4094de7e0ba2c1578ab0138b9178bf8811c4ee0a74d24159"
         ),
-        CONFIG: "ae6fb71109b0e8c8197e6d0c8b3f5d15dca9a374d5ecc8a6b70e16bdb130c9b1",
+        CONFIG: "539062edebd6998b5a2f2050ffe4e63897e8c7d7b221435cee1a65325590d3f3",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "df75fdc8ff7e8549ca1a14440a98de75a075191dbea7d8a24361d660ab7fa74a"
+            "67d286809e169657a92c3b526e97d8211d017144e8d676763009bdcc4cc291f7"
         ),
-        CONFIG: "ae6fb71109b0e8c8197e6d0c8b3f5d15dca9a374d5ecc8a6b70e16bdb130c9b1",
-        **SECRETS_1_8,
+        CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
+        **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "a482ad2ee2f52d99c7b977bd4c3c0b71384248376ce6fa9e583c738286d4c2e2"
+            "d71a5f893eb50e2eb490ec776345a718359acd5a597b5f730770f30332c10601"
         ),
-        CONFIG: ALL,
+        CONFIG: "6be995a52e003a9e380b0c5db4e523eaf2f0ab470b60e4870780f9863c551d78",
         **PYTHON,
         **SECRETS,
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "c1cc5dbcdea69532e3a821b9ee6c05a00366b9880ebb0b733502d21dc9260e52"
+            "213716a6e90487fb87036834ddd3b16c12ada9b54785f990f1cd5909112fe06f"
         ),
-        CONFIG: ALL,
+        CONFIG: "c86d15d1696b56d8ab5b15c2268efad5e03754148a6d9f8e84b95c3d6233fd44",
         **PYTHON,
-        **SECRETS_1_8,
+        **SECRETS,
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "0404ee29b34a9ffecdef2e38c818fb84be2e23d66b504e8584d2449a72401547"
+            "f4faa07e3ef77cfcc1f7cd7ba55ace2c9b58bd7d6ca33e282137469ec1e07b9d"
         ),
-        CONFIG: "e2d4b0aee6c89cb2c08442aee3ae29b80d75a598e8c0d34ead20447a46c6350b",
+        CONFIG: "3a88b2d4f19a4e2777264d6e781ab2046db54102087ad629ad7882d0f644c967",
         **PYTHON,
         **SECRETS,
     },
@@ -118,12 +111,8 @@ def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
     capabilities = tuple(item for item in selection if not item.startswith("\n"))
     extra = "".join(item for item in selection if item.startswith("\n"))
     manifest = render(capabilities, source) + extra.encode()
-    wheel = "gateseal-0.1.0-py3-none-any.whl"
-    artifact = CompilerArtifact(
-        "local-wheel", f"/wheels/{wheel}", wheel, "a" * 64, "0.1.0"
-    )
     chosen = resolve(parse_manifest(manifest), policy)
-    lock = compile_lock(manifest, source, policy, artifact, chosen)
+    lock = compile_lock(manifest, source, policy, PIN, chosen)
     digests = {name: entry["sha256"] for name, entry in lock["outputs"].items()}
     digests["gateseal.lock"] = hashlib.sha256(canonical(lock)).hexdigest()
     assert digests == GOLDEN[selection]
@@ -144,11 +133,9 @@ def refused(name, old, new):
 def test_built_in_tools_name_only_owned_files():
     ruff, betterleaks = built_in_tools()["ruff"], built_in_tools()["betterleaks"]
     assert ruff.hooks["ruff-format"].args == ("--config", RUFF, "--")
-    assert ruff.hooks["ruff-check"].probe[:4] == ("ruff", "check", "--config", RUFF)
     assert betterleaks.owned == (RULES, REPORT, HISTORY_REPORT)
     args = betterleaks.hooks["betterleaks"].args
     assert args[args.index("--report-template") + 1] == REPORT
-    assert betterleaks.hooks["betterleaks"].probe[-2:] == ("--config", RULES)
 
 
 @pytest.mark.parametrize(
@@ -183,25 +170,18 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
         ("ruff", '"--config", "{configuration}", "--fix"', '"--config", "{report}"'),
         ("ruff", '"--config", "{configuration}", "--fix"', '"--config", "{config"'),
         ("ruff", '[configuration]\nformat = "toml"\n', ""),
-        ("ruff", '  "ruff", "check"', '  "/usr/bin/ruff", "check"'),
-        ("ruff", 'name = "ruff"', 'name = "../ruff"'),
-        ("ruff", '["RUFF_"]', '["ruff"]'),
-        ("ruff", '"ruff {version}"', '"ruff"'),
-        ("ruff", '"ruff {version}"', '"ruff ({version}"'),
-        ("ruff", '"ruff {version}"', '"ruff (?:{version})?.*"'),
-        ("ruff", '"ruff {version}"', '"(?:ruff {version})?.*"'),
-        ("ruff", '"ruff {version}"', '"ruff {version}?.*"'),
+        ("betterleaks", 'name = "betterleaks"', 'name = "../betterleaks"'),
         ("ruff", 'scope = "files"', 'scope = "files"\nentry = "ruff check"'),
         ("ruff", '"https://github.com/astral', '"http://github.com/astral'),
         ("ruff", 'tag = "v{version}"', 'tag = "v0.17.1"'),
         ("ruff", 'name = "ruff format"', 'name = "ruff check"'),
-        ("betterleaks", 'probe = ["betterleaks"', 'probe = ["sh"'),
         (
             "betterleaks",
-            '[executable]\nname = "betterleaks"\nversion = ["version"]\n'
-            'version_output = "{version}"\n',
+            '[executable]\nname = "betterleaks"\ncheck_at_commit = true\n',
             "",
         ),
+        ("betterleaks", "check_at_commit = true", 'check_at_commit = "yes"'),
+        ("ruff", 'scope = "files"', 'scope = "files"\n[executable]\nname = "ruff"'),
         ("betterleaks", "_{version}_{platform}.tar.gz", "_{version}.tar.gz"),
         ("betterleaks", '"betterleaks_{version}', '"../{version}'),
         ("betterleaks", "extension = ", 'extension = "tmpl"\npath = "/etc/x"\n#'),
@@ -211,20 +191,14 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
         "unknown placeholder",
         "stray brace",
         "configuration placeholder without configuration",
-        "probe path",
         "executable path",
-        "prefix",
-        "version output without version",
-        "version output pattern",
-        "optional version",
-        "version inside an optional group",
-        "repeated version",
         "command field",
         "http repository",
         "tag without version",
         "hook name twice",
-        "probe of another program",
         "release binary without executable",
+        "check at commit that is no boolean",
+        "pre-commit repository with an executable",
         "archive without platform",
         "archive path",
         "file path",
@@ -281,45 +255,3 @@ def test_a_definition_choice_needs_an_accepted_value():
     with pytest.raises(GatesealError) as failure:
         load_definition("ruff", text.encode(), Origin.BUILT_IN)
     assert failure.value.code == "invalid_field"
-
-
-@pytest.mark.parametrize(
-    "output,reported",
-    [
-        ("ruff {version}", "ruff 1.9.0"),
-        ("{version}", "1.9.0"),
-        ("mutmut, version {version}", "mutmut, version 1.9.0"),
-        ("mypy {version} .*", "mypy 1.9.0 (compiled: yes)"),
-    ],
-)
-def test_version_proof_accepts_the_selected_version(output, reported):
-    Executable("tool", ("--version",), output).require_version(reported, "1.9.0", "x")
-
-
-@pytest.mark.parametrize("reported", ["11.9.0", "1.9.0.1", "1.9.0-rc1", "1.9.1"])
-def test_version_proof_cannot_be_loosened(reported):
-    with pytest.raises(GatesealError) as failure:
-        Executable("tool", ("--version",), ".*{version}.*").require_version(
-            reported, "1.9.0", "tool"
-        )
-    assert failure.value.code == "tool_failed"
-    assert str(failure.value) == f"Prepared tool reports version {reported}, not 1.9.0."
-
-
-@pytest.mark.parametrize("output", ["{version}|.*", ".*|{version}"])
-def test_alternation_cannot_skip_the_version(output):
-    with pytest.raises(GatesealError) as failure:
-        Executable("tool", ("--version",), output).require_version(
-            "9.9.9", "1.9.0", "x"
-        )
-    assert failure.value.code == "tool_failed"
-
-
-def test_processes_start_without_any_built_in_tool_settings(monkeypatch):
-    for key in ["RUFF_CONFIG", "BETTERLEAKS_CONFIG", "GITLEAKS_CONFIG", "RUFFLE"]:
-        monkeypatch.setenv(key, "x")
-    environment = tool_environment()
-    assert "RUFFLE" in environment
-    assert not {"RUFF_CONFIG", "BETTERLEAKS_CONFIG", "GITLEAKS_CONFIG"} & set(
-        environment
-    )

@@ -162,26 +162,27 @@ def test_remove_deletes_the_file_and_accepts_a_missing_one(tmp_path):
     assert failure(remove, tmp_path, "../rules/keep.toml").code == "unsafe_path"
 
 
-@pytest.mark.parametrize(("chosen", "expected"), [((), 0o600), ((0o664,), 0o664)])
-def test_write_atomic_replaces_the_file_with_the_chosen_mode(
-    tmp_path, chosen, expected
-):
+@pytest.mark.parametrize("chosen", [0o600, 0o664])
+def test_write_atomic_replaces_the_file_with_the_chosen_mode(tmp_path, chosen):
     path = tmp_path / "policy.lock"
     path.write_bytes(b"old")
     path.chmod(0o640)
-    write_atomic(path, b"new", *chosen)
+    write_atomic(path, b"new", chosen)
     assert path.read_bytes() == b"new"
-    assert mode(path) == expected
+    assert mode(path) == chosen
     assert [p.name for p in tmp_path.iterdir()] == ["policy.lock"]
 
 
 def test_write_atomic_refuses_a_file_where_its_directory_belongs(tmp_path):
     (tmp_path / "rules").write_bytes(b"not a directory")
-    assert failure(write_atomic, tmp_path / "rules" / "x", b"x").code == "unsafe_path"
+    assert (
+        failure(write_atomic, tmp_path / "rules" / "x", b"x", 0o644).code
+        == "unsafe_path"
+    )
 
 
 def test_a_failed_write_leaves_no_temporary_file(tmp_path):
     (tmp_path / "policy.lock").mkdir()
     with pytest.raises(IsADirectoryError):
-        write_atomic(tmp_path / "policy.lock", b"new")
+        write_atomic(tmp_path / "policy.lock", b"new", 0o644)
     assert [p.name for p in tmp_path.iterdir()] == ["policy.lock"]

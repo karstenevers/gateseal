@@ -1,11 +1,9 @@
 """The Tool Kinds this compiler implements, and its Built-in Tools.
 
 Each kind is a module in this package, and KINDS maps its name to the parser of
-its [source] table. lock.py and runtime.py call each module's own outputs,
-preparation, and probe steps, so a new kind adds its calls there too. A
-Built-in Tool is a Tool Definition in the package's data/tools,
-<name>.tool.toml, so the compiler wheel's digest, which the Lock records, covers
-it. The suffix keeps every tool from reading a definition as its own
+its [source] table. A Built-in Tool is a Tool Definition in the package's
+data/tools, <name>.tool.toml, so the gateseal commit that the Lock pins
+covers it. The suffix keeps every tool from reading a definition as its own
 configuration, as Ruff reads any ruff.toml it walks past. Kind modules import
 gateseal.tools.model, never this package, so loading it cannot cycle.
 """
@@ -49,12 +47,10 @@ def require_distinct(definitions: Iterable[ToolDefinition], subject: str) -> Non
     """Require distinct hook IDs, hook names and owned outputs across definitions.
 
     The Lock and run's results name hooks by ID, pre-commit's status lines by
-    name, and each owned output has one writer. Activation attributes each
-    hook environment to one tool by its repository, so no two tools share one.
-    No definition may claim the mise.toml the release-binary kind writes.
+    name, and each owned output has one writer.
     subject names the definitions, such as the policy's tools, in the failure.
     """
-    claims = {("output", release_binary.MISE): "the release-binary kind"}
+    claims: dict[tuple[str, str], str] = {}
     for definition in definitions:
         claimed = [("hook ID", hook.id) for hook in definition.hooks.values()]
         claimed += [("hook name", hook.name) for hook in definition.hooks.values()]
@@ -92,11 +88,3 @@ def load_directory(directory: Traversable) -> dict[str, ToolDefinition]:
 def built_in_tools() -> Mapping[str, ToolDefinition]:
     """Return every definition in the package's data/tools, by name."""
     return load_directory(files("gateseal").joinpath("data", "tools"))
-
-
-@functools.cache
-def removed_prefixes() -> tuple[str, ...]:
-    """Return every built-in tool's removed environment prefixes, sorted."""
-    return tuple(
-        sorted({p for d in built_in_tools().values() for p in d.removed_prefixes})
-    )

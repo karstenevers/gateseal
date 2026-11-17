@@ -7,10 +7,86 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+### Added
+
+- `gateseal setup` prepares a machine once: it installs pre-commit in a folder
+  of its own and names a Git template with pre-commit's commit launcher in the
+  global `init.templateDir`, so every new clone runs pre-commit at
+  `git commit`. `gateseal setup --refresh` adds the launcher to an existing
+  clone.
+- The `gateseal-check` hook. `.pre-commit-config.yaml` lists gateseal's
+  repository first, at the commit that the Lock pins, so pre-commit builds
+  that gateseal and runs its hook before the tools. The hook compares the
+  staged `gateseal.toml` and each staged generated file with the SHA-256 that
+  the staged Lock records, with no network and no policy. A commit that stages
+  an edited generated file stops and names `gateseal configure`. `gateseal
+  run` skips the hook.
+- `check_at_commit` in a tool definition's `[executable]`. `gateseal policy
+  lock` records the SHA-256 of the program in each archive of such a tool,
+  and the `gateseal-check` hook compares the program that mise starts with
+  it, because mise never checks an installed tool again. Betterleaks sets it,
+  so a commit on a machine with a replaced Betterleaks stops and names it. A
+  team policy that reviews Betterleaks stops loading until you run `gateseal
+  policy lock` on its directory again, which records these SHA-256s, and
+  release it.
+
 ### Changed
 
+- A commit runs pre-commit, not the installed gateseal command. pre-commit
+  builds the environment of each hook repository, and mise installs each
+  release binary at its first use and checks its SHA-256. A hook that starts a
+  release binary names its mise request in `.pre-commit-config.yaml`, so
+  `.gateseal/mise.toml` is no longer written.
+- `gateseal run` and `gateseal gate` start the pre-commit that `gateseal setup`
+  installed, with the caller's environment. Without it they stop with
+  `needs_setup`.
+- `gateseal status` and `gateseal doctor` report the same four checks: the
+  Lock, the pre-commit from setup, the commit launcher and mise. `status` uses
+  no network and exits 0. `doctor` exits 3 when a check fails, and warns when
+  `core.hooksPath` is set or mise's install at first use is off.
+- The generated GitHub workflow runs `gateseal setup`, `gateseal check` and
+  `gateseal gate`.
+- A Tool Definition's `stages` is `["commit", "run", "ci"]` or `["ci"]`.
 - gateseal runs on Python 3.11 and later, the floor of the pre-commit version
   it names. It needed Python 3.14.10 or a later 3.14 release before.
+- `hygiene` is optional. A policy defines at least one capability of any name,
+  and a Manifest selects at least one of them, such as `secrets` alone.
+- `policy.toml` writes each tool once, as a table under its capability:
+  `[capabilities.<capability>.tools.<tool>]` holds its hooks, rule file, `pin`,
+  `reviewed` versions and `requires`, and `[capabilities.<capability>.choices]`
+  gives each exposed choice its default. This is policy schema 5, and gateseal
+  refuses a policy of an older schema with `unsupported_schema`.
+- Any capability can expose `exclude`, except one that holds a tool with a
+  history scan, so that a commit and the CI gate check the same files. The
+  bundled policy still exposes it only for `hygiene`.
+- The Lock pins gateseal by its repository, its version and the commit of its
+  release tag, which `gateseal configure` reads with the user's Git. The
+  generated workflow installs gateseal from that commit. This is Lock format 2,
+  and every command refuses a Lock of another format with
+  `unsupported_schema`. To move a repository from 0.1.0, delete
+  `gateseal.lock`, `.pre-commit-config.yaml`, `.gateseal/` and
+  `.github/workflows/gateseal.yml`, then run `gateseal configure`.
+- `gateseal upgrade` run by another gateseal release moves the Lock to that
+  release, newer or older. It reads only the old Lock's ownership ledger: its
+  format, its gateseal pin, the Manifest's SHA-256, the policy's digest and
+  the files it lists. A listed file that the release never writes stops the
+  move, and so does a bundled policy with other content under the same label.
+- The Lock no longer records the CPython and pre-commit that gateseal runs.
+- A hook repository record in the Lock no longer has `tools`.
+
+### Removed
+
+- `gateseal activate` and `gateseal upgrade --activate`. A clone needs no
+  preparation after `gateseal setup`.
+- Hook Python, the `[components.python]` table of a policy. A Python hook runs
+  on the Python that `gateseal setup` installed pre-commit with.
+- `--compiler-wheel`, `--compiler-source` and `--compiler-sha256` of
+  `gateseal configure` and `gateseal upgrade`, and the candidate compiler that
+  an upgrade installed to render a compiler move.
+- The Tool Definition fields that only the removed preparation read:
+  `removed_prefixes`, a hook's `probe`, and `version` and `version_output` in
+  `[executable]`. A definition that still sets one stops with `invalid_field`.
+  A pre-commit repository no longer takes an `[executable]` table.
 
 ## [0.1.0] - 2026-11-11
 

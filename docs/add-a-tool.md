@@ -6,7 +6,7 @@ compiler supports its kind. The examples use both supported kinds.
 | To add | Tool kind | Example |
 | --- | --- | --- |
 | A binary from a release with checksums | `release-binary` | [Add Gitleaks to secret detection](#define-the-tool) |
-| A Python-language pre-commit hook repository | `pre-commit-repository` | [Offer Black as an alternative to Ruff](#offer-black-as-a-formatter-on-a-newer-python) |
+| A Python-language pre-commit hook repository | `pre-commit-repository` | [Offer Black as an alternative to Ruff](#offer-black-as-a-formatter) |
 
 Start with [a copy of the bundled policy](author-a-policy.md#start-the-policy)
 in `policy/`. From the root of the policy repository, create the
@@ -32,7 +32,6 @@ tool its name. Choose a name that the compiler has not reserved.
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -49,8 +48,6 @@ format = "toml"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{version}"
 
 # The report prints each finding's place and rule, never its source line.
 [files.report]
@@ -72,12 +69,11 @@ args = [
   "--report-format", "template", "--report-template", "{report}",
   "--report-path", "-", "--",
 ]
-probe = ["gitleaks", "stdin", "--config", "{configuration}", "--no-banner"]
 output = "concise"
 ```
 
 `source` describes the release archives and their checksum file.
-`executable` tells activation to check the output of `gitleaks version`.
+`executable` names the program that each hook starts through mise.
 In the hook arguments, `{configuration}` names the generated
 `.gateseal/gitleaks.toml`, and `{report}` names the generated
 `.gateseal/gitleaks-report.tmpl`. The report prints each finding as
@@ -110,21 +106,17 @@ paths = ['''^\.git/''']
 
 ## Add it to a capability
 
-In `policy/policy.toml`, replace the existing `[capabilities.secrets]`
-table with the one below. Add the `tools.gitleaks` and `components.gitleaks`
-tables. Each tool belongs to one capability.
+In `policy/policy.toml`, add the table below after the Betterleaks table. It
+puts Gitleaks in the `secrets` capability, names its rules and reviews
+Gitleaks 8.30.0. Each tool belongs to one capability, and the tools of a
+capability run in file order.
 
+<!-- policy tables: gitleaks -->
 ```toml
-[capabilities.secrets]
-tools = ["betterleaks", "gitleaks"]
-
-[tools.gitleaks]
+[capabilities.secrets.tools.gitleaks]
 configuration = "rules/gitleaks.toml"
-
-[components.gitleaks]
 pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
+reviewed = ["8.30.0"]
 ```
 
 Generate the lock and check the policy.
@@ -154,25 +146,21 @@ repository that adopts it and selects `secrets`, run `gateseal status`.
 Look for Betterleaks marked `built-in` and Gitleaks marked `team-defined`.
 Both hooks redact secret values from their findings.
 
-## Offer Black as a formatter on a newer Python
+## Offer Black as a formatter
 
 Use this example when some repositories need Black and others use Ruff for
-formatting. Black parses code with the interpreter it runs on. To format
-syntax newer than the compiler runtime supports, the policy must also select
-a [Hook Python](../GLOSSARY.md#hook-python) that can parse it.
+formatting. Black parses code with the interpreter it runs on, which is the
+Python that `gateseal setup` installed pre-commit with.
 
 Save the definition as `policy/tools/black.toml`.
 
 <!-- policy file: tools/black.toml -->
 ```toml
-# Black parses the code it formats with the interpreter it runs on, so it
-# formats syntax newer than gateseal's runtime CPython only on a Hook Python
-# that knows that syntax. The mirror's hook installs Black from PyPI by
-# version and without a hash, so the prepared black must report its pin.
+# Black parses the code it formats with the interpreter it runs on. The
+# mirror's hook installs Black from PyPI by version and without a hash.
 kind = "pre-commit-repository"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["BLACK_"]
 
 [source]
 repository = "https://github.com/psf/black-pre-commit-mirror"
@@ -181,18 +169,12 @@ tag = "{version}"
 [configuration]
 format = "toml"
 
-[executable]
-name = "black"
-version = ["--version"]
-version_output = 'black, {version} \(compiled: [a-z]+\)\nPython \(CPython\) [0-9.]+'
-
 # With --config, Black reads no other configuration. The final -- ends the
 # options before pre-commit appends file names.
 [hooks.black]
 name = "black"
 args = ["--config", "{configuration}", "--"]
 types_or = ["python", "pyi"]
-probe = ["black", "--config", "{configuration}", "--check", "-"]
 output = "plain"
 ```
 
@@ -205,68 +187,56 @@ settings from the `[tool.black]` table.
 line-length = 88
 ```
 
-In `policy/policy.toml`, replace `[capabilities.python]` with the table
-below. Add the other tables in the example. The default keeps Ruff as both
-linter and formatter. Selecting Black changes the formatter and keeps the
-Ruff lint hook.
+In `policy/policy.toml`, replace the tables of the `python` capability with
+the ones below. They add Black, offer its hook and `ruff-format` as
+alternatives for one job, and give the choice its default. The default keeps
+Ruff as both linter and formatter. Selecting Black changes the formatter and
+keeps the Ruff lint hook.
 
 <!-- policy tables: black -->
 ```toml
-[capabilities.python]
-tools = ["ruff", "black"]
-alternatives.formatter = ["ruff-format", "black"]
+[capabilities.python.tools.ruff]
+hook_ids = ["ruff-check", "ruff-format"]
+configuration = "rules/ruff.toml"
+pin = "0.17.1"
+reviewed = ["0.17.1"]
 
-[tools.black]
+[capabilities.python.tools.black]
 configuration = "rules/black.toml"
-
-[choices.python.formatter]
-default = "ruff-format"
-
-[components.black]
 pin = "26.10.1"
+reviewed = ["26.10.1"]
 
-[components.black.versions."26.10.1"]
+[capabilities.python.alternatives]
+formatter = ["ruff-format", "black"]
+
+[capabilities.python.choices]
+target_version = "py311"
+formatter = "ruff-format"
 ```
 
-Lock the Black release. Then add the Hook Python. For a new CPython version,
-use the patch release available in the latest python-build-standalone build.
-This example uses 3.15.2.
+Lock the Black release:
 
 ```sh
 gateseal policy lock policy
-gateseal policy add python 3.15.2 policy
 gateseal policy check policy
 ```
 
-The first `policy add python` pins the interpreter in `[components.python]`.
-It records each supported machine's download data in `policy.lock` using
-the build's `SHA256SUMS`. If the policy already pins a different Hook
-Python, also run `gateseal policy pin python 3.15.2 policy`.
-
-The pin applies to all Python-language hooks from pre-commit repositories,
-including Ruff and pre-commit-hooks. Without a pin, they use the compiler
-runtime's CPython. Release binaries run independently of this choice.
-
 After a repository adopts the release, select Black in its `gateseal.toml`.
-For code that uses Python 3.15 syntax, also tell Ruff which syntax to accept.
 
 ```toml
 [choices.python]
 formatter = "black"
-target_version = "py315"
 ```
 
-Run `gateseal configure` and `gateseal activate` in that repository.
-Run `gateseal status` and look for the selected Hook Python and
-`Choice python.formatter: black.` If Black rejects newer syntax, check the
-interpreter in the status output.
+Run `gateseal configure` in that repository. Run `gateseal status` and look
+for `Choice python.formatter: black.`
 
 ## What the Gitleaks definition guarantees
 
 This definition uses `--redact` and a report template that omits source
 text. It disables inline `gitleaks:allow` comments. The
-[tool kind](tool-definitions.md#what-a-team-definition-guarantees) verifies
-the executable, but finding suppression and file selection depend on how
+[tool kind](tool-definitions.md#what-a-team-definition-guarantees) pins the
+archive, but finding suppression and file selection depend on how
 Gitleaks handles its arguments.
 
 Gitleaks 8.30 accepts one path. When pre-commit supplies multiple filenames,

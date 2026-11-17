@@ -6,24 +6,15 @@ its history for secrets.
 
 ## Turn it on
 
-The runner must be able to download the pinned wheel without credentials.
-A local wheel fails with `ci_needs_network_compiler`. For a new repository, follow [Pin the release in a
-repository](install.md#pin-the-release-in-a-repository) and add `--ci github`
-to the first `configure` command.
+The runner installs gateseal from the commit that the Lock pins, so it must
+reach gateseal's repository without credentials. For a new repository, follow
+[Pin the release in a repository](install.md#pin-the-release-in-a-repository)
+and add `--ci github` to the first `configure` command.
 
-For an existing repository, check `compiler.source.kind` in the Lock.
-If it is `local-wheel`, switch to the same wheel on PyPI **before** you edit
-`gateseal.toml`. Copy the wheel's URL from PyPI, as
-[Pin the wheel on PyPI](install.md#pin-the-wheel-on-pypi) shows. Use the
-digest that the Lock records in `compiler.sha256`, and change the location:
-
-```sh
-gateseal upgrade --compiler-source PYPI_WHEEL_URL --compiler-sha256 WHEEL_SHA256
-```
-
-For an existing repository with a public wheel, add this table to
-`gateseal.toml`. For a new repository, `--ci github` creates it. Set `default_branch` to the branch whose pushes you want to
-check. Pull requests and merge groups can target any branch.
+For an existing repository, add this table to `gateseal.toml`. For a new
+repository, `--ci github` creates it. Set `default_branch` to the branch whose
+pushes you want to check. Pull requests and merge groups can target any
+branch.
 
 ```toml
 [ci]
@@ -40,7 +31,6 @@ also enabled Python or secrets for the first time, stage `.gateseal` too.
 ```sh
 gateseal configure
 gateseal check
-gateseal activate
 git add gateseal.toml gateseal.lock .pre-commit-config.yaml .github/workflows/gateseal.yml
 ```
 
@@ -62,6 +52,10 @@ only to the policy repository's HTTPS URL. Fork pull requests do not receive
 the secret. For SSH URLs and other hosts, the job needs separate Git
 credentials. See [Authenticate to a private policy](authenticate.md).
 
+The token serves only the policy fetch. pre-commit clones each hook
+repository in the gate step without it, so the runner must be able to read
+every hook repository without credentials.
+
 ## What the workflow does
 
 The workflow runs on `ubuntu-24.04` with `contents: read`. It checks pushes to
@@ -72,16 +66,18 @@ other events.
 1. Check out the full Git history without persisting credentials. For a pull
    request, check out GitHub's merge commit. The Lock, workflow, and files
    come from the proposed merge.
-2. Download the pinned uv and mise releases and verify them. Install the
-   locked gateseal wheel, then run `gateseal activate` to prepare the tools
-   and check the repository configuration.
+2. Download the pinned uv and mise releases and verify them. Install
+   gateseal from the commit that the Lock pins. Run `gateseal setup` to
+   install pre-commit, then `gateseal check` to check the repository
+   configuration.
 3. Run `gateseal gate` on the files and commits selected by the event.
 
 ## The gate
 
-The gate runs hooks selected for the policy's CI stage (pre-commit's
-`manual` stage). Every hook runs at every stage, so the gate runs the
-same hooks as a commit and `gateseal run`.
+The gate runs the hooks of the CI stage (pre-commit's `manual` stage). A tool
+whose definition lists every stage runs in the gate, at a commit, and in
+`gateseal run`. A tool whose definition lists only `ci` runs in the gate
+alone. The gate starts the pre-commit that `gateseal setup` installed.
 
 | Event | Files checked | History scanned |
 | --- | --- | --- |

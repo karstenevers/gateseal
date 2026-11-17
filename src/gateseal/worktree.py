@@ -1,13 +1,25 @@
 """Find the worktree a command runs in, and where Git keeps its state."""
 
+import contextlib
+import fcntl
+import os
+import shutil
+from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 
-from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError
 from gateseal.environments import tool_environment
+from gateseal.managed_files import open_directory
 from gateseal.paths import resolved
 from gateseal.processes import execute, find_git
+
+PREPARATION = "gateseal"
+"""A worktree's folder for gateseal's writer lock and stored policy releases.
+
+It is in the worktree's own Git directory. Git treats this name as
+per-worktree, as `git rev-parse --git-path gateseal` shows.
+"""
 
 
 @dataclass(frozen=True)
@@ -28,19 +40,11 @@ class Worktree:
 
     @property
     def preparation(self) -> Path:
-        return self.git_dir / bootstrap.PREPARATION
+        return self.git_dir / PREPARATION
 
     @property
     def hook(self) -> Path:
         return self.common_dir / "hooks" / "pre-commit"
-
-    def display(self, path: Path) -> str:
-        """Name path relative to root when it is inside, otherwise absolutely."""
-        return (
-            path.relative_to(self.root).as_posix()
-            if path.is_relative_to(self.root)
-            else str(path)
-        )
 
 
 def locate_worktree(requested: Path) -> Worktree:
@@ -91,3 +95,59 @@ def locate_worktree(requested: Path) -> Worktree:
             next_step="Unset GIT_INDEX_FILE, then retry.",
         )
     return Worktree(root, git_dir, common_dir, git)
+
+
+def preparation_directory(worktree: Worktree) -> Path:
+    """Return the worktree's folder in its Git directory, made when missing.
+
+    Anything else at that path, such as a file or a link, is an unsafe_path.
+    """
+    local = worktree.preparation
+    with contextlib.suppress(FileExistsError):
+        local.mkdir(mode=0o700)
+    with open_directory(local):
+        return local
+
+
+def open_lock(name: Path) -> int:
+    """Open lock file name read-write without following a link, creating it.
+
+    On macOS an O_CREAT open can fail with ENOENT while another process
+    creates the same file, so a missing lock is created with O_EXCL and opened
+    again when another process wins.
+    """
+    flags = os.O_RDWR | os.O_NOFOLLOW
+    while True:
+        try:
+            return os.open(name, flags)
+        except FileNotFoundError:
+            pass
+        try:
+            return os.open(name, flags | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            pass
+
+
+@contextlib.contextmanager
+def operation_lock(local: Path) -> Generator[None]:
+    """Hold local's writer lock, and first delete what a killed writer left.
+
+    Every scratch folder in local is named .gateseal-* and is made under this
+    lock, so one that is there when the lock is taken has no user. Links are
+    never followed.
+    """
+    descriptor = open_lock(local / "operation.lock")
+    try:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise GatesealError(
+                "operation_in_progress", "Another gateseal writer is active.", 4
+            ) from exc
+        with open_directory(local) as directory:
+            for name in os.listdir(directory):
+                if name.startswith(".gateseal-"):
+                    shutil.rmtree(name, dir_fd=directory, ignore_errors=True)
+        yield
+    finally:
+        os.close(descriptor)

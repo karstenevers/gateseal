@@ -29,7 +29,7 @@ pre-commit runs the hooks. gateseal adds what a team needs around them.
   come from one reviewed release. No more copying configuration files into
   each repository and updating them by hand.
 - **Exact versions.** Your commits and CI use the tool versions recorded in
-  `gateseal.lock`. gateseal installs those versions itself and ignores the
+  `gateseal.lock`. pre-commit and mise install those versions and ignore the
   tools installed on your machine. Two repositories on the same machine can
   use different versions of a tool, such as Betterleaks 1.9.0 and 1.10.0,
   without conflict.
@@ -39,8 +39,8 @@ pre-commit runs the hooks. gateseal adds what a team needs around them.
 
 ## Who gateseal is for
 
-**Developers:** run `gateseal activate` in each worktree, and every commit
-checks the staged files with the locked tools that activation installed.
+**Developers:** run `gateseal setup` once per machine, and every commit
+checks the staged files with the tool versions that the Lock pins.
 
 **Repository owners:** pin one policy release in `gateseal.lock`, and plain
 `gateseal` shows whether the repository matches it.
@@ -107,41 +107,37 @@ uv tool install --python 3.14.10 gateseal
 gateseal --version
 ```
 
-[Install gateseal](docs/install.md) explains the Python flag, installs the
-release that a repository pins, and installs a wheel by its reviewed SHA-256.
+[Install gateseal](docs/install.md) explains the Python flag and installs the
+release that a repository pins.
 
 ## Quick start
 
-Adopt the bundled policy in a repository. `hygiene` is required. Leave out
-`python` or `secrets` if you do not want them, and `--ci github` if you do not
-use GitHub Actions. Copy the wheel's URL and SHA-256 from the release's files
-on PyPI, as [Pin the wheel on PyPI](docs/install.md#pin-the-wheel-on-pypi)
-shows:
+Adopt the bundled policy in a repository. Select one or more capabilities,
+and leave out `--ci github` if you do not use GitHub Actions:
 
 ```sh
 gateseal configure \
   --capability hygiene \
   --capability python \
   --capability secrets \
-  --compiler-source PYPI_WHEEL_URL \
-  --compiler-sha256 WHEEL_SHA256 \
   --ci github
-gateseal activate
+gateseal setup --refresh
 ```
+
+configure pins gateseal by the commit of its release tag, which it reads with
+your Git.
 
 Review and commit `gateseal.toml`, `gateseal.lock`, `.pre-commit-config.yaml`,
 `.github/workflows/gateseal.yml`, and, with `python` or `secrets`, the
 generated `.gateseal` directory.
 
-From then on, every `git commit` in that worktree runs the checks that the Lock
+From then on, every `git commit` in that clone runs the checks that the Lock
 pins. GitHub Actions runs the same checks on each pull request and each push to
-`main`. A teammate who clones the repository runs `gateseal activate`, and runs
-it again after pulling a new Lock.
+`main`. A teammate runs `gateseal setup` once per machine, and every clone made
+afterwards checks its commits.
 
 When a commit stops, its last lines say why. A hook that fixed a file leaves
-the fix in the worktree, so review it, stage it, and commit again. When
-gateseal and not a hook stops a commit, its first line names the problem and
-its `Next:` line the fix.
+the fix in the worktree, so review it, stage it, and commit again.
 [Configure a repository](docs/configure-a-repository.md) explains each
 capability, and [GitHub CI](docs/github-ci.md) explains the workflow.
 
@@ -151,13 +147,15 @@ capability, and [GitHub CI](docs/github-ci.md) explains the workflow.
 its choices. `configure` compiles it into the Lock, `gateseal.lock`, and a
 native `.pre-commit-config.yaml`, which you review and commit.
 
-**Activation:** prepares one worktree with the pinned CPython, pre-commit, hook
-repositories, and tools. It writes nothing that Git tracks. Every worktree and
-repository on the machine shares one copy of Python and of each hook
-environment.
+**Setup:** installs pre-commit once per machine and makes Git add its commit
+launcher to every new clone. It writes nothing that Git tracks.
 
-**Hook:** runs only what activation prepared, on what each commit stages. When
-part of it is missing, the commit stops and names the step that fixes it.
+**Commit:** pre-commit runs the generated configuration on what each commit
+stages. Its first hook, `gateseal-check`, stops a commit whose generated files
+differ from the Lock, or whose installed Betterleaks is not the program that
+the Lock records. At the first use, pre-commit builds each hook
+repository's environment, gateseal's included, and mise installs each release
+binary and checks its SHA-256. Every repository on the machine shares them.
 
 **CI and upgrades:** CI runs the same Lock in a generated GitHub Actions
 workflow, and `upgrade` moves the policy, a tool, or the gateseal release
@@ -179,7 +177,7 @@ prove it works.
 | Use a team's policy | [Adopt a team policy](docs/adopt-a-team-policy.md) · [Authenticate to a private policy](docs/authenticate.md) |
 | Write a team policy | [Author a team policy](docs/author-a-policy.md) · [Add a tool](docs/add-a-tool.md) · [Policy format](docs/policy-format.md) |
 | Understand how it works | [How a commit runs](docs/how-a-commit-runs.md) · [Architecture](docs/architecture.md) · [Vision](VISION.md) |
-| Look up commands and files | [Commands and results](docs/commands-and-results.md) · [Manifest and Lock](docs/policy-contract.md) · [Local preparation](docs/local-preparation.md) · [Glossary](GLOSSARY.md) |
+| Look up commands and files | [Commands and results](docs/commands-and-results.md) · [Manifest and Lock](docs/policy-contract.md) · [Glossary](GLOSSARY.md) |
 | See how gateseal is tested | [What the tests prove](docs/what-the-tests-prove.md) · [Build and verify](docs/verification.md) |
 
 ## Contributing

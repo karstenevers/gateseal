@@ -1,8 +1,9 @@
-"""A policy's capabilities and the tools each one runs, as policy schema 4 says.
+"""A policy's capabilities and the tools each one runs, as policy schema 5 says.
 
-[capabilities] names each capability's tools, in the order a selection
-compiles them, and [tools] says how the policy uses each one. A tool whose
-name is a Built-in Tool's runs gateseal's definition. Any other name is a
+capabilities.<capability>.tools holds a table for each tool of the
+capability, in the order a selection compiles them. The table says how the
+policy uses the tool, its pin and its Reviewed Versions. A tool whose name is
+a Built-in Tool's runs gateseal's definition. Any other name is a
 Team-defined Tool, which the policy defines in tools/<name>.toml in the same
 format. That file is a policy asset, so the content digest and every stored
 release cover it, and the compiler parses it as data through its kind.
@@ -17,19 +18,24 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import PurePosixPath
+from typing import cast
 
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import built_in_tools, load_definition, require_distinct
 from gateseal.tools.choices import EXTEND
 from gateseal.tools.choices import NAME as CHOICE
-from gateseal.tools.model import NAME, Hook, Origin, ToolDefinition, ToolUse
-from gateseal.validation import fields, mapping, parse_toml, sequence, string
+from gateseal.tools.model import (
+    NAME,
+    Catalog,
+    Hook,
+    Origin,
+    ToolDefinition,
+    ToolUse,
+)
+from gateseal.validation import fields, mapping, parse_toml, sequence, string, version
 
 CAPABILITY = re.compile(r"[a-z][a-z0-9-]*")
 """A capability's name, as policy.toml and a Manifest name it."""
-
-HYGIENE = "hygiene"
-"""The capability every policy defines, since Manifest schema 1 selects it."""
 
 TEAM_TOOLS = "tools/"
 """The directory of a policy's Team-defined Tools, one <name>.toml each."""
@@ -69,15 +75,18 @@ class Toolset:
     """What a policy's capabilities run.
 
     capabilities is in document order, the order a selection compiles in.
-    definitions and uses hold every tool the capabilities name, by name, in
-    capability then tool order. alternatives holds each capability's
-    alternatives by capability and choice name.
+    definitions, uses and catalogs hold every tool of the capabilities, by
+    name, in capability then tool order. alternatives holds each capability's
+    alternatives by capability and choice name, and defaults the value each
+    capability's choices table gives each choice, still unchecked.
     """
 
     capabilities: tuple[str, ...]
     definitions: Mapping[str, ToolDefinition]
     uses: Mapping[str, ToolUse]
+    catalogs: Mapping[str, Catalog]
     alternatives: Mapping[tuple[str, str], Alternatives]
+    defaults: Mapping[tuple[str, str], object]
 
 
 def validate_configuration(data: bytes, field: str) -> None:
@@ -98,101 +107,86 @@ def validate_configuration(data: bytes, field: str) -> None:
 
 
 def read_toolset(
-    capabilities: object,
-    tools: object,
-    read_asset: Callable[[str], bytes],
-    asset: AssetReader,
+    capabilities: object, read_asset: Callable[[str], bytes], asset: AssetReader
 ) -> Toolset:
-    """Validate a policy's capabilities and tools tables.
+    """Validate a policy's capabilities and the tools of each.
 
-    tools holds a table for exactly the tools the capabilities name. Their
-    hook IDs, hook names and owned outputs must be distinct.
+    A tool belongs to exactly one capability. The tools' hook IDs, hook names
+    and owned outputs must be distinct.
     """
-    offered, alternatives = _capabilities(capabilities)
-    owner = {tool: name for name, listed in offered.items() for tool in listed}
-    tables = mapping(tools, "tools")
-    for name in tables:
-        if name not in owner:
-            raise GatesealError(
-                "invalid_field",
-                f"tools.{name} configures a tool that no capability names.",
-            )
-    for name in owner:
-        if name not in tables:
-            raise GatesealError(
-                "invalid_field",
-                f"capabilities.{owner[name]} names {name}, which needs a "
-                f"tools.{name} table.",
-            )
-    definitions = {name: _definition(name, read_asset, asset) for name in owner}
-    require_distinct(definitions.values(), "the policy's tools")
-    uses = {
-        name: _use(owner[name], definitions[name], tables[name], asset)
-        for name in owner
-    }
-    _require_alternatives(alternatives, uses)
-    return Toolset(tuple(offered), definitions, uses, alternatives)
-
-
-def _capabilities(
-    value: object,
-) -> tuple[dict[str, tuple[str, ...]], dict[tuple[str, str], Alternatives]]:
-    """Return each capability's tools and alternatives.
-
-    A tool belongs to exactly one capability.
-    """
-    offered: dict[str, tuple[str, ...]] = {}
+    tables: dict[str, tuple[str, dict[str, object]]] = {}
     alternatives: dict[tuple[str, str], Alternatives] = {}
-    owner: dict[str, str] = {}
-    for name, entry in mapping(value, "capabilities").items():
-        tools, choices = _capability(name, entry)
-        alternatives.update(choices)
-        for tool in tools:
-            if not NAME.fullmatch(tool):
-                raise GatesealError(
-                    "invalid_field",
-                    f"capabilities.{name}.tools names {tool!r}; a tool's name is "
-                    "lowercase letters, digits and -.",
-                )
-            if owner.setdefault(tool, name) != name or tools.count(tool) > 1:
+    defaults: dict[tuple[str, str], object] = {}
+    entries = mapping(capabilities, "capabilities")
+    if not entries:
+        raise GatesealError("invalid_field", "The policy defines no capability.")
+    for name, entry in entries.items():
+        tools, offered, given = _capability(name, entry)
+        alternatives.update(offered)
+        defaults.update(given)
+        for tool, table in tools.items():
+            if tables.setdefault(tool, (name, table))[0] != name:
                 raise GatesealError(
                     "duplicate_identifier",
-                    f"capabilities.{owner[tool]} and capabilities.{name} both name "
-                    f"{tool}; a tool belongs to exactly one capability, once.",
+                    f"capabilities.{tables[tool][0]} and capabilities.{name} both "
+                    f"have the tool {tool}; a tool belongs to exactly one "
+                    "capability.",
                 )
-        offered[name] = tools
-    if HYGIENE not in offered:
-        raise GatesealError(
-            "invalid_field",
-            f"The policy defines no {HYGIENE} capability, which every Manifest "
-            "selects.",
-        )
-    return offered, alternatives
+    definitions = {name: _definition(name, read_asset, asset) for name in tables}
+    require_distinct(definitions.values(), "the policy's tools")
+    known = set(built_in_tools()) | set(tables)
+    uses: dict[str, ToolUse] = {}
+    catalogs: dict[str, Catalog] = {}
+    for name, (capability, table) in tables.items():
+        field = f"capabilities.{capability}.tools.{name}"
+        table = _tool_fields(definitions[name], table, field)
+        uses[name] = _use(capability, definitions[name], table, field, asset)
+        catalogs[name] = _catalog(name, table, field, known)
+    _require_alternatives(alternatives, uses)
+    return Toolset(tuple(entries), definitions, uses, catalogs, alternatives, defaults)
 
 
 def _capability(
     name: str, entry: object
-) -> tuple[tuple[str, ...], dict[tuple[str, str], Alternatives]]:
-    """Validate capabilities.<name>: its tools and its alternatives."""
-    field = f"capabilities.{name}.tools"
-    table = mapping(entry, f"capabilities.{name}")
-    table = fields(
-        table, {"tools"} | ({"alternatives"} & set(table)), f"capabilities.{name}"
-    )
-    listed = table["tools"]
-    tools = tuple(string(item, field) for item in sequence(listed, field))
-    alternatives: dict[tuple[str, str], Alternatives] = {}
-    for choice, hooks in mapping(
-        table.get("alternatives", {}), f"capabilities.{name}.alternatives"
-    ).items():
-        alternatives[name, choice] = _alternatives(name, choice, hooks)
+) -> tuple[
+    dict[str, dict[str, object]],
+    dict[tuple[str, str], Alternatives],
+    dict[tuple[str, str], object],
+]:
+    """Validate capabilities.<name>: its tools, alternatives and choices."""
+    field = f"capabilities.{name}"
+    table = mapping(entry, field)
+    table = fields(table, {"tools"} | ({"alternatives", "choices"} & set(table)), field)
+    tools = {
+        tool: mapping(value, f"{field}.tools.{tool}")
+        for tool, value in mapping(table["tools"], f"{field}.tools").items()
+    }
     if not CAPABILITY.fullmatch(name) or not tools:
         raise GatesealError(
             "invalid_field",
-            f"capabilities.{name} needs a name of lowercase letters, digits "
-            "and -, and at least one tool.",
+            f"{field} needs a name of lowercase letters, digits and -, and at "
+            "least one tool.",
         )
-    return tools, alternatives
+    for tool in tools:
+        if not NAME.fullmatch(tool):
+            raise GatesealError(
+                "invalid_field",
+                f"{field}.tools.{tool} is not a tool name; a tool's name is "
+                "lowercase letters, digits and -.",
+            )
+    alternatives = {
+        (name, choice): _alternatives(name, choice, hooks)
+        for choice, hooks in mapping(
+            table.get("alternatives", {}), f"{field}.alternatives"
+        ).items()
+    }
+    defaults = {
+        (name, choice): default
+        for choice, default in mapping(
+            table.get("choices", {}), f"{field}.choices"
+        ).items()
+    }
+    return tools, alternatives, defaults
 
 
 def _alternatives(capability: str, name: str, value: object) -> Alternatives:
@@ -244,8 +238,7 @@ def _definition(
             "reserved_tool_name",
             f"The policy names the tool {name}, but {' and '.join(RUNTIME)} name "
             "the Compiler Runtime that each gateseal release carries.",
-            next_step="Name the tool something else in its capability and tools "
-            "tables.",
+            next_step="Give the tool another name in its capability's tools.",
         )
     built_in = built_in_tools().get(name)
     if built_in is not None:
@@ -258,8 +251,8 @@ def _definition(
             f"{path} defines {name}, but {name} is a Built-in Tool, so its name "
             "always means gateseal's definition.",
             next_step=f"To run {name} another way, copy its definition to "
-            f"{TEAM_TOOLS}<new name>.toml, name that tool in its capability "
-            f"and tools tables, and delete {path}.",
+            f"{TEAM_TOOLS}<new name>.toml, give its table in its capability's "
+            f"tools that name, and delete {path}.",
         )
     data = asset(path, f"tools.{name}", ".toml")
     if data is None:
@@ -282,25 +275,36 @@ def _definition(
         raise GatesealError(exc.code, f"{path}: {exc}", exc.exit_code, step) from exc
 
 
+def _tool_fields(
+    definition: ToolDefinition, table: dict[str, object], field: str
+) -> dict[str, object]:
+    """Require a tool's table to hold exactly the fields its definition allows.
+
+    pin and reviewed are required, hook_ids and requires optional, and
+    configuration is required exactly when the definition declares one.
+    """
+    names = {"pin", "reviewed"} | ({"hook_ids", "requires"} & set(table))
+    if definition.configuration is not None:
+        names.add("configuration")
+    return fields(table, names, field)
+
+
 def _use(
-    capability: str, definition: ToolDefinition, value: object, asset: AssetReader
+    capability: str,
+    definition: ToolDefinition,
+    table: dict[str, object],
+    field: str,
+    asset: AssetReader,
 ) -> ToolUse:
-    """Validate tools.<name>: the hooks the policy runs and its configuration.
+    """Return the hooks the policy runs and its configuration of one tool.
 
     Without hook_ids the policy runs every hook of the definition, in its
     order. configuration names a file under rules/ exactly when the
     definition declares a configuration.
     """
-    name = definition.name
-    field = f"tools.{name}"
-    table = mapping(value, field)
-    names = {"hook_ids"} & set(table)
-    if definition.configuration is not None:
-        names.add("configuration")
-    table = fields(table, names, field)
     hooks = tuple(definition.hooks.values())
     if "hook_ids" in table:
-        hooks = _hooks(table["hook_ids"], definition)
+        hooks = _hooks(table["hook_ids"], definition, f"{field}.hook_ids")
     configuration = None
     if definition.configuration is not None:
         path = string(table["configuration"], f"{field}.configuration")
@@ -318,13 +322,53 @@ def _use(
             raise GatesealError(
                 "missing_policy_asset", f"The policy has no file {path}."
             )
-        validate_configuration(configuration, f"The {name} configuration")
+        validate_configuration(configuration, f"The {definition.name} configuration")
     return ToolUse(capability, hooks, configuration)
 
 
-def _hooks(value: object, definition: ToolDefinition) -> tuple[Hook, ...]:
+def _catalog(
+    name: str, table: dict[str, object], field: str, known: set[str]
+) -> Catalog:
+    """Return a tool's pin and Reviewed Versions, with what each version requires.
+
+    reviewed lists stable releases, each once, and pin is one of them. requires
+    maps a reviewed version to the minimum version of each tool it needs,
+    which is a Built-in Tool or one of the policy's, and never this one.
+    """
+    listed = f"{field}.reviewed"
+    reviewed = tuple(
+        version(item, listed) for item in sequence(table["reviewed"], listed)
+    )
+    if not reviewed or len(set(reviewed)) != len(reviewed):
+        raise GatesealError(
+            "invalid_field", f"{listed} must list each reviewed version once."
+        )
+    requires: dict[str, dict[str, str]] = {}
+    for key, value in mapping(table.get("requires", {}), f"{field}.requires").items():
+        entry = f"{field}.requires.{key}"
+        if key not in reviewed:
+            raise GatesealError(
+                "invalid_field",
+                f"{entry} names {key}, which {listed} does not list.",
+            )
+        needs = mapping(value, entry)
+        for other, minimum in needs.items():
+            if other not in known or other == name:
+                raise GatesealError(
+                    "invalid_field",
+                    f"{entry} requires {other!r}, which is not another tool of "
+                    "the policy or a Built-in Tool.",
+                )
+            version(minimum, f"{entry}.{other}")
+        requires[key] = cast(dict[str, str], needs)
+    pin = string(table["pin"], f"{field}.pin")
+    if pin not in reviewed:
+        raise GatesealError("invalid_field", f"{field}.pin {pin} is not in {listed}.")
+    return Catalog(pin, {key: requires.get(key, {}) for key in reviewed})
+
+
+def _hooks(value: object, definition: ToolDefinition, field: str) -> tuple[Hook, ...]:
     """Validate the hooks of its definition that a tool runs, in their order."""
-    field = f"tools.{definition.name}.hook_ids"
     names = tuple(string(v, field) for v in sequence(value, field))
     if not names or set(names) - set(definition.hooks):
         raise GatesealError(

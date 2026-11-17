@@ -8,8 +8,8 @@ import re
 import subprocess
 from dataclasses import dataclass
 
-from gateseal.bootstrap import clean_environment
 from gateseal.diagnostics import GatesealError
+from gateseal.environments import clean_environment
 from gateseal.processes import execute
 from gateseal.worktree import Worktree
 

@@ -9,17 +9,16 @@ Gitleaks from its GitHub release.
 import json
 import re
 import subprocess
-import textwrap
-from pathlib import Path
 
 import pytest
+from conftest import on_machine
+from doc_examples import example
 from gateseal.validation import canonical
 from installation import clone, success
 from team_policy import URL, environment, git, publish
 
 pytestmark = pytest.mark.integration
 
-DOC = Path(__file__).parents[1] / "docs" / "add-a-tool.md"
 SECRET = "AKIA" + "Q7XK2M9P4R8T6W3Z"
 RELEASES = "https://github.com/gitleaks/gitleaks/releases/download"
 ARCHIVES = {
@@ -46,27 +45,6 @@ ARCHIVES = {
 }
 """Each platform's archive and the SHA-256 its release's checksum file lists."""
 
-USE = """
-[tools.gitleaks]
-configuration = "rules/gitleaks.toml"
-
-[components.gitleaks]
-pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
-"""
-
-
-def example(name):
-    """Return the file the how-to shows under <!-- policy file: name -->."""
-    found = re.search(
-        rf"^( *)<!-- policy file: {re.escape(name)} -->\n\1```toml\n(.*?)^\1```$",
-        DOC.read_text(),
-        re.MULTILINE | re.DOTALL,
-    )
-    assert found, f"{DOC.name} shows no {name}"
-    return textwrap.dedent(found[2])
-
 
 def record(version):
     """Return the Policy Lock record gateseal policy lock writes for version."""
@@ -86,14 +64,10 @@ def add_gitleaks(data, locked=True):
     """Add Gitleaks to the secrets capability of the policy in data."""
     for name in ("tools/gitleaks.toml", "rules/gitleaks.toml"):
         (data / name).parent.mkdir(exist_ok=True)
-        (data / name).write_text(example(name))
+        (data / name).write_text(example("add-a-tool.md", f"policy file: {name}"))
     policy = data / "policy.toml"
-    text = policy.read_text()
-    assert 'tools = ["betterleaks"]' in text
-    policy.write_text(
-        text.replace('tools = ["betterleaks"]', 'tools = ["betterleaks", "gitleaks"]')
-        + USE
-    )
+    tables = example("add-a-tool.md", "policy tables: gitleaks")
+    policy.write_text(policy.read_text() + "\n" + tables)
     lock = json.loads((data / "policy.lock").read_bytes())
     lock["components"]["gitleaks"] = {"versions": {"8.30.0": record("8.30.0")}}
     if locked:
@@ -108,21 +82,62 @@ def guarded(installed, tmp_path_factory):
     git(origin, "init", "--initial-branch=main")
     publish(origin, "v1", add_gitleaks)
     root = tmp_path_factory.mktemp("gitleaks consumer ü")
-    consumer = clone(root / "origin", root / "consumer")
+    env = environment(installed, origin)
+    with on_machine(installed):
+        consumer = clone(root / "origin", root / "consumer")
+        installed.cli(
+            consumer,
+            "configure",
+            *("--capability", "hygiene", "--capability", "secrets"),
+            *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
+            env=env,
+        )
+        success(["git", "add", "-A"], consumer)
+        success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
+    return consumer, env
+
+
+ALL_STAGES = 'stages = ["commit", "run", "ci"]'
+
+
+def ci_only(data):
+    """Add Gitleaks to the policy in data as a tool of the ci stage alone."""
+    add_gitleaks(data)
+    definition = data / "tools/gitleaks.toml"
+    text = definition.read_text()
+    assert ALL_STAGES in text
+    definition.write_text(text.replace(ALL_STAGES, 'stages = ["ci"]'))
+
+
+def hooks_run(result):
+    """Return the tools whose hooks a run or gate result reports."""
+    return {d["tool"] for d in result["diagnostics"] if d["category"] == "hook"}
+
+
+def test_a_ci_only_tool_runs_in_the_gate_and_not_at_a_commit(installed, tmp_path):
+    origin = tmp_path / "gateseal-policy"
+    origin.mkdir()
+    git(origin, "init", "--initial-branch=main")
+    publish(origin, "v1", ci_only)
+    consumer = clone(tmp_path / "origin", tmp_path / "consumer")
     env = environment(installed, origin)
     installed.cli(
         consumer,
         "configure",
         *("--capability", "hygiene", "--capability", "secrets"),
         *("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1"),
-        *("--compiler-wheel", installed.wheel),
-        *("--compiler-sha256", installed.checksum),
         env=env,
     )
-    assert installed.cli(consumer, "activate", env=env)["code"] == "prepared"
     success(["git", "add", "-A"], consumer)
-    success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
-    return consumer, env
+    commit = success(["git", "commit", "-m", "Adopt the team policy"], consumer, env)
+    shown = commit.stdout + commit.stderr
+    assert re.search(r"Detect secrets with Betterleaks\.+Passed", shown), shown
+    assert "Gitleaks" not in shown
+    every_stage = {"pre-commit-hooks", "betterleaks"}
+    assert hooks_run(installed.cli(consumer, "run", env=env)) == every_stage
+    gated = installed.cli(consumer, "gate", env=env)
+    assert gated["code"] == "checks_passed"
+    assert hooks_run(gated) == every_stage | {"gitleaks"}
 
 
 def tool_notes(result):
@@ -141,7 +156,7 @@ def test_status_and_doctor_label_gitleaks_team_defined(installed, guarded):
         ]
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
     entries = [h.get("entry", "") for repo in config["repos"] for h in repo["hooks"]]
-    assert any(entry.startswith("gateseal-gitleaks dir --config") for entry in entries)
+    assert any(" -- gitleaks dir --config " in entry for entry in entries)
 
 
 def test_a_staged_secret_stops_the_commit_without_printing_it(guarded):

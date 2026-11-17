@@ -9,24 +9,14 @@ from team_policy import URL, environment, git, publish
 pytestmark = pytest.mark.integration
 
 POLICY = """\
-schema = 4
+schema = 5
 release = "binary-only"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["betterleaks"]
-
-[tools.betterleaks]
+[capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
-
-[choices]
-
-[components.betterleaks]
 pin = "1.9.0"
-
-[components.betterleaks.versions."1.9.0"]
-
-[components.betterleaks.versions."1.8.0"]
+reviewed = ["1.9.0", "1.8.0"]
 """
 
 
@@ -49,20 +39,15 @@ def test_a_policy_without_a_hook_repository_checks_commits(installed, tmp_path):
         root,
         "configure",
         "--capability",
-        "hygiene",
+        "secrets",
         "--policy",
         URL,
         "--policy-path",
         "policy",
         "--policy-tag",
         "v1",
-        "--compiler-wheel",
-        installed.wheel,
-        "--compiler-sha256",
-        installed.checksum,
         env=env,
     )
-    installed.cli(root, "activate", env=env)
     assert installed.cli(root, "doctor", env=env)["code"] == "healthy"
     (root / "notes.txt").write_bytes(b"original\n")
     success(["git", "add", "-A"], root)
