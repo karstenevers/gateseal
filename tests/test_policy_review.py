@@ -122,7 +122,8 @@ def test_a_top_level_table_of_another_layout_is_named(table):
     )
     assert refused(edited) == (
         f"policy.toml has {table} at its top level, which holds only schema, "
-        "release, minimum_compiler and capabilities."
+        "release, minimum_compiler, capabilities and the optional "
+        "time_budget_seconds."
     )
 
 

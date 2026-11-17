@@ -56,3 +56,9 @@ A new push to a pull request cancels the run for the older commit. Runs of the o
 If the base and head have no common ancestor, the gate checks all tracked files. It scans all commits reachable from the head. A selected history-capable tool such as Betterleaks can report a secret removed in a later commit. Rotate a real credential. Remove it from the branch history before merging.
 
 A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool failure exits 4. See [Commands and results](commands-and-results.md) for JSON results and other errors.
+
+## Time budget
+
+Each gate reports how long it took. The time includes the hooks, any install of their environments, and the history scans. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because runner speed changes with load and caches.
+
+The warning shows in the job log, as an annotation on the run's summary page and on the pull request's **Checks** tab, and in the `--json` result as `over_time_budget`. GitHub sends no notification for a warning in a passing run. To fix a slow gate, speed up its slowest checks or raise the budget.

@@ -41,9 +41,17 @@ change the manifest, policy or lock format, and its entry says how to move.
 - A page on how to adjust a setup, which lists each way to change the checks
   and who makes the change, and a section on hooks of your own in Work in a
   configured repository.
+- A time budget for the CI gate. `time_budget_seconds` in `policy.toml` sets
+  it in whole seconds. Each `gateseal gate` that checks files reports its time
+  in a `duration` diagnostic. A gate over the budget also gives an
+  `over_time_budget` warning and keeps the exit code that its checks decide.
 
 ### Changed
 
+- With `GITHUB_ACTIONS=true`, text output prints each warning as a
+  `::warning` workflow command instead of a `Warning:` line, which GitHub
+  shows as an annotation. This also applies to the overdue and redundant
+  Version Exception warnings of `gateseal check`.
 - A commit runs pre-commit, not the installed gateseal command. pre-commit
   builds the environment of each hook repository, and mise installs each
   release binary at its first use and checks its SHA-256. A hook that starts a

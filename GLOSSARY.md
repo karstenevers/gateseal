@@ -53,3 +53,5 @@
 <a id="ci-gate"></a>The **CI Gate** runs selected CI-stage checks and any history scans for an event.
 
 <a id="history-scan"></a>A **History Scan** checks commits in a revision range, including content removed by a later commit.
+
+<a id="time-budget"></a>A **Time Budget** is the time in whole seconds that a policy allows one CI Gate run. A slower run warns but keeps the result of its checks.
