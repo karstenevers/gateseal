@@ -32,7 +32,7 @@ The first commit downloads hook environments and selected binaries. Check networ
 
 ## A hook changes a file or reports a secret
 
-Review the edits with `git diff`. Stage the intended changes. Retry the commit. For a real credential, remove it. Rotate it. For a false positive, ask the policy author to review the rule. The bundled Betterleaks checks ignore repository ignore files and inline allow comments. Neither can suppress a finding.
+Review the edits with `git diff`. Stage the intended changes. Retry the commit. For a real credential, remove it. Rotate it. For a false positive, ask the policy author to review the rule. The author can turn the rule off or skip the path in the policy's rule file. The bundled Betterleaks checks ignore repository ignore files and inline allow comments. Neither can suppress a finding.
 
 ## A commit reports a changed installed tool
 

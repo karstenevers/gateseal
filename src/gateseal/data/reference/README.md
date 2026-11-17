@@ -17,6 +17,8 @@ this README and every other file.
   definition.
 - `rules/ruff.toml` and `rules/betterleaks.toml` are the Ruff configuration
   and the Betterleaks rules that configure copies into each repository.
+  The Betterleaks rules start from the rules built into Betterleaks, and
+  `disabledRules` turns some of them off.
 - `gateseal policy add <tool> <version>` reviews a new version, and
   `gateseal policy pin <tool> <version>` makes a reviewed version the pin.
   Both edit only their own lines of `policy.toml` and keep its comments.

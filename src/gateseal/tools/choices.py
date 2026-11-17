@@ -18,8 +18,9 @@ NAME = re.compile(r"[a-z][a-z0-9_]*")
 KEY = re.compile(r"[a-z][a-z0-9-]*")
 
 EXTEND = "extend"
-"""The key that would make a configuration load another one, which no policy
-configuration and so no choice may set."""
+"""The key that can make a configuration load another one. A policy
+configuration may set it only as a table that starts from a tool's built-in
+rules, and no choice may set it."""
 
 VALUE = re.compile(r"[a-z0-9]+")
 """A value a choice accepts, which renders as a TOML string without escaping."""

@@ -9,7 +9,7 @@ gateseal configure --capability hygiene --capability secrets --ci github
 pre-commit install
 ```
 
-`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. Omit `--ci github` if you do not use GitHub Actions. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
+`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. Its built-in rules find cloud keys, private keys, passwords and many service tokens, and the bundled policy adds a rule for an AWS access key ID alone. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. Omit `--ci github` if you do not use GitHub Actions. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
 
 Review the Manifest, Lock, `.pre-commit-config.yaml`, and the workflow if generated. If you omitted `--ci github`, omit `.github/workflows/gateseal.yml` from the next command. Then commit them:
 
