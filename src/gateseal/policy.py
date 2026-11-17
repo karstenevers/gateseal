@@ -1,17 +1,15 @@
 import hashlib
 import re
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import cast
 
 from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import read
 from gateseal.paths import resolved
 from gateseal.policy_tools import Alternatives, Toolset, read_toolset
-from gateseal.tools import built_in_tools
 from gateseal.tools.choices import Choice
 from gateseal.tools.model import (
     Catalog,
@@ -33,7 +31,7 @@ from gateseal.validation import (
     version_key,
 )
 
-SCHEMAS = frozenset({4})
+SCHEMAS = frozenset({5})
 """The policy schemas this compiler reads."""
 
 INHERITANCE = frozenset({"base", "extend", "extends", "include", "inherit"})
@@ -85,13 +83,15 @@ ChoiceValue = str | tuple[str, ...]
 ChoiceParser = Callable[[object, str], ChoiceValue]
 """Return a choice's value for its field, or fail with invalid_choice."""
 
-CHOICES: dict[tuple[str, str], ChoiceParser] = {
-    ("hygiene", "exclude"): paths_choice,
-}
-"""The choices the compiler itself renders, by capability and name.
+EXCLUDE = "exclude"
+"""The choice that keeps paths from the hooks of every tool of a capability."""
 
-The definitions of a capability's tools and its alternatives declare the
-others.
+CHOICES: dict[str, ChoiceParser] = {EXCLUDE: paths_choice}
+"""The choices the compiler itself renders, by name.
+
+Any capability may expose one, so no tool definition or alternative may
+declare a choice of that name. The definitions of a capability's tools and
+its alternatives declare the others.
 """
 
 Declared = Choice | Alternatives
@@ -104,14 +104,13 @@ def declared_choices(
 ) -> dict[tuple[str, str], Declared]:
     """Return each choice the policy declares, by capability and name.
 
-    tools pairs each tool's capability with its definition. A capability's
-    choices.<capability>.<name> must mean one choice, so no two of its tools
-    and alternatives may declare one name, and none may declare a choice of
-    CHOICES.
+    tools pairs each tool's capability with its definition. A choice name of
+    a capability must mean one choice, so no two of its tools and alternatives
+    may declare one name, and none may declare a choice of CHOICES.
     """
     declared: dict[tuple[str, str], Declared] = {}
     for (capability, name), choice in alternatives.items():
-        if (capability, name) in CHOICES:
+        if name in CHOICES:
             raise GatesealError(
                 "invalid_field",
                 f"capabilities.{capability}.alternatives.{name} declares the "
@@ -120,7 +119,7 @@ def declared_choices(
         declared[capability, name] = choice
     for capability, definition in tools:
         for name, choice in definition.choices.items():
-            if (capability, name) in CHOICES or (capability, name) in declared:
+            if name in CHOICES or (capability, name) in declared:
                 raise GatesealError(
                     "invalid_field",
                     f"tools.{definition.name} declares the choice {name}, which "
@@ -139,8 +138,8 @@ def choice_parser(
     CHOICES comes first, then the choices of declared_choices. A choice
     neither defines fails with unsupported_choice.
     """
-    if (capability, name) in CHOICES:
-        return CHOICES[capability, name]
+    if name in CHOICES:
+        return CHOICES[name]
     if (capability, name) not in declared:
         raise _undefined_choice(capability, name)
     return declared[capability, name].parse
@@ -317,25 +316,39 @@ def review_policy(
         raise GatesealError("missing_policy_asset", f"The policy has no file {POLICY}.")
     document = mapping(parse_toml(source), "policy")
     minimum = _compatibility(document, version(compiler, "compiler_version"))
-    required = {"schema", "release", "minimum_compiler", "capabilities", "tools"}
-    document = fields(document, required | {"choices", "components"}, "policy")
+    required = {"schema", "release", "minimum_compiler", "capabilities"}
+    extra = sorted(set(document) - required)
+    if extra:
+        raise GatesealError(
+            "invalid_field",
+            f"{POLICY} has {', '.join(extra)} at its top level, which holds only "
+            "schema, release, minimum_compiler and capabilities.",
+            next_step="Write each tool as capabilities.<capability>.tools.<tool>, "
+            "with its pin and reviewed versions, and each choice in "
+            "capabilities.<capability>.choices.",
+        )
+    document = fields(document, required, "policy")
     release = string(document["release"], "release")
     if len(release) > 128 or not release.isprintable():
         raise GatesealError(
             "invalid_field", "Policy release must be a short printable label."
         )
-    toolset = read_toolset(
-        document["capabilities"], document["tools"], read_asset, asset
+    toolset = read_toolset(document["capabilities"], read_asset, asset)
+    catalogs = toolset.catalogs
+    require_compatible(
+        {
+            name: Release(catalog.pin, catalog.requires[catalog.pin])
+            for name, catalog in catalogs.items()
+        },
+        "incompatible_policy",
+        "pins",
     )
-    catalogs = _catalogs(
-        mapping(document["components"], "components"), toolset.definitions
-    )
-    exposed = _exposed(document["choices"], toolset)
+    exposed = _exposed(toolset)
     for name, use in toolset.uses.items():
         for choice_name, choice in toolset.definitions[name].choices.items():
             default = exposed.get((use.capability, choice_name))
             if isinstance(default, str):
-                field = f"choices.{use.capability}.{choice_name}.default"
+                field = f"capabilities.{use.capability}.choices.{choice_name}"
                 choice.require(default, name, catalogs[name].pin, field)
     return Review(
         release,
@@ -440,73 +453,6 @@ def _records(
     return records
 
 
-def _catalogs(
-    components: Mapping[str, object], definitions: Mapping[str, ToolDefinition]
-) -> dict[str, Catalog]:
-    """Validate the tools' components, which must catalog exactly the policy's tools.
-
-    A version may require a built-in tool or one of the policy's. The pins
-    must meet each other's requirements.
-    """
-    if set(components) != set(definitions):
-        other = [
-            f"components.{name}" for name in sorted(set(components) ^ set(definitions))
-        ]
-        raise GatesealError(
-            "unsupported_component",
-            f"This policy's capabilities need exactly the components "
-            f"{', '.join(sorted(definitions))}, so {', '.join(other)} is missing or "
-            "names no tool of a capability.",
-        )
-    known = set(built_in_tools()) | set(definitions)
-    catalogs = {
-        name: _catalog(name, components[name], known) for name in sorted(components)
-    }
-    require_compatible(
-        {
-            name: Release(catalog.pin, catalog.requires[catalog.pin])
-            for name, catalog in catalogs.items()
-        },
-        "incompatible_policy",
-        "pins",
-    )
-    return catalogs
-
-
-def _catalog(name: str, table: object, known: Collection[str]) -> Catalog:
-    """Validate a policy's components.<name>: its pin and reviewed versions.
-
-    Each version key is a stable release, and each version table holds only an
-    optional requires that names only known tools and never this one.
-    """
-    table = fields(table, {"pin", "versions"}, f"components.{name}")
-    reviewed: dict[str, Mapping[str, str]] = {}
-    for key, entry in mapping(table["versions"], f"{name}.versions").items():
-        field = f"components.{name}.versions.{key}"
-        version(key, field)
-        data = fields(entry, {"requires"} & set(mapping(entry, field)), field)
-        requires = mapping(data.get("requires", {}), f"{field}.requires")
-        for other, minimum in requires.items():
-            if other not in known:
-                raise GatesealError(
-                    "invalid_field",
-                    f"{field}.requires requires an unknown component {other!r}.",
-                )
-            version(minimum, f"{field}.requires.{other}")
-        if name in requires:
-            raise GatesealError(
-                "invalid_field", f"{field} cannot require its own component."
-            )
-        reviewed[key] = cast(dict[str, str], requires)
-    pin = string(table["pin"], f"components.{name}.pin")
-    if pin not in reviewed:
-        raise GatesealError(
-            "invalid_field",
-            f"components.{name}.pin {pin} is not one of its reviewed versions.",
-        )
-    return Catalog(pin, reviewed)
-
-
 def require_compatible(
     selected: Mapping[str, Release],
     code: str,
@@ -533,7 +479,7 @@ def require_compatible(
                 )
 
 
-def _exposed(value: object, toolset: Toolset) -> dict[tuple[str, str], ChoiceValue]:
+def _exposed(toolset: Toolset) -> dict[tuple[str, str], ChoiceValue]:
     """Validate the choices a policy exposes, each with its default.
 
     A choice that a tool definition declares renders a key into the tool's
@@ -548,23 +494,43 @@ def _exposed(value: object, toolset: Toolset) -> dict[tuple[str, str], ChoiceVal
         toolset.alternatives,
     )
     exposed: dict[tuple[str, str], ChoiceValue] = {}
-    for capability, table in mapping(value, "choices").items():
-        for name, declaration in mapping(table, f"choices.{capability}").items():
-            field = f"choices.{capability}.{name}"
-            if capability not in toolset.capabilities:
-                raise _undefined_choice(capability, name)
-            parse = choice_parser(declared, capability, name)
-            default = fields(declaration, {"default"}, field)["default"]
-            exposed[capability, name] = parse(default, field + ".default")
+    for (capability, name), default in toolset.defaults.items():
+        parse = choice_parser(declared, capability, name)
+        exposed[capability, name] = parse(
+            default, f"capabilities.{capability}.choices.{name}"
+        )
     for capability, name in toolset.alternatives:
         if (capability, name) not in exposed:
             raise GatesealError(
                 "invalid_field",
                 f"capabilities.{capability}.alternatives.{name} needs "
-                f"choices.{capability}.{name} with the default hook.",
+                f"capabilities.{capability}.choices.{name} with the default hook.",
             )
+    _require_unscanned(exposed, toolset)
     _require_unset_keys(exposed, toolset)
     return exposed
+
+
+def _require_unscanned(
+    exposed: Mapping[tuple[str, str], ChoiceValue], toolset: Toolset
+) -> None:
+    """Require no capability that exposes exclude to hold a tool with a history scan.
+
+    A commit skips the excluded paths, but the gate's history scan reads every
+    path, so the two would check different files.
+    """
+    for tool, use in toolset.uses.items():
+        if (use.capability, EXCLUDE) in exposed and toolset.definitions[
+            tool
+        ].history is not None:
+            raise GatesealError(
+                "invalid_field",
+                f"capabilities.{use.capability}.choices exposes {EXCLUDE}, but "
+                f"{tool} in {use.capability} scans history, which reads every "
+                "path.",
+                next_step=f"Move {tool} to a capability that exposes no "
+                f"{EXCLUDE}, or stop exposing {EXCLUDE} in {use.capability}.",
+            )
 
 
 def _require_unset_keys(
@@ -581,7 +547,8 @@ def _require_unset_keys(
                 raise GatesealError(
                     "invalid_field",
                     f"The {tool} configuration sets {choice.key}, which "
-                    f"choices.{use.capability}.{name} sets for each repository.",
+                    f"capabilities.{use.capability}.choices.{name} sets for each "
+                    "repository.",
                 )
 
 

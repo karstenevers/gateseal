@@ -90,9 +90,9 @@ def compile_outputs(
     any tool runs. Each tool renders its repository after it, in
     capability order, and declares its own outputs, which its capability's
     choices may change. A capability's exclude choice applies to the hooks of
-    every tool the policy puts in it. Only hygiene defines one, so a file is
-    kept from Ruff or a secret scanner only by a policy that puts that tool in
-    hygiene. A Manifest's [ci] adds the provider's workflow, which names
+    every tool the policy puts in it, so a file is kept from a tool only by a
+    policy that exposes exclude in that tool's capability. A Manifest's [ci]
+    adds the provider's workflow, which names
     the gateseal commit CI installs and the policy repository its credential
     helper serves.
     """

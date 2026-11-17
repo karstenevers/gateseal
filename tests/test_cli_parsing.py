@@ -176,7 +176,7 @@ def test_policy_pin_moves_the_named_component(capsys, started):
     assert (code, result["command"], result["code"]) == (0, "policy pin", "pinned")
     assert result["changed"] == ["policy.toml"]
     text = (started / "policy.toml").read_text()
-    assert '[components.pre-commit-hooks]\npin = "5.0.0"' in text
+    assert '"end-of-file-fixer", "check-yaml"]\npin = "5.0.0"' in text
 
 
 def test_policy_add_names_the_requested_component(capsys, started):

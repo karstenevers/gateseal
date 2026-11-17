@@ -9,18 +9,16 @@ Gitleaks from its GitHub release.
 import json
 import re
 import subprocess
-import textwrap
-from pathlib import Path
 
 import pytest
 from conftest import on_machine
+from doc_examples import example
 from gateseal.validation import canonical
 from installation import clone, success
 from team_policy import URL, environment, git, publish
 
 pytestmark = pytest.mark.integration
 
-DOC = Path(__file__).parents[1] / "docs" / "add-a-tool.md"
 SECRET = "AKIA" + "Q7XK2M9P4R8T6W3Z"
 RELEASES = "https://github.com/gitleaks/gitleaks/releases/download"
 ARCHIVES = {
@@ -47,27 +45,6 @@ ARCHIVES = {
 }
 """Each platform's archive and the SHA-256 its release's checksum file lists."""
 
-USE = """
-[tools.gitleaks]
-configuration = "rules/gitleaks.toml"
-
-[components.gitleaks]
-pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
-"""
-
-
-def example(name):
-    """Return the file the how-to shows under <!-- policy file: name -->."""
-    found = re.search(
-        rf"^( *)<!-- policy file: {re.escape(name)} -->\n\1```toml\n(.*?)^\1```$",
-        DOC.read_text(),
-        re.MULTILINE | re.DOTALL,
-    )
-    assert found, f"{DOC.name} shows no {name}"
-    return textwrap.dedent(found[2])
-
 
 def record(version):
     """Return the Policy Lock record gateseal policy lock writes for version."""
@@ -87,14 +64,10 @@ def add_gitleaks(data, locked=True):
     """Add Gitleaks to the secrets capability of the policy in data."""
     for name in ("tools/gitleaks.toml", "rules/gitleaks.toml"):
         (data / name).parent.mkdir(exist_ok=True)
-        (data / name).write_text(example(name))
+        (data / name).write_text(example("add-a-tool.md", f"policy file: {name}"))
     policy = data / "policy.toml"
-    text = policy.read_text()
-    assert 'tools = ["betterleaks"]' in text
-    policy.write_text(
-        text.replace('tools = ["betterleaks"]', 'tools = ["betterleaks", "gitleaks"]')
-        + USE
-    )
+    tables = example("add-a-tool.md", "policy tables: gitleaks")
+    policy.write_text(policy.read_text() + "\n" + tables)
     lock = json.loads((data / "policy.lock").read_bytes())
     lock["components"]["gitleaks"] = {"versions": {"8.30.0": record("8.30.0")}}
     if locked:

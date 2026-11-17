@@ -8,40 +8,37 @@ bundled policy, use `gateseal policy init`. See the
 [schema reference](policy-contract.md) for how a repository selects a release.
 
 This `policy.toml` defines one capability. Repositories that select it check
-YAML files with the `check-yaml` hook.
+YAML files with the `check-yaml` hook. The tool `pre-commit-hooks` is the
+project pre-commit/pre-commit-hooks.
 
+<!-- policy example -->
 ```toml
-schema = 4
+schema = 5
 release = "team-2026.11"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["pre-commit-hooks"]
-
-[tools.pre-commit-hooks]
+[capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["check-yaml"]
-
-[choices.hygiene.exclude]
-default = []
-
-[components.pre-commit-hooks]
 pin = "6.0.0"
+reviewed = ["6.0.0"]
 
-[components.pre-commit-hooks.versions."6.0.0"]
+[capabilities.hygiene.choices]
+exclude = []
 ```
 
 | Field | Purpose and constraints |
 | --- | --- |
-| `schema` | Integer `4`. |
+| `schema` | Integer `5`. |
 | `release` | A nonempty, printable label of up to 128 characters. Labels have no sort order. |
 | `minimum_compiler` | The earliest compatible compiler version in `major.minor.patch` form. gateseal compares the numbers. |
-| `capabilities.<name>.tools` | A nonempty list of distinct tools in execution order. A capability name must match `[a-z][a-z0-9-]*`. gateseal processes capabilities in file order. |
+| `capabilities.<name>.tools.<tool>` | One table for each tool of the capability. The tools run in file order. A capability name must match `[a-z][a-z0-9-]*`. gateseal processes capabilities in file order. |
+| `capabilities.<name>.tools.<tool>.hook_ids` | Optional. Ordered, distinct hook IDs. Omit it to run all hooks in definition order. |
+| `capabilities.<name>.tools.<tool>.configuration` | Path to a file under `rules/` with the extension the tool declares. Required exactly when the tool definition declares a configuration. |
+| `capabilities.<name>.tools.<tool>.pin` | The default version. It must be one of the reviewed versions. |
+| `capabilities.<name>.tools.<tool>.reviewed` | Every version the policy's authors reviewed, each once. |
+| `capabilities.<name>.tools.<tool>.requires.<version>` | Optional. The minimum versions of other tools that a reviewed version needs. |
 | `capabilities.<name>.alternatives.<choice>` | Optional. Two or more distinct hooks from this capability. Expose a choice with a default to [select one of them](#alternatives). |
-| `tools.<name>.hook_ids` | Optional. Ordered, distinct hook IDs. Omit it to run all hooks in definition order. |
-| `tools.<name>.configuration` | Path to a file under `rules/` with the extension the tool declares. Required exactly when the tool definition declares a configuration. |
-| `choices.<capability>.<name>.default` | Exposes a choice. Use the compiler's `hygiene.exclude`, a tool's declared choice, or a capability's alternatives. Use an empty `[choices]` table if you expose none. |
-| `components.<name>.pin` | The default version. It must be one of the reviewed versions. |
-| `components.<name>.versions.<version>` | A reviewed version and its optional minimum requirements for other tools. |
+| `capabilities.<name>.choices.<choice>` | Exposes a choice with its default. Use the compiler's [`exclude`](#exclude), a tool's declared choice, or a capability's alternatives. Omit the table if the capability exposes none. |
 
 ## Capabilities
 
@@ -65,13 +62,13 @@ Offer alternative hooks when repositories need to choose one tool for a job.
 For example, these tables offer two formatters in a policy that defines both
 Ruff and Black.
 
+<!-- policy tables: alternatives -->
 ```toml
-[capabilities.python]
-tools = ["ruff", "black"]
-alternatives.formatter = ["ruff-format", "black"]
+[capabilities.python.alternatives]
+formatter = ["ruff-format", "black"]
 
-[choices.python.formatter]
-default = "ruff-format"
+[capabilities.python.choices]
+formatter = "ruff-format"
 ```
 
 Only the selected formatter runs. If the choice leaves a tool with no hooks,
@@ -88,8 +85,8 @@ repository selected, run `gateseal status` or `gateseal doctor`.
 
 ## Tools
 
-Every tool belongs to exactly one capability and needs a matching `[tools.<name>]`
-table. The compiler supplies definitions for `pre-commit-hooks`, `ruff`,
+Every tool belongs to exactly one capability, as a table under its
+`tools`. The compiler supplies definitions for `pre-commit-hooks`, `ruff`,
 and `betterleaks`. A team supplies other definitions as
 [`tools/<name>.toml`](tool-definitions.md). An error in a definition names
 its file.
@@ -98,28 +95,38 @@ its file.
 | --- | --- |
 | A selected tool has no built-in or team definition. | `unknown_tool` |
 | A team definition uses a built-in tool's name or a tool uses the name `pre-commit` or `python`. | `reserved_tool_name` |
-| Tools share a hook ID, hook name, owned output, or hook repository. A tool can also appear more than once in the capabilities. | `duplicate_identifier` |
-| The policy defines no capability, a capability has no tools, or the tool tables differ from the capabilities' tools. | `invalid_field` |
+| Tools share a hook ID, hook name, owned output, or hook repository. Two capabilities can also hold one tool. | `duplicate_identifier` |
+| The policy defines no capability, a capability has no tools, or `policy.toml` has a top-level table other than `capabilities`. | `invalid_field` |
 | A `hook_ids` entry is missing from the definition. | `unsupported_hook` |
 
 Each tool choice needs a unique name within its capability. The compiler
-reserves `exclude` in `hygiene`.
+reserves `exclude` in every capability.
 
-## Components
+### Exclude
 
-List exactly one component for each tool.
-A different set of components gives `unsupported_component`. Each component
-has a pin and the versions that policy authors reviewed with the rules and
-other tools. For Ruff, the version is the Ruff release installed by the
-pinned `ruff-pre-commit` repository.
+A capability that exposes `exclude` lets a repository list paths in
+`[choices.<capability>]` that the hooks of every tool in that capability
+skip. A capability that does not expose it refuses the choice. The bundled
+policy exposes `exclude` only for `hygiene`.
+
+A commit and the CI gate run the same hooks, so they skip the same paths. A
+history scan reads every path, so a capability that holds a tool with a
+history scan cannot expose `exclude` (`invalid_field`).
+
+## Versions
+
+Each tool has a pin and the versions that policy authors reviewed with the
+rules and other tools. For Ruff, the version is the Ruff release installed
+by the pinned `ruff-pre-commit` repository.
 
 Compiler and tool versions have three nonnegative decimal numbers, for
 example `6.0.0`. A number can only start with zero when it is zero.
 
-A reviewed version can declare `requires = { ruff = "0.17.1" }` to require
-Ruff 0.17.1 or later whenever Ruff is also selected. You can name another
-built-in tool or a tool in the policy. If component pins fail to meet each
-other's requirements, gateseal reports `incompatible_policy`.
+A reviewed version can declare `requires."<version>" = { ruff = "0.17.1" }`
+in its tool's table to require Ruff 0.17.1 or later whenever Ruff is also
+selected. You can name another built-in tool or a tool in the policy. If the
+pins fail to meet each other's requirements, gateseal reports
+`incompatible_policy`.
 
 The compiler supplies pre-commit. A policy cannot set or require its version.
 gateseal checks whether its own pre-commit supports the selected hooks.
@@ -178,7 +185,7 @@ commands.
 
 ### Schemas
 
-This compiler reads schema 4. The schema is stable.
+This compiler reads schema 5. The schema is stable.
 
 ### What a compiler reads first
 

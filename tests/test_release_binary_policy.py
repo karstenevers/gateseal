@@ -97,20 +97,14 @@ def with_gitleaks(tmp_path):
     (root / "tools").mkdir()
     (root / "tools/gitleaks.toml").write_text(GITLEAKS)
     (root / "rules/gitleaks.toml").write_text('title = "Team rules"\n')
-    edit(
-        root / "policy.toml",
-        (
-            'tools = ["betterleaks"]\n',
-            'tools = ["betterleaks", "gitleaks"]\n'
-            'alternatives.deep_scan = ["gitleaks", "gitleaks-deep"]\n',
-        ),
-    )
     with (root / "policy.toml").open("a") as policy:
         policy.write(
-            '\n[tools.gitleaks]\nconfiguration = "rules/gitleaks.toml"\n'
-            '\n[choices.secrets.deep_scan]\ndefault = "gitleaks"\n'
-            '\n[components.gitleaks]\npin = "8.30.0"\n\n'
-            '[components.gitleaks.versions."8.30.0"]\n'
+            "\n[capabilities.secrets.tools.gitleaks]\n"
+            'configuration = "rules/gitleaks.toml"\npin = "8.30.0"\n'
+            'reviewed = ["8.30.0"]\n'
+            "\n[capabilities.secrets.alternatives]\n"
+            'deep_scan = ["gitleaks", "gitleaks-deep"]\n'
+            '\n[capabilities.secrets.choices]\ndeep_scan = "gitleaks"\n'
         )
     archive = {"executable": "gitleaks", "sha256": GITLEAKS_SHA, "url": GITLEAKS_URL}
     edit_lock(
@@ -248,16 +242,11 @@ def test_policy_lock_records_every_platform_the_definition_names(
 
 def test_a_capability_of_release_binaries_alone_records_no_component(tmp_path):
     root = copied(tmp_path)
-    hooks = '["trailing-whitespace", "end-of-file-fixer", "check-yaml"]'
-    edit(
-        root / "policy.toml",
-        ('[capabilities.hygiene]\ntools = ["pre-commit-hooks"]\n\n', ""),
-        (f"[tools.pre-commit-hooks]\nhook_ids = {hooks}\n\n", ""),
-        ("[choices.hygiene.exclude]\ndefault = []\n\n", ""),
-        ('[components.pre-commit-hooks]\npin = "6.0.0"\n\n', ""),
-        ('[components.pre-commit-hooks.versions."6.0.0"]\n\n', ""),
-        ('[components.pre-commit-hooks.versions."5.0.0"]\n\n', ""),
-    )
+    text = (root / "policy.toml").read_text()
+    hygiene = text[
+        text.index("# pre-commit-hooks") : text.index("[capabilities.python")
+    ]
+    edit(root / "policy.toml", (hygiene, ""))
     edit_lock(root, lambda components: components.pop("pre-commit-hooks"))
     policy = load_policy_tree(root)
     secrets, _ = compiled(policy, ("secrets",))

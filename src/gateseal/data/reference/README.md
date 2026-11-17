@@ -8,10 +8,10 @@ this README and every other file.
 
 ## Edit
 
-- `policy.toml` names the tools of each capability and the hooks of each
-  tool, declares the choices a repository may make, and lists each
-  component's reviewed versions and its pin. Set `release` to a label of your
-  own for each release.
+- `policy.toml` holds a table for each tool, under its capability, with the
+  hooks it runs, its reviewed versions and its pin. Each capability's
+  `choices` gives the choices a repository may make and their defaults. Set
+  `release` to a label of your own for each release.
 - `tools/<name>.toml` defines a tool that gateseal does not ship, of a kind it
   implements. A tool named like one gateseal ships always runs gateseal's
   definition.

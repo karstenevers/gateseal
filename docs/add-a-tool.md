@@ -106,21 +106,17 @@ paths = ['''^\.git/''']
 
 ## Add it to a capability
 
-In `policy/policy.toml`, replace the existing `[capabilities.secrets]`
-table with the one below. Add the `tools.gitleaks` and `components.gitleaks`
-tables. Each tool belongs to one capability.
+In `policy/policy.toml`, add the table below after the Betterleaks table. It
+puts Gitleaks in the `secrets` capability, names its rules and reviews
+Gitleaks 8.30.0. Each tool belongs to one capability, and the tools of a
+capability run in file order.
 
+<!-- policy tables: gitleaks -->
 ```toml
-[capabilities.secrets]
-tools = ["betterleaks", "gitleaks"]
-
-[tools.gitleaks]
+[capabilities.secrets.tools.gitleaks]
 configuration = "rules/gitleaks.toml"
-
-[components.gitleaks]
 pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
+reviewed = ["8.30.0"]
 ```
 
 Generate the lock and check the policy.
@@ -191,27 +187,31 @@ settings from the `[tool.black]` table.
 line-length = 88
 ```
 
-In `policy/policy.toml`, replace `[capabilities.python]` with the table
-below. Add the other tables in the example. The default keeps Ruff as both
-linter and formatter. Selecting Black changes the formatter and keeps the
-Ruff lint hook.
+In `policy/policy.toml`, replace the tables of the `python` capability with
+the ones below. They add Black, offer its hook and `ruff-format` as
+alternatives for one job, and give the choice its default. The default keeps
+Ruff as both linter and formatter. Selecting Black changes the formatter and
+keeps the Ruff lint hook.
 
 <!-- policy tables: black -->
 ```toml
-[capabilities.python]
-tools = ["ruff", "black"]
-alternatives.formatter = ["ruff-format", "black"]
+[capabilities.python.tools.ruff]
+hook_ids = ["ruff-check", "ruff-format"]
+configuration = "rules/ruff.toml"
+pin = "0.17.1"
+reviewed = ["0.17.1"]
 
-[tools.black]
+[capabilities.python.tools.black]
 configuration = "rules/black.toml"
-
-[choices.python.formatter]
-default = "ruff-format"
-
-[components.black]
 pin = "26.10.1"
+reviewed = ["26.10.1"]
 
-[components.black.versions."26.10.1"]
+[capabilities.python.alternatives]
+formatter = ["ruff-format", "black"]
+
+[capabilities.python.choices]
+target_version = "py311"
+formatter = "ruff-format"
 ```
 
 Lock the Black release:

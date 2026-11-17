@@ -349,7 +349,7 @@ def test_bundled_consumer_adopts_by_editing_its_manifest(
         ),
         (
             lambda data: (data / "policy.toml").write_text(
-                (data / "policy.toml").read_text().replace("schema = 4", "schema = 3")
+                (data / "policy.toml").read_text().replace("schema = 5", "schema = 4")
             ),
             "unsupported_schema",
         ),
@@ -536,7 +536,7 @@ def test_interrupted_fetch_stops_git(monkeypatch, tmp_path):
 
 
 FIXTURES = "https://github.com/karstenevers/gateseal-fixtures.git"
-FIXTURE_COMMIT = "29415bb17be770885d432fc19e8da7a88c061af2"
+FIXTURE_COMMIT = "e140db5e790f8eb270dc2dc120bb9bf98eb34cbd"
 """The fixture repository's commit whose policy folder is the bundled policy."""
 
 

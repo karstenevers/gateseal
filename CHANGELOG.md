@@ -51,6 +51,14 @@ change the manifest, policy or lock format, and its entry says how to move.
   it names. It needed Python 3.14.10 or a later 3.14 release before.
 - `hygiene` is optional. A policy defines at least one capability of any name,
   and a Manifest selects at least one of them, such as `secrets` alone.
+- `policy.toml` writes each tool once, as a table under its capability:
+  `[capabilities.<capability>.tools.<tool>]` holds its hooks, rule file, `pin`,
+  `reviewed` versions and `requires`, and `[capabilities.<capability>.choices]`
+  gives each exposed choice its default. This is policy schema 5, and gateseal
+  refuses a policy of an older schema with `unsupported_schema`.
+- Any capability can expose `exclude`, except one that holds a tool with a
+  history scan, so that a commit and the CI gate check the same files. The
+  bundled policy still exposes it only for `hygiene`.
 - The Lock pins gateseal by its repository, its version and the commit of its
   release tag, which `gateseal configure` reads with the user's Git. The
   generated workflow installs gateseal from that commit. This is Lock format 2,

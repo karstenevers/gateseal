@@ -30,9 +30,7 @@ def pinned(hooks, betterleaks):
 
 def without_betterleaks_1_8(data):
     toml = data / "policy.toml"
-    toml.write_text(
-        toml.read_text().replace('[components.betterleaks.versions."1.8.0"]\n', "")
-    )
+    toml.write_text(toml.read_text().replace('["1.9.0", "1.8.0"]', '["1.9.0"]'))
     lock = json.loads((data / "policy.lock").read_bytes())
     del lock["components"]["betterleaks"]["versions"]["1.8.0"]
     (data / "policy.lock").write_bytes(canonical(lock))
@@ -42,9 +40,8 @@ def requiring_hooks_6(data):
     toml = data / "policy.toml"
     toml.write_text(
         toml.read_text().replace(
-            '[components.betterleaks.versions."1.9.0"]\n',
-            '[components.betterleaks.versions."1.9.0"]\n'
-            'requires = { pre-commit-hooks = "6.0.0" }\n',
+            'pin = "1.9.0"\n',
+            'pin = "1.9.0"\nrequires."1.9.0" = { pre-commit-hooks = "6.0.0" }\n',
         )
     )
 

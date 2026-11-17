@@ -37,45 +37,34 @@ CAVEAT = (
 COMMIT = "c0ffee" + "0" * 34
 
 POLICY = """\
-schema = 4
+schema = 5
 release = "team-1"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["pre-commit-hooks", "yamllint"]
-
-[capabilities.secrets]
-tools = ["gitleaks"]
-
-[tools.pre-commit-hooks]
+[capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["check-yaml"]
-
-[tools.yamllint]
-
-[tools.gitleaks]
-configuration = "rules/gitleaks.toml"
-
-[choices.hygiene.exclude]
-default = []
-
-[components.pre-commit-hooks]
 pin = "6.0.0"
+reviewed = ["6.0.0"]
 
-[components.pre-commit-hooks.versions."6.0.0"]
-
-[components.yamllint]
+[capabilities.hygiene.tools.yamllint]
 pin = "1.37.1"
+reviewed = ["1.37.1"]
 
-[components.yamllint.versions."1.37.1"]
+[capabilities.hygiene.choices]
+exclude = []
 
-[components.gitleaks]
+[capabilities.secrets.tools.gitleaks]
+configuration = "rules/gitleaks.toml"
 pin = "8.30.0"
-
-[components.gitleaks.versions."8.30.0"]
+reviewed = ["8.30.0"]
 """
 
-YAMLLINT_COMPONENT = (
-    '[components.yamllint]\npin = "1.37.1"\n\n[components.yamllint.versions."1.37.1"]\n'
+YAMLLINT_TABLE = (
+    '[capabilities.hygiene.tools.yamllint]\npin = "1.37.1"\nreviewed = ["1.37.1"]\n\n'
+)
+GITLEAKS_TABLE = (
+    '[capabilities.secrets.tools.gitleaks]\nconfiguration = "rules/gitleaks.toml"\n'
+    'pin = "8.30.0"\nreviewed = ["8.30.0"]\n'
 )
 
 
@@ -355,9 +344,7 @@ def test_a_built_in_name_is_reserved(tmp_path, upstream):
 
 @pytest.mark.parametrize("name", ["pre-commit", "python"])
 def test_the_compiler_runtimes_names_are_reserved(tmp_path, upstream, name):
-    policy = POLICY.replace('"yamllint"', f'"{name}"').replace(
-        "[tools.yamllint]", f"[tools.{name}]"
-    )
+    policy = POLICY.replace("tools.yamllint]", f"tools.{name}]")
     root = team(tmp_path, policy, {f"tools/{name}.toml": hook_tool(YAMLLINT, "x")})
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
@@ -399,45 +386,27 @@ def test_a_policys_tools_claim_distinct_hooks_and_repositories(
 @pytest.mark.parametrize(
     "old,new,code",
     [
-        ("[capabilities.hygiene]", "[capabilities.tidy]", "unsupported_choice"),
         (
-            'tools = ["gitleaks"]',
-            'tools = ["gitleaks", "yamllint"]',
+            GITLEAKS_TABLE,
+            YAMLLINT_TABLE.replace("hygiene", "secrets") + GITLEAKS_TABLE,
             "duplicate_identifier",
         ),
+        (GITLEAKS_TABLE, "[capabilities.secrets]\ntools = {}\n", "invalid_field"),
         (
-            'tools = ["gitleaks"]',
-            'tools = ["gitleaks", "gitleaks"]',
-            "duplicate_identifier",
-        ),
-        ('tools = ["gitleaks"]', "tools = []", "invalid_field"),
-        (
-            "[tools.yamllint]\n",
-            "[tools.yamllint]\n\n[tools.semgrep]\n",
-            "invalid_field",
-        ),
-        ("[tools.yamllint]\n", "", "invalid_field"),
-        (
-            "[tools.yamllint]\n",
-            '[tools.yamllint]\nhook_ids = ["ruff"]\n',
+            YAMLLINT_TABLE,
+            YAMLLINT_TABLE.replace("pin", 'hook_ids = ["ruff"]\npin'),
             "unsupported_hook",
         ),
-        (YAMLLINT_COMPONENT, "", "unsupported_component"),
         ('hook_ids = ["check-yaml"]', 'hook_ids = ["yamllint"]', "unsupported_hook"),
     ],
     ids=[
-        "hygiene choice without hygiene",
         "tool in two capabilities",
-        "tool twice",
         "no tools",
-        "tools table without a capability",
-        "tool without a table",
         "hook of another tool",
-        "components that differ from the tools",
         "hook of another tool in hygiene",
     ],
 )
-def test_policy_schema_4_structure_is_validated(tmp_path, upstream, old, new, code):
+def test_policy_structure_is_validated(tmp_path, upstream, old, new, code):
     assert old in POLICY
     root = team(tmp_path, POLICY.replace(old, new, 1))
     with pytest.raises(GatesealError) as failure:
@@ -447,8 +416,7 @@ def test_policy_schema_4_structure_is_validated(tmp_path, upstream, old, new, co
 
 
 def test_a_policy_defines_at_least_one_capability(tmp_path):
-    tables = "\n\n".join(("[capabilities]", "[tools]", "[choices]", "[components]"))
-    root = team(tmp_path, POLICY.split("\n\n")[0] + "\n\n" + tables + "\n")
+    root = team(tmp_path, POLICY.split("\n\n")[0] + "\n\n[capabilities]\n")
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == "invalid_field"
@@ -456,8 +424,8 @@ def test_a_policy_defines_at_least_one_capability(tmp_path):
 
 
 def test_a_policy_without_hygiene_compiles_a_selection_of_secrets(tmp_path, upstream):
-    policy = POLICY.replace("[capabilities.hygiene]", "[capabilities.files]")
-    policy = policy.replace("[choices.hygiene.exclude]\ndefault = []\n", "[choices]\n")
+    policy = POLICY.replace("[capabilities.hygiene.choices]\nexclude = []\n\n", "")
+    policy = policy.replace("[capabilities.hygiene.", "[capabilities.files.")
     root = team(tmp_path, policy)
     assert authoring.lock(root).code == "locked"
     locked, lock = consumer(load_policy_tree(root), ("secrets",))
@@ -482,29 +450,21 @@ def test_omitted_hook_ids_run_every_hook_in_definition_order(tmp_path, upstream)
 
 
 PYTHON = """
-[capabilities.python]
-tools = ["strict-ruff"]
-
-[tools.strict-ruff]
+[capabilities.python.tools.strict-ruff]
 hook_ids = ["ruff-check"]
 configuration = "rules/ruff.toml"
-
-[choices.python.target_version]
-default = "py311"
-
-[components.strict-ruff]
 pin = "0.17.1"
+reviewed = ["0.17.1"]
 
-[components.strict-ruff.versions."0.17.1"]
+[capabilities.python.choices]
+target_version = "py311"
 """
 
 
 def python_policy(tmp_path, extra=""):
     ruff = (bundled_root().parent / "tools/ruff.tool.toml").read_text()
     rules = (bundled_root() / "rules/ruff.toml").read_text()
-    policy = POLICY.replace(
-        "\n[tools.pre-commit-hooks]", PYTHON + extra + "\n[tools.pre-commit-hooks]", 1
-    )
+    policy = POLICY + PYTHON + extra
     files = {"tools/strict-ruff.toml": ruff, "rules/ruff.toml": rules}
     return team(tmp_path, policy, files)
 
@@ -523,28 +483,26 @@ def test_a_team_definition_choice_renders_into_its_configuration(tmp_path, upstr
     assert policy.tools["strict-ruff"].definition.origin == "team-defined"
 
 
-def test_two_tools_of_a_capability_cannot_declare_one_choice(tmp_path, upstream):
+@pytest.mark.parametrize("name", ["target_version", "exclude"])
+def test_a_tool_cannot_declare_a_choice_its_capability_has(tmp_path, upstream, name):
+    """strict-ruff declares target_version, and gateseal declares exclude."""
     other = hook_tool(
         "https://github.com/team/pyfmt",
         "pyfmt",
-        '[configuration]\nformat = "toml"\n\n[choices.target_version]\n'
+        f'[configuration]\nformat = "toml"\n\n[choices.{name}]\n'
         'key = "target"\nsince = { py311 = "1.0.0" }\n',
     )
     extra = (
-        '\n[tools.pyfmt]\nconfiguration = "rules/pyfmt.toml"\n\n'
-        '[components.pyfmt]\npin = "1.0.0"\n\n[components.pyfmt.versions."1.0.0"]\n'
+        '\n[capabilities.python.tools.pyfmt]\nconfiguration = "rules/pyfmt.toml"\n'
+        'pin = "1.0.0"\nreviewed = ["1.0.0"]\n'
     )
     root = python_policy(tmp_path, extra)
-    policy = root / "policy.toml"
-    policy.write_text(
-        policy.read_text().replace('["strict-ruff"]', '["strict-ruff", "pyfmt"]')
-    )
     (root / "tools/pyfmt.toml").write_text(other)
     (root / "rules/pyfmt.toml").write_text("")
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == "invalid_field"
-    assert "declares the choice target_version" in str(failure.value)
+    assert f"tools.pyfmt declares the choice {name}," in str(failure.value)
 
 
 @pytest.mark.parametrize(
@@ -566,11 +524,7 @@ def test_an_exception_names_a_tool_the_policy_offers(
 
 
 def test_upgrade_targets_a_tool_that_the_new_release_adds(tmp_path, upstream):
-    first = (
-        POLICY.replace('"pre-commit-hooks", "yamllint"', '"pre-commit-hooks"')
-        .replace("[tools.yamllint]\n\n", "")
-        .replace(YAMLLINT_COMPONENT, "")
-    )
+    first = POLICY.replace(YAMLLINT_TABLE, "")
     old, new = team(tmp_path / "v1", first), team(tmp_path / "v2")
     authoring.lock(old)
     authoring.lock(new)

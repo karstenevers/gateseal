@@ -10,6 +10,7 @@ the real upstream.
 
 import hashlib
 import json
+import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -237,11 +238,11 @@ def test_a_replaced_checksum_never_rewrites_a_recorded_digest(
     assert (started / "policy.lock").read_bytes() == before
 
 
-def review(directory, component, version):
+def review(directory, tool, version):
     path = directory / "policy.toml"
-    path.write_text(
-        path.read_text() + f'\n[components.{component}.versions."{version}"]\n'
-    )
+    head, table = path.read_text().split(f"tools.{tool}]\n")
+    table = table.replace("reviewed = [", f'reviewed = ["{version}", ', 1)
+    path.write_text(f"{head}tools.{tool}]\n{table}")
 
 
 @pytest.mark.parametrize(
@@ -283,8 +284,8 @@ def test_lock_writes_nothing_when_upstream_lacks_a_fact(
 
 def unreview(directory):
     path = directory / "policy.toml"
-    version = '[components.pre-commit-hooks.versions."5.0.0"]\n\n'
-    path.write_text(path.read_text().replace(version, ""))
+    reviewed = 'reviewed = ["6.0.0", "5.0.0"]'
+    path.write_text(path.read_text().replace(reviewed, 'reviewed = ["6.0.0"]'))
 
 
 def edit(directory):
@@ -316,7 +317,7 @@ def test_check_refuses_ruff_rules_that_set_the_target_version(installed, started
     assert refused["code"] == "invalid_field"
     assert refused["diagnostics"][0]["message"] == (
         "The ruff configuration sets target-version, which "
-        "choices.python.target_version sets for each repository."
+        "capabilities.python.choices.target_version sets for each repository."
     )
 
 
@@ -398,10 +399,8 @@ def test_add_reviews_a_version_and_pin_makes_it_the_pin(installed, upstream, loc
     added = policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")
     assert (added["code"], added["changed"]) == ("added", list(POLICY_FILES))
     assert "gateseal policy pin betterleaks 1.10.0" in added["next_steps"][0]
-    newest = '[components.betterleaks.versions."1.9.0"]'
     assert (locked / "policy.toml").read_bytes() == before["policy.toml"].replace(
-        newest.encode(),
-        f'[components.betterleaks.versions."1.10.0"]\n\n{newest}'.encode(),
+        b'reviewed = ["1.9.0", "1.8.0"]', b'reviewed = ["1.10.0", "1.9.0", "1.8.0"]'
     )
     record = lock_document(locked)["components"]["betterleaks"]["versions"]["1.10.0"]
     name = "betterleaks_1.10.0_linux_x64.tar.gz"
@@ -432,53 +431,32 @@ def test_add_reviews_a_version_and_pin_makes_it_the_pin(installed, upstream, loc
 
 COMMENTED = """\
 # Our team's policy. gateseal reads this file; people edit it.
-schema = 4
+schema = 5
 release = "team-2026.11"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["pre-commit-hooks"]
-
-[capabilities.python]
-tools = ["ruff"]
-
-[capabilities.secrets]
-tools = ["betterleaks"]
-
-[tools.pre-commit-hooks]
+[capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["trailing-whitespace", "end-of-file-fixer", "check-yaml"]
+pin = "6.0.0"
+reviewed = ["6.0.0", "5.0.0"]
 
-[tools.ruff]
+[capabilities.hygiene.choices]
+exclude = []
+
+[capabilities.python.tools.ruff]
 hook_ids = ["ruff-check", "ruff-format"]
 configuration = "rules/ruff.toml"
-
-[tools.betterleaks]
-configuration = "rules/betterleaks.toml"
-
-[choices.hygiene.exclude]
-default = []
-
-[components.pre-commit-hooks]
-pin = "6.0.0"
-
-[components.pre-commit-hooks.versions."6.0.0"]
-
-[components.pre-commit-hooks.versions."5.0.0"]
-
-[components.ruff]
 pin = "0.17.1"
-
-[components.ruff.versions."0.17.1"]
+reviewed = ["0.17.1"]
 
 # Betterleaks: read each release's notes before review.
-[components.betterleaks]
+[capabilities.secrets.tools.betterleaks]
+configuration = "rules/betterleaks.toml"
 pin = 'BEFORE'  # Raised after the October review.
-
-# Reviewed on 2026-10-20.
-[components.betterleaks.versions."1.9.0"]
-
-# Kept for repositories that still scan with 1.8.
-[components.betterleaks.versions."1.8.0"]"""
+reviewed = [
+    "1.9.0",  # Reviewed on 2026-10-20.
+    "1.8.0",  # Kept for repositories that still scan with 1.8.
+]"""
 
 
 def test_add_and_pin_keep_the_authors_comments_and_order(installed, upstream, locked):
@@ -490,8 +468,7 @@ def test_add_and_pin_keep_the_authors_comments_and_order(installed, upstream, lo
     policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")
     installed.cli(locked, "policy", "pin", "betterleaks", "1.10.0", str(locked))
     assert path.read_text() == COMMENTED.replace("BEFORE", "1.10.0").replace(
-        "# Reviewed on",
-        '[components.betterleaks.versions."1.10.0"]\n\n# Reviewed on',
+        '    "1.9.0",', '    "1.10.0",\n    "1.9.0",'
     )
     assert installed.cli(locked, "policy", "check", str(locked))["code"] == "consistent"
 
@@ -602,16 +579,20 @@ def test_two_pins_at_once_never_lose_a_reported_pin(installed, started):
         results = list(pool.map(pin, ["pre-commit-hooks 5.0.0", "betterleaks 1.8.0"]))
     assert sorted(code for _, code in results) == ["pinned", "policy_changed"]
     text = (started / "policy.toml").read_text()
+    pins = {
+        tool: table["pin"]
+        for capability in tomllib.loads(text)["capabilities"].values()
+        for tool, table in capability["tools"].items()
+    }
     for tool_version, code in results:
         tool, version = tool_version.split()
-        pinned = f'[components.{tool}]\npin = "{version}"' in text
-        assert pinned == (code == "pinned"), (results, text)
+        assert (pins[tool] == version) == (code == "pinned"), (results, text)
 
 
-def add_requires(directory, version, requires):
+def add_requires(directory, tool, version, requires):
     path = directory / "policy.toml"
-    table = f"[components.{version}]\n"
-    path.write_text(path.read_text().replace(table, f"{table}requires = {requires}\n"))
+    head, table = path.read_text().split(f"tools.{tool}]\n")
+    path.write_text(f'{head}tools.{tool}]\nrequires."{version}" = {requires}\n{table}')
 
 
 @pytest.mark.parametrize(
@@ -624,18 +605,14 @@ def add_requires(directory, version, requires):
             "does not review betterleaks 1.10.0",
         ),
         (
-            lambda d: add_requires(
-                d, 'ruff.versions."0.17.1"', '{ betterleaks = "1.9.0" }'
-            ),
+            lambda d: add_requires(d, "ruff", "0.17.1", '{ betterleaks = "1.9.0" }'),
             "betterleaks 1.8.0",
             "requires_conflict",
             "ruff 0.17.1 needs betterleaks 1.9.0 or newer, but the pins select "
             "betterleaks 1.8.0.",
         ),
         (
-            lambda d: add_requires(
-                d, 'betterleaks.versions."1.8.0"', '{ ruff = "0.18.0" }'
-            ),
+            lambda d: add_requires(d, "betterleaks", "1.8.0", '{ ruff = "0.18.0" }'),
             "betterleaks 1.8.0",
             "requires_conflict",
             "betterleaks 1.8.0 needs ruff 0.18.0 or newer, but the pins select "
@@ -665,13 +642,15 @@ def test_pin_refuses_an_unreviewed_or_conflicting_version(
 
 
 def test_add_refuses_a_policy_toml_it_cannot_edit(installed, started):
-    """An inline table of versions takes a hand edit, and add writes nothing."""
+    """A tool written as an inline table takes a hand edit, and add writes nothing."""
     path = started / "policy.toml"
+    text = path.read_text()
+    head, table = text.split("[capabilities.python.tools.ruff]\n")
     path.write_text(
-        path.read_text().replace(
-            'pin = "0.17.1"\n\n[components.ruff.versions."0.17.1"]\n',
-            'pin = "0.17.1"\nversions = { "0.17.1" = {} }\n',
-        )
+        f"{head}[capabilities.python]\n"
+        'tools.ruff = { hook_ids = ["ruff-check", "ruff-format"], '
+        'configuration = "rules/ruff.toml", pin = "0.17.1", reviewed = ["0.17.1"] }\n'
+        + table[table.index("\n[capabilities.python.choices]") :]
     )
     assert (
         installed.cli(started, "policy", "check", str(started))["code"] == "consistent"
