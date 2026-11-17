@@ -5,7 +5,9 @@
   </picture>
 </p>
 
-<h3 align="center">Pin your checks like you pin your dependencies.</h3>
+<h3 align="center">One policy for your team's commit checks.</h3>
+
+<p align="center">Built on pre-commit and mise, enforced the same way on every machine and in CI.</p>
 
 <p align="center">
   <a href="https://github.com/karstenevers/gateseal/actions?query=branch%3Amain"><img alt="Status of every CI check on main" src="https://img.shields.io/github/check-runs/karstenevers/gateseal/main?label=CI&logo=github"></a>
@@ -23,7 +25,9 @@
 
 ## Why gateseal
 
-pre-commit runs the hooks. gateseal adds what a team needs around them.
+pre-commit runs the hooks, and mise installs the release binaries. gateseal
+gives them one reviewed policy and checks that every clone and CI run follow
+it.
 
 - **One policy for every repository.** Tools, versions, rules, and CI inputs
   come from one reviewed release. No more copying configuration files into
@@ -39,8 +43,8 @@ pre-commit runs the hooks. gateseal adds what a team needs around them.
 
 ## Who gateseal is for
 
-**Developers:** run `gateseal setup` once per machine, and every commit
-checks the staged files with the tool versions that the Lock pins.
+**Developers:** commit as usual. pre-commit runs the checks that the Lock
+pins, gateseal's own among them, so you never install gateseal.
 
 **Repository owners:** pin one policy release in `gateseal.lock`, and plain
 `gateseal` shows whether the repository matches it.
@@ -96,19 +100,21 @@ Windows is not supported yet, and support is planned. The generated GitHub
 Actions workflow runs on GitHub's Linux runner `ubuntu-24.04`. You cannot
 choose another runner yet.
 
-It needs these tools:
+**A developer never installs gateseal.** pre-commit builds gateseal's own
+check from the commit that the Lock pins. You need:
 
 - Git 2.54.0 or later
-- uv 0.13.6 or later
-- mise 2026.10.19 or later, for the secrets check only
+- pre-commit, which `gateseal setup` installs once per machine with uv
+  0.13.6 or later. Your own pre-commit 4.7.0 or later works too.
+- mise 2026.10.19 or later, when the policy uses a release binary such as
+  Betterleaks
 
-```sh
-uv tool install --python 3.14.10 gateseal
-gateseal --version
-```
+**A Repository Maintainer** also runs gateseal, to configure and upgrade a
+repository. `uvx gateseal` runs it without an install, and
+`uv tool install gateseal` keeps one.
 
-[Install gateseal](docs/install.md) explains the Python flag and installs the
-release that a repository pins.
+[Install gateseal](docs/install.md) explains each step, and what to do when you
+already use Git's `init.templateDir` or `core.hooksPath`.
 
 ## Quick start
 
@@ -116,16 +122,19 @@ Adopt the bundled policy in a repository. Select one or more capabilities,
 and leave out `--ci github` if you do not use GitHub Actions:
 
 ```sh
+uv tool install gateseal
+gateseal setup --refresh
 gateseal configure \
   --capability hygiene \
   --capability python \
   --capability secrets \
   --ci github
-gateseal setup --refresh
 ```
 
-configure pins gateseal by the commit of its release tag, which it reads with
-your Git.
+setup installs pre-commit on this machine. It adds the commit launcher to this
+clone and to every clone you make later. configure pins gateseal by the commit
+of its release tag, which it reads with your Git. To keep no gateseal install,
+skip the first command and write `uvx gateseal` for `gateseal`.
 
 Review and commit `gateseal.toml`, `gateseal.lock`, `.pre-commit-config.yaml`,
 `.github/workflows/gateseal.yml`, and, with `python` or `secrets`, the
@@ -133,8 +142,9 @@ generated `.gateseal` directory.
 
 From then on, every `git commit` in that clone runs the checks that the Lock
 pins. GitHub Actions runs the same checks on each pull request and each push to
-`main`. A teammate runs `gateseal setup` once per machine, and every clone made
-afterwards checks its commits.
+`main`. A teammate runs setup of the release that the Lock pins once per
+machine, such as `uvx gateseal@0.2.0 setup`. Every clone made afterwards then
+checks its commits.
 
 When a commit stops, its last lines say why. A hook that fixed a file leaves
 the fix in the worktree, so review it, stage it, and commit again.
@@ -149,6 +159,8 @@ native `.pre-commit-config.yaml`, which you review and commit.
 
 **Setup:** installs pre-commit once per machine and makes Git add its commit
 launcher to every new clone. It writes nothing that Git tracks.
+`pre-commit install` in each clone is enough for commits. `gateseal run`,
+`status` and `doctor` still need setup's pre-commit.
 
 **Commit:** pre-commit runs the generated configuration on what each commit
 stages. Its first hook, `gateseal-check`, stops a commit whose generated files

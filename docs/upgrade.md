@@ -34,20 +34,21 @@ pins Betterleaks 1.9.0, run:
 gateseal upgrade betterleaks
 ```
 
-**Change the gateseal release.** Install the release you move to, newer or
-older, and run its command with no target:
+**Change the gateseal release.** Run the command of the release you move to,
+newer or older, with no target:
 
 ```sh
-uv tool install --python 3.14.10 gateseal==0.2.0
-gateseal upgrade
+uvx gateseal@0.2.0 upgrade
 ```
 
 [Move to another gateseal release](#move-to-another-gateseal-release) explains
 what the move reads and writes.
 
 Review the changed files, stage them together, and commit. After a gateseal
-move, each developer installs the same release and runs `gateseal setup`. The
-first commit after an upgrade installs the tools that changed.
+move, the next commit in each clone builds the new gateseal's hook and installs
+the tools that changed. When the new release names a newer pre-commit, a commit
+stops and asks for it. Each developer then runs setup of the new release, such
+as `uvx gateseal@0.2.0 setup`.
 
 ## Usage
 
@@ -69,7 +70,7 @@ target, `gateseal upgrade` reports the current selection.
 | Git policy | Use `--policy-tag` for a release in the current repository. To change the repository or directory, use `--policy` or `--policy-path`. Use `--policy-commit` to require an exact commit for the tag. |
 | Bundled policy | Use `--policy bundled` for the policy that comes with the running gateseal. |
 | Tool | Use `COMPONENT=VERSION` for an exact reviewed version. A version different from the policy pin needs a reason and review date. Selecting the pin explicitly removes the exception. |
-| gateseal | Install the target release and run `gateseal upgrade` with it. The release also fixes the pre-commit version. |
+| gateseal | Run `gateseal upgrade` of the target release, such as `uvx gateseal@0.2.0 upgrade`. The release also fixes the pre-commit version. |
 
 A bare component name such as `betterleaks` normally follows the policy
 pin. If the current version is newer and the target policy still reviews it,
@@ -126,8 +127,8 @@ release label, the upgrade reports `bundled_policy_moves`. Review that policy. T
 `--policy bundled`.
 
 To roll back a gateseal move, revert its commit with `git revert`. When later
-commits make the revert conflict, install the earlier release and run
-`gateseal upgrade` with it.
+commits make the revert conflict, run `gateseal upgrade` of the earlier
+release, such as `uvx gateseal@0.2.0 upgrade` after a move to 0.2.1.
 
 A Lock of another format stops every command with `unsupported_schema`. gateseal
 0.1.0 wrote format 1: delete `gateseal.lock` and the files gateseal wrote, then

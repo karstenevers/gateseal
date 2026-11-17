@@ -5,7 +5,7 @@ will try the bundled hygiene, Python, and secrets checks in a new repository.
 
 ## Install the command
 
-[Install gateseal from PyPI](install.md#install-from-pypi). You need Git, uv,
+[Install gateseal from PyPI](install.md#run-gateseal). You need Git, uv,
 mise, and network access for the first commit. Git must have a name and
 email address to use for the demo commits.
 

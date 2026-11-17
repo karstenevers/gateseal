@@ -4,6 +4,10 @@ When a gateseal command stops, read its error and the `Next:` instruction.
 If a hook stopped a commit, look for the filename and rule in the hook's
 output.
 
+Without gateseal installed, run each `gateseal` command below as
+`uvx gateseal@VERSION`, with the version in the `gateseal.version` field of
+`gateseal.lock`.
+
 ## Inspect a clone
 
 From the affected worktree, run:
@@ -22,13 +26,56 @@ settings that keep a hook from running.
 
 Run `gateseal doctor` in the clone.
 
-- **The launcher check failed.** The clone has no commit launcher, or another
-  hook is in its place. Run `gateseal setup --refresh`. A hook that the clone
-  already has stays as `.git/hooks/pre-commit.legacy`, and the launcher runs
-  it first.
-- **`custom_hooks_path`.** Git's `core.hooksPath` is set, so Git skips the
-  launcher. Run `git config --show-origin core.hooksPath` to find the file
-  that sets it, and remove the setting.
+- **The launcher check failed.** See
+  [the clone has an old launcher](#the-clone-has-an-old-launcher).
+- **`custom_hooks_path`.** See
+  [Git's core.hooksPath is set](#gits-corehookspath-is-set).
+
+## The clone has an old launcher
+
+`gateseal doctor` fails its launcher check when the clone's
+`.git/hooks/pre-commit` is not the launcher that setup installs. That happens
+in a clone made before setup, or after another pre-commit or tool wrote the
+hook. When the pre-commit that a launcher names was deleted, the launcher
+starts the `pre-commit` on your `PATH`. Without one, each commit stops with
+`` `pre-commit` not found ``.
+
+Run `gateseal setup --refresh` in the clone. When the clone had a hook from
+another tool, pre-commit keeps it as `.git/hooks/pre-commit.legacy` and runs it
+first. Delete that file if you no longer need the hook.
+
+## Git's core.hooksPath is set
+
+Git then runs only the hooks in the folder that `core.hooksPath` names, so it
+skips the clone's launcher. `gateseal setup` and `pre-commit install` both
+refuse to run. Remove the setting, or put pre-commit's launcher in that folder,
+as [When core.hooksPath is set](install.md#when-corehookspath-is-set) shows.
+
+## Git LFS reports that a hook already exists
+
+`gateseal setup` installs only the commit launcher. `git lfs install` then
+adds its push and checkout hooks beside it, and a push uploads the LFS objects.
+`git lfs install` stops with `Hook already exists: pre-push` when the clone has
+another push hook, such as the one that `pre-commit install -t pre-push`
+writes. To keep both, let Git LFS write its hook, then install pre-commit's
+again:
+
+```sh
+git lfs update --force
+pre-commit install -t pre-push
+```
+
+pre-commit keeps the Git LFS hook as `.git/hooks/pre-push.legacy` and runs it
+first, so a push still uploads the LFS objects.
+
+## A commit asks for a newer pre-commit
+
+A commit stops with `pre-commit version X is required but version Y is
+installed` when the repository moved to a gateseal release that names a newer
+pre-commit. Run `uvx gateseal@VERSION setup` to install it, with the version
+that the Lock pins. Without a version, uvx can run an older gateseal, whose
+setup keeps the older pre-commit. If you installed pre-commit yourself,
+upgrade it instead.
 
 ## A command reports needs_setup
 
@@ -37,9 +84,9 @@ installed. Run `gateseal setup`, then run the command again.
 
 ## The first commit is slow or fails
 
-The first commit that needs a tool downloads it. pre-commit clones each hook
-repository and builds its environment, and mise downloads each release
-binary. Later commits reuse them.
+The first commit that needs a tool downloads it, and later commits reuse it.
+[How a commit runs](how-a-commit-runs.md#before-the-commit) lists what it
+downloads.
 
 - **No network access.** Restore network access and commit again.
 - **A checksum does not match.** mise stops the hook when an archive does not

@@ -6,7 +6,7 @@ repository](work-in-a-configured-repository.md).
 
 ## Configure and commit
 
-[Install gateseal](install.md#install-from-pypi), then [pin the release in the
+[Install gateseal](install.md#run-gateseal), then [pin the release in the
 repository](install.md#pin-the-release-in-a-repository). The example
 `configure` command selects the bundled `hygiene` capability. It checks for
 trailing whitespace, missing final newlines, and invalid YAML. To select more
