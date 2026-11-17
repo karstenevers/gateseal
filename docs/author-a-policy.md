@@ -32,15 +32,15 @@ flowchart LR
 
 2. In `policy/policy.toml`, set `release` to a label such as
    `"team-2026.11"`. The label can contain up to 128 printable characters.
-   The `[capabilities]` tables group the tools. The `[tools]` tables select
-   their hooks and rule files. Keep at least one capability.
+   Each tool is one table under its capability, such as
+   `[capabilities.python.tools.ruff]`, with its hooks, rule file, pin and
+   reviewed versions. Keep at least one capability.
 
-3. If you remove a capability, remove its tool and component tables, version
-   tables, and choices. For example, if you remove `python`, also delete
-   `[choices.python.target_version]`. To remove `secrets`, remove
-   `[capabilities.secrets]`, `[tools.betterleaks]`, `[components.betterleaks]`,
-   its version tables, and `rules/betterleaks.toml`. Run
-   `gateseal policy lock policy` to drop those versions from the lock.
+3. If you remove a capability, remove every table whose header starts with
+   its name, and its rule files. For example, to remove `python`, delete
+   `[capabilities.python.tools.ruff]`, `[capabilities.python.choices]` and
+   `rules/ruff.toml`. Run `gateseal policy lock policy` to drop those
+   versions from the lock.
 
 4. Edit the remaining rule files under `policy/rules/`. Use UTF-8 TOML with
    LF line endings. A rule file cannot extend another configuration.
@@ -74,11 +74,12 @@ The [policy format](policy-format.md) describes the fields you can edit.
     it writes `policy.toml` and `policy.lock`.
 
 3. If the version requires a minimum version of another tool, add that
-   requirement to its version table. For example, `requires = { ruff = "0.17.1" }`
-   requires Ruff 0.17.1 or later.
+   requirement to its tool's table. For example,
+   `requires."1.8.1" = { ruff = "0.17.1" }` makes Betterleaks 1.8.1 require
+   Ruff 0.17.1 or later.
 
-4. Review `git diff -- policy`. Look for the version table in `policy.toml`
-   and the matching record in `policy.lock`. To make this version the
+4. Review `git diff -- policy`. Look for the version in the tool's
+   `reviewed` list in `policy.toml` and the matching record in `policy.lock`. To make this version the
    default for repositories that adopt your policy, pin it.
 
     ```sh
@@ -88,8 +89,9 @@ The [policy format](policy-format.md) describes the fields you can edit.
 
 A pin must name a reviewed version and meet the other pins' requirements.
 The previous version stays available through a Version Exception. To remove
-a reviewed version, move its pin first if necessary. Delete the version table
-and run `gateseal policy lock policy`.
+a reviewed version, move its pin first if necessary. Delete it from
+`reviewed`, with any `requires` entry for it, and run
+`gateseal policy lock policy`.
 
 Add and pin preserve comments and table order. If the command reports
 `policy_edit_unsupported`, make the change by hand. Run `gateseal policy

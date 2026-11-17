@@ -15,25 +15,18 @@ from team_policy import git
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 POLICY = """\
-schema = 4
+schema = 5
 release = "team-1"
 minimum_compiler = "0.1.0"
 
-[capabilities.hygiene]
-tools = ["pre-commit-hooks"]
-
-[tools.pre-commit-hooks]
+[capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["check-yaml"]
-
-[choices.hygiene.exclude]
-default = []
-
-[components.pre-commit-hooks]
 pin = "6.0.0"
+reviewed = ["6.0.0"]
 
-[components.pre-commit-hooks.versions."6.0.0"]
+[capabilities.hygiene.choices]
+exclude = []
 """
-UNRELEASED = '\n[components.pre-commit-hooks.versions."5.5.0"]\n'
 
 
 @pytest.fixture(scope="module")
@@ -120,7 +113,7 @@ def test_adding_an_unreleased_version_names_the_release_to_check(offline, tmp_pa
 def test_a_reviewed_version_without_a_release_keeps_its_own_step(
     offline, tmp_path, version
 ):
-    root = team(tmp_path, POLICY + UNRELEASED)
+    root = team(tmp_path, POLICY.replace('["6.0.0"]', '["6.0.0", "5.5.0"]'))
     before = files(root)
     error = refused(authoring.add, root, "pre-commit-hooks", version)
     assert error.code == "upstream_tag_missing"
@@ -142,10 +135,10 @@ def test_a_tag_read_that_fails_names_the_command_to_rerun(offline, tmp_path):
     assert [path.name for path in tmp_path.iterdir()] == ["global.gitconfig"]
 
 
-def add_requires(root, version, requires):
+def add_requires(root, tool, version, requires):
     path = root / "policy.toml"
-    table = f"[components.{version}]\n"
-    path.write_text(path.read_text().replace(table, f"{table}requires = {requires}\n"))
+    head, table = path.read_text().split(f"tools.{tool}]\n")
+    path.write_text(f'{head}tools.{tool}]\nrequires."{version}" = {requires}\n{table}')
 
 
 @pytest.fixture
@@ -164,7 +157,7 @@ def test_pin_refuses_an_unreviewed_version(started):
 
 
 def test_pin_refuses_a_version_that_another_pin_rules_out(started):
-    add_requires(started, 'ruff.versions."0.17.1"', '{ betterleaks = "1.9.0" }')
+    add_requires(started, "ruff", "0.17.1", '{ betterleaks = "1.9.0" }')
     before = files(started)
     error = refused(authoring.pin, started, "betterleaks", "1.8.0")
     assert error.code == "requires_conflict"

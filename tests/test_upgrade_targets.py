@@ -39,9 +39,8 @@ def reviews_hooks_4_6(root):
     toml = root / "policy.toml"
     toml.write_text(
         toml.read_text().replace(
-            '[components.pre-commit-hooks.versions."5.0.0"]\n',
-            '[components.pre-commit-hooks.versions."5.0.0"]\n\n'
-            '[components.pre-commit-hooks.versions."4.6.0"]\n',
+            'reviewed = ["6.0.0", "5.0.0"]',
+            'reviewed = ["6.0.0", "5.0.0", "4.6.0"]',
         )
     )
     lock = json.loads((root / "policy.lock").read_bytes())

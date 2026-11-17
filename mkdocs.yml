@@ -89,6 +89,7 @@ nav:
       - design/0011-share-sealed-hook-environments-through-the-interpreter-store.md
       - design/0012-fail-gateseal-pull-requests-on-surviving-mutants.md
       - design/0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md
+      - design/0014-write-each-tool-once-under-its-capability.md
   - Contribute:
       - Build and verify: verification.md
 

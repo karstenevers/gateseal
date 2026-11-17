@@ -9,24 +9,14 @@ from team_policy import URL, environment, git, publish
 pytestmark = pytest.mark.integration
 
 POLICY = """\
-schema = 4
+schema = 5
 release = "binary-only"
 minimum_compiler = "0.1.0"
 
-[capabilities.secrets]
-tools = ["betterleaks"]
-
-[tools.betterleaks]
+[capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
-
-[choices]
-
-[components.betterleaks]
 pin = "1.9.0"
-
-[components.betterleaks.versions."1.9.0"]
-
-[components.betterleaks.versions."1.8.0"]
+reviewed = ["1.9.0", "1.8.0"]
 """
 
 

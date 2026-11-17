@@ -38,22 +38,16 @@ def requiring_hooks_6(data):
     toml = data / "policy.toml"
     toml.write_text(
         toml.read_text().replace(
-            '[components.betterleaks.versions."1.9.0"]\n',
-            '[components.betterleaks.versions."1.9.0"]\n'
-            'requires = { pre-commit-hooks = "6.0.0" }\n',
+            'pin = "1.9.0"\n',
+            'pin = "1.9.0"\nrequires."1.9.0" = { pre-commit-hooks = "6.0.0" }\n',
         )
     )
 
 
 def without_old_versions(data):
     toml = data / "policy.toml"
-    text = toml.read_text()
-    for version in (
-        'pre-commit-hooks.versions."5.0.0"',
-        'betterleaks.versions."1.8.0"',
-    ):
-        text = text.replace(f"[components.{version}]\n", "")
-    toml.write_text(text)
+    text = toml.read_text().replace('["6.0.0", "5.0.0"]', '["6.0.0"]')
+    toml.write_text(text.replace('["1.9.0", "1.8.0"]', '["1.9.0"]'))
     document = json.loads((data / "policy.lock").read_bytes())
     del document["components"]["pre-commit-hooks"]["versions"]["5.0.0"]
     del document["components"]["betterleaks"]["versions"]["1.8.0"]
@@ -62,16 +56,7 @@ def without_old_versions(data):
 
 def without_secrets(data):
     toml = data / "policy.toml"
-    text = toml.read_text()
-    for section in (
-        '[capabilities.secrets]\ntools = ["betterleaks"]\n\n',
-        '[tools.betterleaks]\nconfiguration = "rules/betterleaks.toml"\n\n',
-        '\n[components.betterleaks]\npin = "1.9.0"\n\n'
-        '[components.betterleaks.versions."1.9.0"]\n\n'
-        '[components.betterleaks.versions."1.8.0"]\n',
-    ):
-        text = text.replace(section, "")
-    toml.write_text(text)
+    toml.write_text(toml.read_text().split("\n[capabilities.secrets.")[0])
     (data / "rules/betterleaks.toml").unlink()
     document = json.loads((data / "policy.lock").read_bytes())
     del document["components"]["betterleaks"]

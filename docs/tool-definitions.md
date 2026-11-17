@@ -124,8 +124,8 @@ writes the key before the rest of the policy's configuration. Ruff's
 | `key` | A distinct top-level configuration key matching `[a-z][a-z0-9-]*`. The reserved key `extend` could load another configuration. |
 | `since` | Map each accepted value to the earliest tool release that supports it. Use lowercase letters and digits for values. |
 
-To expose the choice, set a default in `[choices.<capability>.<name>]` in
-`policy.toml`. A repository can select a different value that its tool
+To expose the choice, give it a default as `<name> = <default>` in
+`[capabilities.<capability>.choices]` in `policy.toml`. A repository can select a different value that its tool
 version supports.
 
 ## What a team definition guarantees

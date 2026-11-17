@@ -72,8 +72,8 @@ commit or checksum, regenerate the lock and review every change. See
 
 ### `gateseal policy add <tool> <version> [<directory>]`
 
-Use `add` to record a version you reviewed. The command prepares a version
-table for `policy.toml` and checks all reviewed versions against upstream.
+Use `add` to record a version you reviewed. The command adds the version to
+the tool's `reviewed` list and checks all reviewed versions against upstream.
 After the checks pass, it writes `policy.toml` and then `policy.lock`.
 
 - If upstream lacks required release data, check that the version has been
@@ -84,7 +84,7 @@ After the checks pass, it writes `policy.toml` and then `policy.lock`.
 ### `gateseal policy pin <tool> <version> [<directory>]`
 
 Use `pin` to make a reviewed version the default. The command changes the
-component's `pin` in `policy.toml` and checks the result offline.
+tool's `pin` in `policy.toml` and checks the result offline.
 `policy.lock` records all reviewed versions regardless of which one you pin.
 
 ### Edits and codes
@@ -96,7 +96,7 @@ checks that only the requested setting changed.
 | Code | Exit | What to do |
 | --- | --- | --- |
 | `invalid_invocation` | 2 | Specify an exact `major.minor.patch` version. |
-| `unknown_component` | 2 | Check the component name in `policy.toml`. |
+| `unknown_component` | 2 | Check the tool name in `policy.toml`. |
 | `version_unreviewed` | 2 | Review the version and run `gateseal policy add` before pinning it. |
 | `requires_conflict` | 2 | Check the two versions in the message. Their pins must meet each other's requirements. |
 | `policy_edit_unsupported` | 2 | Make the edit by hand. For example, the command cannot insert a version into an inline table. |

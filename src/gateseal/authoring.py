@@ -262,7 +262,7 @@ def _parse_request(review: Review, tool: str, requested: str) -> tuple[Catalog, 
     if catalog is None:
         raise GatesealError(
             "unknown_component",
-            f"{POLICY} has no component {tool}; it lists "
+            f"{POLICY} has no tool {tool}; it lists "
             f"{', '.join(sorted(review.catalogs))}.",
         )
     try:
@@ -288,10 +288,10 @@ def _pin_step(catalog: Catalog, tool: str, exact: str) -> tuple[str, ...]:
 def add(root: Path, tool: str, requested: str) -> Result:
     """Review an exact version of tool, and lock its facts from upstream.
 
-    The version's table goes into policy.toml and its facts into the lock,
-    resolved as gateseal policy lock resolves them. Both files are written
-    only after every fact checks, policy.toml first, so an interrupted add
-    leaves a stale lock that gateseal policy lock completes.
+    The version goes into the tool's reviewed list in policy.toml and its
+    facts into the lock, resolved as gateseal policy lock resolves them. Both
+    files are written only after every fact checks, policy.toml first, so an
+    interrupted add leaves a stale lock that gateseal policy lock completes.
     """
     snapshot = Snapshot(root)
     catalog, exact = _parse_request(review_policy(snapshot.read), tool, requested)
