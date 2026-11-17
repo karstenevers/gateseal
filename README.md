@@ -152,7 +152,8 @@ launcher to every new clone. It writes nothing that Git tracks.
 
 **Commit:** pre-commit runs the generated configuration on what each commit
 stages. Its first hook, `gateseal-check`, stops a commit whose generated files
-differ from the Lock. At the first use, pre-commit builds each hook
+differ from the Lock, or whose installed Betterleaks is not the program that
+the Lock records. At the first use, pre-commit builds each hook
 repository's environment, gateseal's included, and mise installs each release
 binary and checks its SHA-256. Every repository on the machine shares them.
 

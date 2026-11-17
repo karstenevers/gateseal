@@ -145,7 +145,9 @@ def test_a_commit_that_stages_an_edited_owned_file_fails(installed, adopted):
     refused = process(["git", "commit", "-m", "Edit an owned file"], adopted)
     shown = refused.stdout + refused.stderr
     assert refused.returncode == 1, shown
-    assert re.search(r"Check the files gateseal wrote\.+Failed", shown), shown
+    assert re.search(r"Check files and tools against gateseal\.lock\.+Failed", shown), (
+        shown
+    )
     assert f"gateseal: The staged {CONFIG} differs from the file gateseal wrote." in (
         shown
     )
@@ -154,7 +156,10 @@ def test_a_commit_that_stages_an_edited_owned_file_fails(installed, adopted):
     success(["git", "add", CONFIG], adopted)
     (adopted / "notes.txt").write_text("changed\n")
     committed = success(["git", "commit", "-am", "Change notes"], adopted)
-    assert "Check the files gateseal wrote" in committed.stdout + committed.stderr
+    assert (
+        "Check files and tools against gateseal.lock"
+        in committed.stdout + committed.stderr
+    )
 
 
 def test_gateseal_run_needs_no_staged_configuration_and_keeps_skip(
@@ -219,7 +224,9 @@ def test_a_developers_own_pre_commit_runs_the_hook_without_gateseal(
     success(["git", "add", "notes.txt"], clone, env)
     committed = success(["git", "commit", "-m", "Add notes"], clone, env)
     shown = committed.stdout + committed.stderr
-    assert re.search(r"Check the files gateseal wrote\.+Passed", shown), shown
+    assert re.search(r"Check files and tools against gateseal\.lock\.+Passed", shown), (
+        shown
+    )
     [hook] = (home / "pre-commit home").glob("repo*/py_env-*/bin/gateseal-check")
     version = success([hook.parent / "python", "--version"], clone, env).stdout
     assert version.startswith(f"Python {python}."), version

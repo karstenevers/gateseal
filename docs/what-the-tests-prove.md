@@ -16,6 +16,7 @@ commit or an upgrade goes wrong.
 | Clone without a launcher, or with `core.hooksPath` set | `gateseal doctor` names the failed launcher check, or warns about the setting, each with its next step. |
 | Partially staged source file | The commit checks the staged part and keeps the unstaged edits. |
 | Staged hand edit of `.pre-commit-config.yaml` | The `gateseal-check` hook stops the commit and names `gateseal configure`. |
+| Betterleaks program replaced after mise installed it | The `gateseal-check` hook stops a commit that stages a secret and names the program. With that hook skipped, the replaced program lets the secret through. After the install folder is deleted, the next commit installs Betterleaks again, and it blocks the secret. |
 | A developer's own pre-commit on Python 3.11 or 3.12, and no gateseal on `PATH` | pre-commit builds the `gateseal-check` hook on that Python, and the commit passes. |
 | Clone with `core.autocrlf=true` | Configure, validation, and a commit succeed without changes to tracked content. |
 

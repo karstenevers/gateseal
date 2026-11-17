@@ -4,9 +4,11 @@ pre-commit builds the hook from gateseal's repository at the commit that the
 Lock pins and runs it at git commit, before the tools' own hooks. It reads the
 index that the commit records, which Git names in GIT_INDEX_FILE for git
 commit -a or a commit of paths. The staged Manifest and each owned file that
-the staged Lock lists must have the SHA-256 that Lock records. Only the Lock's
-ledger is read, so the hook needs no policy and no network. gateseal check and
-the CI gate also compile the policy again, which catches an edited Lock.
+the staged Lock lists must have the SHA-256 that Lock records. So must each
+installed executable that a tool checks at commit, because mise never checks
+an install again. Only the staged Lock is read, so the hook needs no policy
+and no network. gateseal check and the CI gate also compile the policy again,
+which catches an edited Lock.
 """
 
 import subprocess
@@ -17,14 +19,17 @@ from pathlib import Path
 from gateseal import lock
 from gateseal.bootstrap import LOCK, MANIFEST, sha, tracked_bytes
 from gateseal.diagnostics import GatesealError
+from gateseal.platforms import machine
 from gateseal.processes import find_tool
+from gateseal.tools.release_binary import check_installs
 
 STAGE_ALL = f"Stage {MANIFEST}, {LOCK} and the files gateseal wrote, then commit again."
 
 
-def check(staged: Callable[[str], bytes]) -> None:
-    """Fail unless the staged files are the ones the staged Lock records."""
-    ledger = lock.own_ledger(staged(LOCK))
+def check(staged: Callable[[str], bytes], root: Path) -> None:
+    """Fail unless the staged files and the checked installs are the recorded ones."""
+    target = machine()
+    ledger = lock.own_ledger(staged(LOCK), None if target is None else target.mise)
     for name, recorded in ledger.files.items():
         if sha(staged(name)) == recorded:
             continue
@@ -40,6 +45,7 @@ def check(staged: Callable[[str], bytes]) -> None:
             next_step=f"Undo the edit to {name}, or change {MANIFEST} and run "
             f"gateseal configure. {STAGE_ALL}",
         )
+    check_installs(ledger.programs, root)
 
 
 def index(root: Path, git: str) -> Callable[[str], bytes]:
@@ -64,8 +70,9 @@ def index(root: Path, git: str) -> Callable[[str], bytes]:
 
 
 def main() -> int:
+    root = Path.cwd()
     try:
-        check(index(Path.cwd(), find_tool("git")))
+        check(index(root, find_tool("git")), root)
     except GatesealError as exc:
         print(f"gateseal: {exc}\nNext: {exc.next_step}", file=sys.stderr)
         return 1

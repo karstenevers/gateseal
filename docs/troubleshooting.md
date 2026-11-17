@@ -96,6 +96,16 @@ restore its generated contents and make the intended change in the Manifest
 or policy. If another tool owns the file, move it before you run
 `gateseal configure` again.
 
+## A commit reports a changed installed tool
+
+If the `gateseal-check` hook stops a commit because an installed program,
+such as `betterleaks`, is not the one `gateseal.lock` records, something
+replaced the program after mise installed it. mise never checks an installed
+tool again, so the replaced program would run in every commit. Find out what
+changed it before you go on. Then delete the install folder that the message
+names and commit again. The tool's hook has mise install it again from the
+archive whose SHA-256 the Lock records.
+
 ## A command reports alternate_index
 
 Repository commands expect the worktree's own Git index. If

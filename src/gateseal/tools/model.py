@@ -230,11 +230,16 @@ class Executable:
     for 1.9.0. The text on each side of {version} is a regular expression of
     its own, in its own group, so no alternation, optional group, or repeat can
     skip the version, and a definition cannot loosen the proof.
+
+    check_at_commit says that the commit check compares the installed program
+    with the SHA-256 that the Policy Lock records for it. Only a kind whose
+    hooks start the tool's own executable installs a program to check.
     """
 
     name: str
     version: tuple[str, ...]
     version_output: str
+    check_at_commit: bool
 
     def require_version(self, reported: str, version: str, subject: str) -> None:
         """Fail with tool_failed unless reported proves version."""
@@ -421,7 +426,17 @@ def _version_pattern(output: str, version: str) -> str:
 
 
 def _executable(value: object, field: str, owned: Mapping[str, str]) -> Executable:
-    table = fields(value, {"name", "version", "version_output"}, field)
+    table = mapping(value, field)
+    table = fields(
+        table,
+        {"name", "version", "version_output"} | ({"check_at_commit"} & set(table)),
+        field,
+    )
+    checked = table.get("check_at_commit", False)
+    if not isinstance(checked, bool):
+        raise GatesealError(
+            "invalid_field", f"{field}.check_at_commit must be true or false."
+        )
     output = string(table["version_output"], f"{field}.version_output")
     try:
         valid = output.count("{version}") == 1 and all(
@@ -440,6 +455,7 @@ def _executable(value: object, field: str, owned: Mapping[str, str]) -> Executab
         _program(string(table["name"], f"{field}.name"), f"{field}.name"),
         _arguments(table["version"], f"{field}.version", owned),
         output,
+        checked,
     )
 
 
@@ -571,7 +587,8 @@ def parse_definition(
     The caller has read kind. The other closed values are read before any
     other field, so a newer compiler's value stops with the step to use it.
     A kind whose hooks are local needs an executable, and each of its probes
-    must start with that executable.
+    must start with that executable. Only such a kind's executable is checked
+    at commit.
     """
     field = f"tools.{name}"
     stages = _stages(document.get("stages"), f"{field}.stages")
@@ -612,6 +629,12 @@ def parse_definition(
         raise GatesealError(
             "invalid_field",
             f"A {source.kind} tool needs an executable that starts every probe.",
+        )
+    if executable is not None and executable.check_at_commit and not source.local:
+        raise GatesealError(
+            "invalid_field",
+            f"{field}.executable.check_at_commit needs a tool whose hooks start its "
+            "own executable.",
         )
     history = (
         _history(document["history"], f"{field}.history", owned, source)

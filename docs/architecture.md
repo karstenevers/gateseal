@@ -106,6 +106,10 @@ hook can also bypass its checks.
   For example, the Ruff hook pins the Ruff package by version. Its wheel
   has no locked hash. Activation and `gateseal doctor` check the installed
   executable's version.
+- mise checks a release binary's archive before it installs it, but never
+  checks the install again. For a tool whose definition sets
+  `check_at_commit`, such as Betterleaks, the `gateseal-check` hook compares
+  the program that mise starts with the Lock at each commit.
 - Tools run with the access of the user who starts them. Review a
   team-defined tool's arguments as well as its source. For example, the
   built-in Betterleaks definition disables repository ignore files. Another

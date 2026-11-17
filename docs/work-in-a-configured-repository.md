@@ -51,6 +51,10 @@ release or build that the Lock pins.
 - If `gateseal-check` reports that a staged file differs from the file gateseal
   wrote, undo the edit. To change a check, change `gateseal.toml` and run
   `gateseal configure` instead.
+- If `gateseal-check` reports that an installed program is not the one
+  `gateseal.lock` records, find out what changed it. Then delete the folder
+  that the message names and commit again. See
+  [troubleshooting](troubleshooting.md#a-commit-reports-a-changed-installed-tool).
 - If a hook cannot start, run `gateseal doctor` and follow its next steps.
 
 You can stage part of an ordinary source file. Stage
