@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 from conftest import PIN, named_flags
 from gateseal import __version__, upgrade
-from gateseal.bootstrap import LOCK
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import Locked, Snapshot, compile_lock
+from gateseal.managed_files import LOCK
 from gateseal.manifest import (
     BundledSource,
     ExceptionRequest,

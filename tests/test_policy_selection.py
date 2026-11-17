@@ -74,7 +74,6 @@ def test_python_selects_the_ruff_hook_repository():
         "version": "0.17.1",
         "revision": "38bfb07c0c64c304f47eb52090f8288150c77730",
         "hook_ids": ["ruff-check", "ruff-format"],
-        "tools": {"ruff": "0.17.1"},
     }
     assert tuple(hook.id for hook in chosen.hooks) == (
         "trailing-whitespace",

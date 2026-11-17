@@ -78,9 +78,7 @@ def test_python_capability_locks_and_renders_ruff(installed, consumer):
         "version": RUFF,
         "revision": "38bfb07c0c64c304f47eb52090f8288150c77730",
         "hook_ids": ["ruff-check", "ruff-format"],
-        "tools": {"ruff": RUFF},
     }
-    assert lock["components"]["pre-commit-hooks"]["tools"] == {}
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
     ruff = config["repos"][2]
     assert [hook["id"] for hook in ruff["hooks"]] == ["ruff-check", "ruff-format"]

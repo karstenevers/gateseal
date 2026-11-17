@@ -1,48 +1,45 @@
 # How a commit runs
 
-When you run `git commit`, Git tells gateseal which files you staged.
-The staged copy of `gateseal.lock` selects the tools for the commit.
-gateseal checks that those tools are ready in this worktree before it
-starts pre-commit.
+When you run `git commit`, Git starts pre-commit's commit launcher. pre-commit
+runs the hooks of `.pre-commit-config.yaml` on the files you staged.
+`gateseal configure` generates that file from the Lock, and its first hook is
+gateseal's own check.
 
 ```mermaid
 flowchart TD
     accTitle: How gateseal checks a commit
-    accDescr: Git finds the tools prepared for this worktree. The hook checks that they match the staged settings. Then pre-commit checks the staged files.
-    git["git commit"] --> hook["Find the tools prepared for this worktree"]
-    hook --> settings["Check that the tools match the staged settings"]
-    settings --> checks["Run checks on the staged files"]
+    accDescr: Git starts pre-commit. gateseal's hook compares the staged files and the installed programs of marked tools with the staged Lock. Then the other hooks check the staged files.
+    git["git commit"] --> launcher["pre-commit's launcher starts pre-commit"]
+    launcher --> check["gateseal-check compares the staged files<br/>and marked programs with the staged Lock"]
+    check --> checks["The other hooks check the staged files"]
 ```
 
 ## Before the commit
 
-`gateseal activate` builds a *prepared attempt* in the worktree's Git
-directory. It installs tools or links to copies in the machine's interpreter
-store. It writes the local record last. When preparation and hook installation
-succeed, it changes the `current` link to point to the complete attempt. If
-preparation fails, the previous attempt stays current.
+`gateseal setup` installs pre-commit and makes Git copy pre-commit's commit
+launcher into every new clone. In a clone that you made before setup,
+`gateseal setup --refresh` adds it. See
+[Set up pre-commit on this machine](install.md#set-up-pre-commit-on-this-machine).
 
-The Git hook is shared by the worktrees of a repository. The hook follows
-`current` in the worktree making the commit. A new, moved, or copied worktree
-needs its own activation. See [Local preparation](local-preparation.md).
+The first commit that needs a hook downloads it. pre-commit builds the
+environment of each hook repository at the revision that the configuration
+pins, gateseal's own among them. mise installs each release binary and checks
+its archive's SHA-256. Later commits in every clone on the machine reuse them.
 
 ## During the commit
 
-1. The hook resolves `current` and starts the bootstrap with the prepared
-   Python. The commit uses that attempt until pre-commit exits.
-2. The bootstrap checks the worktree location, staged Lock, and generated
-   files. Each staged generated file must match its working copy because
-   the tools open the working copy. The bootstrap also checks the prepared
-   files and hook executables.
-3. The prepared compiler reads the exact staged blobs that the bootstrap
-   checked. It verifies that the staged Manifest, Lock, and generated files
-   agree.
-4. The compiler starts pre-commit on Git's terminal. You see the hook
-   output as it runs. Git receives pre-commit's exit status, and Ctrl-C
-   reaches pre-commit while it restores unstaged edits.
+1. Git starts the launcher, which starts pre-commit on the staged files.
+2. The `gateseal-check` hook runs the gateseal that the Lock pins. It compares
+   the staged Manifest and generated files with the SHA-256 values in the
+   staged Lock. For each tool whose definition sets `check_at_commit`, such as
+   Betterleaks, it also compares the program that mise installed with the
+   Lock. It needs no network and no policy.
+3. The other hooks check the staged files. Each release binary starts through
+   `mise exec`.
 
-Each stage replaces the previous process. The hook uses the prepared tools,
-so commits can run with a minimal `PATH` and without starting uv or mise.
+If a commit stops, follow its next step.
+[When a commit stops](work-in-a-configured-repository.md#when-a-commit-stops)
+lists the common causes.
 
 ## Which files run
 
@@ -52,16 +49,3 @@ use the index Git chose for that operation. pre-commit temporarily saves
 unstaged edits to partially staged source files and restores them after the
 checks. If a hook fixes a file, review and stage the fix before retrying.
 See [Work in a configured repository](work-in-a-configured-repository.md).
-
-## How each command checks the prepared tools
-
-| Operation | What it checks |
-| --- | --- |
-| Commit, `gateseal status`, `gateseal run` | File metadata in the prepared trees and the expected hook executables. A commit also validates the staged inputs. |
-| `gateseal doctor` | File contents by hash and health probes for the selected tools. It can detect damage that preserves size and modification time. |
-| `gateseal activate` | File contents and tool health. It prepares a new attempt when repair is necessary. |
-
-If a commit stops before any check runs, follow its next step. When the
-working copy matches the staged Manifest and Lock, activation can prepare
-them. Otherwise, the message identifies which files to stage or restore.
-See [Staged Lock selection](local-preparation.md#staged-lock-selection).

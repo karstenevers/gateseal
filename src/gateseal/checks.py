@@ -9,13 +9,14 @@ import os
 import re
 import subprocess
 
-from gateseal import ci, lock, runtime, setup
+from gateseal import ci, lock, setup
 from gateseal.ci import OFFLINE, Scope
 from gateseal.compiler_release import CHECK_HOOK
 from gateseal.diagnostics import Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
+from gateseal.managed_files import CONFIG
 from gateseal.processes import execute, pre_commit_command
-from gateseal.tools.model import RANGE, Stage, ToolDefinition
+from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, ToolDefinition
 from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
@@ -41,7 +42,7 @@ def run(locked: lock.Locked) -> Result:
     process = execute(
         pre_commit_command(
             setup.require_pre_commit(),
-            [*runtime.hook_run(Stage.RUN), "--all-files", "--color", "never"],
+            [*hook_run(Stage.RUN), "--all-files", "--color", "never"],
         ),
         locked.root,
         environment,
@@ -104,9 +105,7 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         ci.require_checked_out(worktree, scope.head)
     env = dict(os.environ) | OFFLINE
     process = execute(
-        pre_commit_command(
-            python, [*runtime.hook_run(Stage.CI), *files, "--color", "never"]
-        ),
+        pre_commit_command(python, [*hook_run(Stage.CI), *files, "--color", "never"]),
         locked.root,
         env,
         allow_failure=True,
@@ -238,3 +237,8 @@ def _history_findings(tool: ToolDefinition, output: str) -> list[dict[str, objec
             }
         )
     return findings
+
+
+def hook_run(stage: Stage) -> list[str]:
+    """Return pre-commit's run arguments for the hooks of one Stage."""
+    return ["run", "--config", CONFIG, "--hook-stage", HOOK_STAGES[stage]]

@@ -17,19 +17,19 @@ from collections.abc import Callable
 from pathlib import Path
 
 from gateseal import lock
-from gateseal.bootstrap import LOCK, MANIFEST, sha, tracked_bytes
 from gateseal.diagnostics import GatesealError
+from gateseal.managed_files import LOCK, MANIFEST, tracked_bytes
 from gateseal.platforms import machine
 from gateseal.processes import find_tool
 from gateseal.tools.release_binary import check_installs
+from gateseal.validation import sha
 
 STAGE_ALL = f"Stage {MANIFEST}, {LOCK} and the files gateseal wrote, then commit again."
 
 
 def check(staged: Callable[[str], bytes], root: Path) -> None:
     """Fail unless the staged files and the checked installs are the recorded ones."""
-    target = machine()
-    ledger = lock.own_ledger(staged(LOCK), None if target is None else target.mise)
+    ledger = lock.own_ledger(staged(LOCK), machine())
     for name, recorded in ledger.files.items():
         if sha(staged(name)) == recorded:
             continue

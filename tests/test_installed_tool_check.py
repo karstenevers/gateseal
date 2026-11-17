@@ -84,7 +84,7 @@ def edit_record(root, change):
     """Stage a Lock whose record of this machine's Betterleaks change edits."""
     path = root / LOCK
     document = json.loads(path.read_text())
-    change(document["native_artifacts"]["betterleaks"]["platforms"][machine().mise])
+    change(document["native_artifacts"]["betterleaks"]["platforms"][machine()])
     path.write_text(json.dumps(document))
     success(["git", "add", LOCK], root)
 
@@ -175,7 +175,7 @@ def test_a_record_without_the_programs_sha256_is_not_checked(staged, folder, cap
 def test_an_unreadable_record_names_the_field(staged, capsys):
     edit_record(staged, lambda archive: archive.update(note="edited"))
     message, _ = hook(capsys)[1]
-    platform = machine().mise
+    platform = machine()
     assert message == (
         f"Cannot read {LOCK}: native_artifacts.betterleaks.platforms.{platform} "
         "requires exactly executable, executable_sha256, sha256, url."

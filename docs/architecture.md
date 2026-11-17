@@ -8,23 +8,20 @@ reviewer can expect from that choice.
 ```mermaid
 flowchart LR
     accTitle: What gateseal keeps in Git and on your machine
-    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. gateseal activate prepares the locked tools on your machine. Each commit runs those tools.
+    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. Each commit runs the hooks that the generated files pin. pre-commit and mise install them once per machine.
     policy["Policy<br/>bundled or from Git"]
     subgraph git["Committed to Git"]
         manifest["gateseal.toml<br/>your choices"]
         lock["gateseal.lock<br/>and generated files"]
     end
     subgraph machine["On your machine only"]
-        tools["Prepared tools<br/>for each worktree"]
-        store["Python and hook environments<br/>shared by all repositories"]
+        tools["Hook environments and release binaries<br/>shared by all clones"]
     end
     policy --> configure(["gateseal configure"])
     manifest --> configure
     configure --> lock
-    lock --> activate(["gateseal activate"])
-    activate --> tools
-    tools -. "links to" .-> store
-    commit(["git commit"]) -- "runs" --> tools
+    lock --> commit(["git commit"])
+    commit -- "pre-commit and mise install and run" --> tools
 ```
 
 ## Each part has one owner
@@ -33,11 +30,11 @@ flowchart LR
 | --- | --- |
 | Policy author | Writes the team's policy: the tools, their versions, and the rules. Lists the other versions they also tested, and the settings a repository may change. Tags each release. |
 | Repository maintainer | Writes one repository's `gateseal.toml`: the policy release, the capabilities, values for the allowed settings, and any switch to another tested version. Reviews `gateseal.lock` and the generated files before committing them. |
-| gateseal | Compiles the Manifest, prepares the locked tools, installs the Git hook, and detects changes to files it owns. |
+| gateseal | Compiles the Manifest, sets up pre-commit on the machine, and detects changes to the files it owns and to the programs of marked tools. |
 | Git | Fetches a team policy with the user's Git configuration and credentials. Selects the index for each commit. |
-| uv | Downloads and verifies the compiler runtime and builds the compiler and pre-commit environments. |
-| pre-commit | Prepares Python hook environments and runs the selected hooks. |
-| mise | Downloads and verifies release binaries such as Betterleaks during activation. |
+| uv | Installs pre-commit for `gateseal setup`, and gateseal in CI. |
+| pre-commit | Builds each hook repository's environment, gateseal's own among them, and runs the selected hooks. |
+| mise | Downloads and verifies release binaries such as Betterleaks when a hook first needs them. |
 
 One person can hold both roles. They stay separate because one policy can
 serve many repositories, and each repository upgrades when it is ready.
@@ -54,7 +51,7 @@ A policy groups tools into capabilities. For example, selecting `python` in the
 bundled policy adds Ruff. A policy can offer a choice of formatters or several
 reviewed versions of a tool. The Lock records the selected hooks, versions, and
 settings. A team can define another tool using a kind that the compiler
-supports. Its definition names the source, hooks, probes, and arguments.
+supports. Its definition names the source, hooks, and arguments.
 See [Policy format](policy-format.md) and [Tool definitions](tool-definitions.md).
 
 `gateseal configure` writes the Lock and the native configuration that tools
@@ -72,40 +69,39 @@ policy to change a check. See [Manifest and Lock](policy-contract.md).
 - `configure` checks every path before it writes and replaces each file in
   one step. The files together are not one transaction. If `configure`
   stops partway, run it again to finish.
-- `activate` installs exactly the versions that the Lock pins. `configure`
+- pre-commit and mise install exactly the versions that the Lock pins. `configure`
   takes each tool's version from the Manifest and its policy release, so a
   version changes only when you change the Manifest.
 
 ## What stays on the machine
 
-`gateseal activate` prepares the locked compiler and tools for one worktree.
-The worktrees of a repository share an installed Git hook. Each worktree has
-its own current preparation. The machine's interpreter store holds the Python
-interpreters and hook environments that worktrees can reuse.
+`gateseal setup` installs pre-commit once per machine and adds its commit
+launcher to every new clone. pre-commit keeps one environment for each hook
+repository and revision, and mise keeps one install of each release binary.
+All clones on the machine share them.
 See [How a commit runs](how-a-commit-runs.md).
 
-The compiler release fixes CPython and pre-commit. To change pre-commit
-itself, [move to another gateseal release](upgrade.md#move-to-another-gateseal-release).
+Each gateseal release names the pre-commit that `gateseal setup` installs. To
+change pre-commit itself, [move to another gateseal release](upgrade.md#move-to-another-gateseal-release).
 
 ## What gateseal trusts
 
-The Lock lets gateseal detect changes to the policy, generated files, and
-prepared tools. The host OS, Git, local preparation, and the tools that
-perform installation must be trustworthy. A person who can replace the local
+The Lock lets gateseal detect changes to the policy, the generated files, and
+the programs of marked tools. The host OS, Git, pre-commit, mise, and the tools
+that perform installation must be trustworthy. A person who can replace the local
 hook can also bypass its checks.
 
 - A matching Git tag and content digest identify a release. You still need
   to trust the team that controls the policy repository.
-- The Lock pins gateseal by the full commit of its release tag. CI builds
-  gateseal from that commit, with a build tool from PyPI by version and no
-  locked hash. `gateseal setup` installs the release's pre-commit version on
-  CPython 3.14 from the configured package index, and CI runs gateseal on
-  CPython 3.14. Neither has a locked hash.
+- The Lock pins gateseal by the full commit of its release tag. pre-commit
+  and CI build gateseal from that commit, with a build tool from PyPI by
+  version and no locked hash. `gateseal setup` installs the release's
+  pre-commit version on CPython 3.14 from the configured package index, and
+  CI runs gateseal on CPython 3.14. Neither has a locked hash.
 - Python hook repositories have locked Git revisions. pre-commit installs
   their dependencies using the configured package index and local caches.
   For example, the Ruff hook pins the Ruff package by version. Its wheel
-  has no locked hash. Activation and `gateseal doctor` check the installed
-  executable's version.
+  has no locked hash.
 - mise checks a release binary's archive before it installs it, but never
   checks the install again. For a tool whose definition sets
   `check_at_commit`, such as Betterleaks, the `gateseal-check` hook compares
@@ -117,8 +113,8 @@ hook can also bypass its checks.
 
 ## What CI checks
 
-With GitHub CI enabled, configure generates a workflow that installs the
-pinned compiler and activates the repository on a runner. The CI gate runs
+With GitHub CI enabled, configure generates a workflow that installs
+gateseal at the commit that the Lock pins and sets up pre-commit on a runner. The CI gate runs
 hooks on the files selected for the event. If a tool defines a history scan,
 the gate also checks the commits in the event. This can catch a secret added
 and then removed before review. See [GitHub CI](github-ci.md).
@@ -136,28 +132,22 @@ Each decision has a cost. Its design record gives the full reasons, and the
   rules. It cannot add scripts or plugins, so a reviewer reads data. The
   cost is that a new kind of tool needs a gateseal release.
   [Design record 0007](design/0007-implement-tool-kinds-in-the-compiler-and-describe-every-tool-as-data.md)
-- **Tools are ready before the commit.** `gateseal activate` installs every
-  tool. Commits then run only the prepared tools and start neither uv nor
-  mise. The cost is one `activate` in each worktree, and again when the Lock
-  changes.
-  [Design record 0003](design/0003-prepare-gateseal-tools-before-commits.md)
-- **Each release ships its own Python and pre-commit.** Every machine and
-  every CI run uses the same versions. The cost is that a new pre-commit
-  needs a gateseal upgrade.
+- **pre-commit and mise run the tools.** gateseal compiles the Lock and
+  checks it as one more pre-commit hook, pinned by commit. pre-commit builds
+  each hook environment and mise installs each release binary, once per
+  machine. The cost is a first commit that needs network access, and no
+  check of an installed tool's version after the install, except for the
+  tools whose definitions set `check_at_commit`.
+  [Design record 0013](design/0013-run-hooks-with-pre-commit-and-mise-and-keep-gateseal-a-compiler.md)
+- **Each release names its pre-commit.** Every machine and every CI run uses
+  the same version. The cost is that a new pre-commit needs a gateseal
+  upgrade.
   [Design record 0006](design/0006-generate-policy-lock-data-and-ship-the-runtime-with-the-compiler.md)
 - **A team policy release is an exact commit.** The Lock records the commit
   and a digest of the policy, so a moved tag changes nothing. The cost is
   that each worktree fetches the release once, with network access and Git
   credentials.
   [Design record 0004](design/0004-acquire-git-policy-releases-by-exact-commit.md)
-- **Repositories share installs.** Each Python and each hook environment is
-  installed once per machine, named by the SHA-256 of its archive or recipe.
-  A new worktree adds no hook environment to disk. The cost is shared state.
-  If one repository rebuilds a shared environment, another worktree must run
-  `gateseal activate` again before its next commit. Each shared install is
-  sealed, and activation takes a lock while it writes one.
-  [Design record 0010](design/0010-share-one-sealed-interpreter-store-across-repositories.md),
-  [design record 0011](design/0011-share-sealed-hook-environments-through-the-interpreter-store.md)
 
 ## How the design is tested
 
@@ -169,8 +159,5 @@ Each decision has a cost. Its design record gives the full reasons, and the
   check fails if no unit test notices one.
 - **CRAP scores.** Every function must score 10 or less. The score rises
   when complex code has few tests.
-- **A TLA+ model.** It checks every order of activation, cleanup, and commit
-  steps within its bounds. It shows that they keep five of the
-  [prepared attempt invariants](local-preparation.md#prepared-attempt-invariants).
 
 [Build and verify gateseal](verification.md) shows how to run each check.

@@ -7,10 +7,9 @@ from dataclasses import dataclass
 from datetime import date
 
 from gateseal import __version__
-from gateseal.bootstrap import MANIFEST
-from gateseal.compiler_release import load_runtime
+from gateseal.compiler_release import PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note
-from gateseal.managed_files import relative_name
+from gateseal.managed_files import MANIFEST, relative_name
 from gateseal.policy import (
     ChoiceValue,
     Policy,
@@ -376,7 +375,7 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
             if tool.definition.source.local
             for hook in tool.use.hooks
         ),
-        load_runtime().pre_commit,
+        PRE_COMMIT,
     )
     _require_accepted(tools, choices)
     return Selection(choices, dict(sorted(exceptions.items())), tools, manifest.ci)
@@ -440,7 +439,7 @@ def _version_exception(
             "runtime_exception",
             "exceptions.pre-commit selects a pre-commit version, but each "
             f"gateseal release carries its own: gateseal {__version__} runs "
-            f"pre-commit {load_runtime().pre_commit}.",
+            f"pre-commit {PRE_COMMIT}.",
             next_step=f"Remove [exceptions.pre-commit] from {MANIFEST}, then run "
             "gateseal configure. A newer pre-commit comes with a newer gateseal "
             "release.",

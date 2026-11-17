@@ -39,12 +39,6 @@ NAME = re.compile(r"[a-z][a-z0-9-]*")
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 """An executable's bare name, which its kind finds in the tool it installs."""
 
-PREFIX = re.compile(r"[A-Z][A-Z0-9]*_")
-
-KEPT = ("GIT_DIR", "GIT_INDEX_FILE")
-"""The variables a commit passes to pre-commit to name the index it records,
-which no removed prefix may drop."""
-
 RANGE = "{range}"
 """The placeholder a history scan's arguments hold once for the gate's range."""
 
@@ -185,10 +179,7 @@ class Hook:
     tool is the definition's name, and origin its definition's. id and name
     are unique among the hooks of a policy's tools: the Lock and run's results
     name a hook by its id, and pre-commit's status line by its name. args
-    follow the program the kind runs, never through a shell. probe runs
-    without file names from the worktree's top on empty standard input; its
-    first word is a bare executable name that the kind resolves to an
-    executable it prepared, never to a host program.
+    follow the program the kind runs, never through a shell.
     """
 
     tool: str
@@ -197,7 +188,6 @@ class Hook:
     name: str
     args: tuple[str, ...]
     types_or: tuple[str, ...]
-    probe: tuple[str, ...]
     output: OutputFormat
 
     def base_entry(
@@ -221,38 +211,14 @@ class Hook:
 
 @dataclass(frozen=True)
 class Executable:
-    r"""The executable a kind prepares for a tool, and how it proves its version.
-
-    version_output is a regular expression that the stripped output of the
-    executable run with the version arguments must fully match. {version}
-    stands for the escaped selected version between (?<![0-9.]) and
-    (?![\w.+-]), so even .*{version}.* refuses 11.9.0, 1.9.0.1 and 1.9.0-rc1
-    for 1.9.0. The text on each side of {version} is a regular expression of
-    its own, in its own group, so no alternation, optional group, or repeat can
-    skip the version, and a definition cannot loosen the proof.
+    """The executable that a tool's hooks start.
 
     check_at_commit says that the commit check compares the installed program
-    with the SHA-256 that the Policy Lock records for it. Only a kind whose
-    hooks start the tool's own executable installs a program to check.
+    with the SHA-256 that the Policy Lock records for it.
     """
 
     name: str
-    version: tuple[str, ...]
-    version_output: str
     check_at_commit: bool
-
-    def require_version(self, reported: str, version: str, subject: str) -> None:
-        """Fail with tool_failed unless reported proves version."""
-        if (
-            re.fullmatch(_version_pattern(self.version_output, version), reported)
-            is None
-        ):
-            raise GatesealError(
-                "tool_failed",
-                f"Prepared {subject} reports version {reported}, not {version}.",
-                4,
-                "gateseal activate",
-            )
 
 
 @dataclass(frozen=True)
@@ -369,7 +335,6 @@ class ToolDefinition:
     origin: Origin
     stages: frozenset[Stage]
     scope: Scope
-    removed_prefixes: tuple[str, ...]
     configuration: str | None
     files: Mapping[str, bytes]
     executable: Executable | None
@@ -419,42 +384,16 @@ def _program(value: str, field: str) -> str:
     return value
 
 
-def _version_pattern(output: str, version: str) -> str:
-    before, after = output.split("{version}")
-    bounded = rf"(?<![0-9.]){re.escape(version)}(?![\w.+-])"
-    return f"(?:{before}){bounded}(?:{after})"
-
-
-def _executable(value: object, field: str, owned: Mapping[str, str]) -> Executable:
+def _executable(value: object, field: str) -> Executable:
     table = mapping(value, field)
-    table = fields(
-        table,
-        {"name", "version", "version_output"} | ({"check_at_commit"} & set(table)),
-        field,
-    )
+    table = fields(table, {"name"} | ({"check_at_commit"} & set(table)), field)
     checked = table.get("check_at_commit", False)
     if not isinstance(checked, bool):
         raise GatesealError(
             "invalid_field", f"{field}.check_at_commit must be true or false."
         )
-    output = string(table["version_output"], f"{field}.version_output")
-    try:
-        valid = output.count("{version}") == 1 and all(
-            re.compile(part)
-            for part in (*output.split("{version}"), _version_pattern(output, "0"))
-        )
-    except re.error:
-        valid = False
-    if not valid:
-        raise GatesealError(
-            "invalid_field",
-            f"{field}.version_output must hold {{version}} once, between two "
-            "regular expressions that each compile on their own.",
-        )
     return Executable(
         _program(string(table["name"], f"{field}.name"), f"{field}.name"),
-        _arguments(table["version"], f"{field}.version", owned),
-        output,
         checked,
     )
 
@@ -489,14 +428,10 @@ def _hook(
     table = mapping(value, field)
     output = closed(table.get("output"), OutputFormat, f"{field}.output")
     table = fields(
-        table, {"name", "probe", "output"} | ({"args", "types_or"} & set(table)), field
+        table, {"name", "output"} | ({"args", "types_or"} & set(table)), field
     )
-    probe = _arguments(table["probe"], f"{field}.probe", owned)
-    if not NAME.fullmatch(hook_id) or not probe:
-        raise GatesealError(
-            "invalid_field", f"{field} needs a lowercase id and a nonempty probe."
-        )
-    _program(probe[0], f"{field}.probe")
+    if not NAME.fullmatch(hook_id):
+        raise GatesealError("invalid_field", f"{field} needs a lowercase id.")
     return Hook(
         tool,
         origin,
@@ -507,7 +442,6 @@ def _hook(
             string(item, f"{field}.types_or")
             for item in sequence(table.get("types_or", []), f"{field}.types_or")
         ),
-        probe,
         output,
     )
 
@@ -518,23 +452,6 @@ def _stages(value: object, field: str) -> frozenset[Stage]:
     if stages not in STAGE_SETS or len(stages) != len(listed):
         raise unsupported(field, ", ".join(listed))
     return stages
-
-
-def _removed_prefixes(value: object, field: str) -> tuple[str, ...]:
-    prefixes = tuple(string(item, field) for item in sequence(value, field))
-    if (
-        len(set(prefixes)) != len(prefixes)
-        or not all(map(PREFIX.fullmatch, prefixes))
-        # pytestmut: off[call.anyall] -- only GIT_ fits PREFIX and starts either name
-        or any(variable.startswith(prefixes) for variable in KEPT)
-        # pytestmut: on
-    ):
-        raise GatesealError(
-            "invalid_field",
-            f"{field} must be distinct prefixes such as RUFF_, "
-            f"and none may remove {' or '.join(KEPT)}.",
-        )
-    return prefixes
 
 
 def _hooks(
@@ -586,9 +503,8 @@ def parse_definition(
 
     The caller has read kind. The other closed values are read before any
     other field, so a newer compiler's value stops with the step to use it.
-    A kind whose hooks are local needs an executable, and each of its probes
-    must start with that executable. Only such a kind's executable is checked
-    at commit.
+    A kind whose hooks are local needs an executable, and only such a kind
+    has one.
     """
     field = f"tools.{name}"
     stages = _stages(document.get("stages"), f"{field}.stages")
@@ -600,7 +516,7 @@ def parse_definition(
             table["format"], ConfigurationFormat, f"{field}.configuration.format"
         )
         owned["configuration"] = f"{OWNED}/{name}.{chosen}"
-    shared = {"kind", "stages", "scope", "removed_prefixes", "source", "hooks"}
+    shared = {"kind", "stages", "scope", "source", "hooks"}
     document = fields(
         document,
         shared
@@ -610,31 +526,23 @@ def parse_definition(
         ),
         field,
     )
-    prefixes = _removed_prefixes(
-        document["removed_prefixes"], f"{field}.removed_prefixes"
-    )
     source = parse_source(document["source"], f"{field}.source")
     files = _files(name, document.get("files", {}), f"{field}.files")
     owned |= {key: path for key, (path, _) in files.items()}
     executable = (
-        _executable(document["executable"], f"{field}.executable", owned)
+        _executable(document["executable"], f"{field}.executable")
         if "executable" in document
         else None
     )
     hooks = _hooks(name, origin, document["hooks"], owned)
-    if source.local and (
-        executable is None
-        or any(hook.probe[0] != executable.name for hook in hooks.values())
-    ):
+    if source.local and executable is None:
         raise GatesealError(
-            "invalid_field",
-            f"A {source.kind} tool needs an executable that starts every probe.",
+            "invalid_field", f"A {source.kind} tool needs an executable."
         )
-    if executable is not None and executable.check_at_commit and not source.local:
+    if executable is not None and not source.local:
         raise GatesealError(
             "invalid_field",
-            f"{field}.executable.check_at_commit needs a tool whose hooks start its "
-            "own executable.",
+            f"{field}.executable needs a tool whose hooks start its own executable.",
         )
     history = (
         _history(document["history"], f"{field}.history", owned, source)
@@ -647,7 +555,6 @@ def parse_definition(
         origin=origin,
         stages=stages,
         scope=scope,
-        removed_prefixes=prefixes,
         configuration=owned.get("configuration"),
         files={path: content for path, content in files.values()},
         executable=executable,

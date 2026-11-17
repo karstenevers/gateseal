@@ -4,9 +4,14 @@ import shutil
 import stat
 
 import pytest
-from gateseal import bootstrap, runtime, sources
+from gateseal import sources
 from gateseal.diagnostics import GatesealError
-from gateseal.worktree import locate_worktree
+from gateseal.worktree import (
+    PREPARATION,
+    locate_worktree,
+    operation_lock,
+    preparation_directory,
+)
 from installation import clone, success
 
 
@@ -36,12 +41,12 @@ def test_a_clone_and_its_linked_worktree_prepare_in_their_own_git_directory(
     root, tmp_path
 ):
     clone = locate_worktree(root)
-    assert clone.preparation == root / ".git" / bootstrap.PREPARATION
+    assert clone.preparation == root / ".git" / PREPARATION
     assert clone.hook == root / ".git" / "hooks" / "pre-commit"
     success(["git", "worktree", "add", "--quiet", tmp_path / "linked"], root)
     linked = locate_worktree(tmp_path / "linked")
     assert linked.git_dir == root / ".git" / "worktrees" / "linked"
-    assert linked.preparation == linked.git_dir / bootstrap.PREPARATION
+    assert linked.preparation == linked.git_dir / PREPARATION
     assert linked.hook == clone.hook
 
 
@@ -66,7 +71,7 @@ def test_the_preparation_folder_is_private_and_made_once(root):
     worktree = locate_worktree(root)
     assert not worktree.preparation.exists()
     for _ in range(2):
-        found = runtime.preparation_directory(worktree)
+        found = preparation_directory(worktree)
         assert found == worktree.preparation
     assert stat.S_IMODE(found.stat().st_mode) == 0o700
 
@@ -81,28 +86,28 @@ def test_a_preparation_that_is_not_a_folder_is_refused(root, tmp_path, kind):
         if kind == "link":
             target.mkdir()
         worktree.preparation.symlink_to(target)
-    error = refused(runtime.preparation_directory, worktree)
+    error = refused(preparation_directory, worktree)
     assert error.code == "unsafe_path"
 
 
 def test_one_gateseal_writer_runs_at_a_time(root):
     worktree = locate_worktree(root)
-    local = runtime.preparation_directory(worktree)
+    local = preparation_directory(worktree)
     scratch = local / ".gateseal-0a"
-    with runtime.operation_lock(local):
+    with operation_lock(local):
         scratch.mkdir()
-        with pytest.raises(GatesealError) as failure, runtime.operation_lock(local):
+        with pytest.raises(GatesealError) as failure, operation_lock(local):
             pass
         assert scratch.is_dir()
     error = failure.value
     assert (error.code, error.exit_code) == ("operation_in_progress", 4)
-    with runtime.operation_lock(local):
+    with operation_lock(local):
         pass
 
 
 def test_a_writer_deletes_the_scratch_folders_a_killed_one_left(root, tmp_path):
     worktree = locate_worktree(root)
-    local = runtime.preparation_directory(worktree)
+    local = preparation_directory(worktree)
     outside = tmp_path / "outside"
     outside.mkdir()
     (outside / "kept").write_text("kept\n")
@@ -110,8 +115,21 @@ def test_a_writer_deletes_the_scratch_folders_a_killed_one_left(root, tmp_path):
     (local / ".gateseal-0b" / "repository").mkdir(parents=True)
     (local / ".gateseal-link").symlink_to(outside, target_is_directory=True)
     (local / sources.STORE / ".gateseal-0c").mkdir(parents=True)
-    with runtime.operation_lock(local):
+    with operation_lock(local):
         left = sorted(entry.name for entry in local.iterdir())
     assert left == sorted([".gateseal-link", "operation.lock", sources.STORE])
     assert (local / sources.STORE / ".gateseal-0c").is_dir()
     assert (outside / "kept").read_text() == "kept\n"
+
+
+def test_the_writer_lock_is_a_private_file_and_never_a_link(root, tmp_path):
+    local = preparation_directory(locate_worktree(root))
+    lock = local / "operation.lock"
+    with operation_lock(local):
+        assert stat.S_IMODE(lock.stat().st_mode) == 0o600
+    lock.unlink()
+    target = tmp_path / "target"
+    target.write_text("")
+    lock.symlink_to(target)
+    with pytest.raises(OSError), operation_lock(local):
+        pass

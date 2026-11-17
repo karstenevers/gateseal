@@ -14,10 +14,10 @@ from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 
-from gateseal import __version__, lock, manifest_toml, runtime, sources
-from gateseal.bootstrap import LOCK, MANIFEST, sha
-from gateseal.compiler_release import GatesealPin, load_runtime
+from gateseal import __version__, lock, manifest_toml, sources
+from gateseal.compiler_release import PRE_COMMIT, GatesealPin
 from gateseal.diagnostics import GatesealError, Note, Result
+from gateseal.managed_files import LOCK, MANIFEST
 from gateseal.manifest import (
     BundledSource,
     ExceptionRequest,
@@ -33,10 +33,11 @@ from gateseal.validation import (
     canonical,
     decode_json,
     mapping,
+    sha,
     version,
     version_key,
 )
-from gateseal.worktree import Worktree
+from gateseal.worktree import Worktree, operation_lock, preparation_directory
 
 RESTORE = (
     "Run gateseal configure after an edit of gateseal.toml. If an interrupted "
@@ -508,7 +509,7 @@ def _result(before: dict[str, object], plan: Plan, written: tuple[str, ...]) -> 
     if lock.ledger_pin(before) != lock.ledger_pin(after):
         steps.append(
             f"Have each developer install gateseal {__version__} and run gateseal "
-            f"setup, so git commit runs pre-commit {load_runtime().pre_commit}."
+            f"setup, so git commit runs pre-commit {PRE_COMMIT}."
         )
     if written:
         steps.append("Review git diff, then stage and commit the changed files.")
@@ -550,8 +551,8 @@ def _write(
 def run(worktree: Worktree, request: Request) -> Result:
     """Plan every target and write the tracked files."""
     root, git = worktree.root, worktree.git
-    local = runtime.preparation_directory(worktree)
-    with runtime.operation_lock(local):
+    local = preparation_directory(worktree)
+    with operation_lock(local):
         before = _ledger(root)
         if lock.ledger_pin(before).running:
             lock.ensure_policy(root, local, git)

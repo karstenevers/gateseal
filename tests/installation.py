@@ -49,12 +49,11 @@ class Installation:
 
 
 def environment(directory):
-    """Return the environment whose caches and interpreter store are directory's."""
+    """Return the environment whose uv and mise caches are directory's."""
     result = dict(
         os.environ,
         UV_CACHE_DIR=str(directory / "uv-cache"),
         MISE_CACHE_DIR=str(directory / "mise-cache"),
-        GATESEAL_INTERPRETER_STORE=str(directory / "interpreter store ü"),
     )
     result.pop("PYTHONPATH", None)
     return result

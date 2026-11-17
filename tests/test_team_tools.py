@@ -10,14 +10,12 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 from conftest import PIN
 from gateseal import authoring, checks, upgrade
 from gateseal.ci import Scope
 from gateseal.diagnostics import GatesealError
-from gateseal.environments import pre_commit_environment
 from gateseal.hook_results import hook_results
 from gateseal.lock import Locked, Snapshot, compile_lock, compile_outputs, describe
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
@@ -27,7 +25,6 @@ from gateseal.policy import (
     load_policy_stream,
     load_policy_tree,
 )
-from gateseal.tools import release_binary
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
@@ -88,7 +85,6 @@ def hook_tool(repository, hook, extra=""):
 kind = "pre-commit-repository"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["{hook.upper()}_"]
 {extra}
 [source]
 repository = "{repository}"
@@ -97,7 +93,6 @@ tag = "v{{version}}"
 [hooks.{hook}]
 name = "{hook} check"
 args = ["--strict"]
-probe = ["{hook}", "--version"]
 output = "plain"
 """
 
@@ -106,7 +101,6 @@ GITLEAKS_TOOL = """\
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -123,8 +117,6 @@ format = "toml"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{version}"
 
 [files.report]
 extension = "tmpl"
@@ -135,7 +127,6 @@ content = '''
 [hooks.gitleaks]
 name = "Detect secrets with Gitleaks"
 args = ["dir", "--config", "{configuration}", "--redact", "--report-path", "-"]
-probe = ["gitleaks", "version"]
 output = "concise"
 
 [history]
@@ -250,7 +241,6 @@ def test_a_consumer_compiles_and_labels_team_tools(tmp_path, upstream):
         "version": "1.37.1",
         "revision": COMMIT,
         "hook_ids": ["yamllint"],
-        "tools": {},
     }
     assert set(lock["components"]) == {"pre-commit-hooks", "yamllint"}
     assert set(lock["native_artifacts"]) == {"gitleaks"}
@@ -373,17 +363,6 @@ def test_the_compiler_runtimes_names_are_reserved(tmp_path, upstream, name):
         authoring.lock(root)
     assert failure.value.code == "reserved_tool_name"
     assert "name the Compiler Runtime" in str(failure.value)
-
-
-@pytest.mark.parametrize("prefix", ["GIT_", "GIT_INDEX_"])
-def test_a_team_tool_cannot_drop_the_index_a_commit_names(tmp_path, upstream, prefix):
-    definition = GITLEAKS_TOOL.replace('["GITLEAKS_"]', f'["GITLEAKS_", "{prefix}"]')
-    root = team(tmp_path, files={"tools/gitleaks.toml": definition})
-    with pytest.raises(GatesealError) as failure:
-        authoring.lock(root)
-    assert failure.value.code == "invalid_field"
-    assert "none may remove GIT_DIR or GIT_INDEX_FILE" in str(failure.value)
-    assert not (root / "policy.lock").exists()
 
 
 def test_a_tool_neither_gateseal_nor_the_policy_defines_is_unknown(tmp_path):
@@ -586,25 +565,6 @@ def test_an_exception_names_a_tool_the_policy_offers(
     assert failure.value.code == code
 
 
-def test_processes_drop_the_settings_of_the_selected_team_tools(
-    tmp_path, upstream, monkeypatch
-):
-    root = team(tmp_path)
-    authoring.lock(root)
-    locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    for key in ("YAMLLINT_CONFIG_FILE", "RUFF_CONFIG", "TEAM_SETTING"):
-        monkeypatch.setenv(key, "x")
-    paths = SimpleNamespace(
-        pre_commit_home=Path("/home"),
-        tools=Path("/tools"),
-        pre_commit_python=Path("/python/bin/python"),
-        git=Path("/usr/bin/git"),
-    )
-    environment = pre_commit_environment(paths, locked.selection.tools)
-    assert "TEAM_SETTING" in environment
-    assert not {"YAMLLINT_CONFIG_FILE", "RUFF_CONFIG"} & set(environment)
-
-
 def test_upgrade_targets_a_tool_that_the_new_release_adds(tmp_path, upstream):
     first = (
         POLICY.replace('"pre-commit-hooks", "yamllint"', '"pre-commit-hooks"')
@@ -637,22 +597,6 @@ def test_upgrade_names_each_lock_record_by_its_tool():
         "hygiene": "5.0.0",
         "gitleaks": "8.30.0",
     }
-
-
-def test_a_release_binary_probe_runs_on_empty_input(tmp_path, upstream, monkeypatch):
-    root = team(tmp_path)
-    authoring.lock(root)
-    locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
-    given = []
-
-    def execute(arguments, root, env, **options):
-        given.append((arguments[1:], options.get("stdin")))
-        return SimpleNamespace(stdout=b"8.30.0\n")
-
-    monkeypatch.setattr(release_binary, "execute", execute)
-    (gitleaks,) = (t for t in locked.selection.tools if t.definition.name == "gitleaks")
-    release_binary._probe(gitleaks, "8.30.0", Path("/gateseal-gitleaks"), Path(), {})
-    assert given == [(["version"], b""), (["version"], b"")]
 
 
 def test_a_team_choice_cannot_make_its_configuration_load_another(tmp_path, upstream):

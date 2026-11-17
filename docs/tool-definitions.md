@@ -27,10 +27,9 @@ name under a capability in `policy.toml`.
 | `kind` | `pre-commit-repository` or `release-binary`. gateseal reads this field first. |
 | `stages` | `["commit", "run", "ci"]` for a tool that runs everywhere, or `["ci"]` for a tool that runs only in the [CI gate](github-ci.md#the-gate). |
 | `scope` | `files`. pre-commit passes filenames to the hooks. |
-| `removed_prefixes` | Unique environment variable prefixes, such as `GITLEAKS_`. A prefix must preserve `GIT_DIR` and `GIT_INDEX_FILE`. The field does not change how a hook starts: see [Environment](#environment). |
 | `source` | The [source fields for the tool's kind](#kinds). |
 | `configuration.format` | Optional. Use `toml` if the policy supplies a configuration. Configure writes it to `.gateseal/<name>.toml`. |
-| `executable` | Names the program that a hook starts. Required for a release binary. |
+| `executable` | Names the program that a hook starts. Required for a release binary, and refused for a pre-commit repository. |
 | `files.<key>` | Optional. A lowercase `extension` and text `content` with LF line endings. Configure writes the file to `.gateseal/<name>-<key>.<extension>`. |
 | `hooks.<id>` | A [hook](#hooks). Define at least one. |
 | `history.args` | Optional for a release binary. Arguments for a revision-range scan in the [CI gate](github-ci.md#the-gate). Include `{range}` exactly once. |
@@ -50,7 +49,6 @@ field.
 | `name` | The name pre-commit displays. Each hook ID and name must be unique across the policy. |
 | `args` | Optional. Literal arguments to pass to the hook. |
 | `types_or` | Optional. The pre-commit file types to match. |
-| `probe` | A command that shows the hook works, without filenames and with empty standard input. Start with the bare name of the tool's program. No command runs it. |
 | `output` | Use `concise` for findings in the form `file:line:column: rule message`. gateseal reports each as a JSON `finding`. Use `plain` to report only passed, failed, or modified. |
 
 To pass an owned file, use `{configuration}` or `{<files key>}` as a whole
@@ -62,15 +60,8 @@ such as `/dev/null`, directly to the tool without a shell.
 
 | Field | Accepted value or purpose |
 | --- | --- |
-| `name` | The bare program name. A release-binary hook starts it through mise. Start each release-binary probe with this name. |
-| `version` | The arguments that make the program print its version. No command runs them. |
-| `version_output` | A regular expression for the entire output after trimming whitespace. Include `{version}` once. |
+| `name` | The bare program name. A release-binary hook starts it through mise. |
 | `check_at_commit` | Optional, `false` by default. Set it to `true` for a release binary that a commit should check after mise installs it, such as a secret scanner. `gateseal policy lock` then records the SHA-256 of the program in each archive, and the `gateseal-check` hook compares the installed program with it at each commit. |
-
-Declare an executable for a pre-commit repository if it installs its tool
-from a package index by version, as `ruff-pre-commit` does. For hooks
-implemented in the repository itself, such as `pre-commit-hooks`, the commit
-identifies the version.
 
 ## Kinds
 

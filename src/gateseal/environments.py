@@ -6,34 +6,41 @@ they run in the caller's environment, as they do at git commit.
 """
 
 import os
-from collections.abc import Iterable
-
-from gateseal import bootstrap
-from gateseal.tools import removed_prefixes
-from gateseal.tools.model import Tool
 
 
-def tool_environment(tools: Iterable[Tool] = ()) -> dict[str, str]:
-    """Return the cleaned environment without the settings of built-ins or tools.
+def clean_environment() -> dict[str, str]:
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(
+            (
+                "PYTHON",
+                "UV_",
+                "PIP_",
+                "VIRTUALENV_",
+                "CONDA",
+                "DYLD_",
+                "MISE_",
+            )
+        )
+        and key
+        not in ("VIRTUAL_ENV", "__PYVENV_LAUNCHER__", "LD_PRELOAD", "LD_LIBRARY_PATH")
+    }
+
+
+def tool_environment() -> dict[str, str]:
+    """Return the cleaned environment.
 
     GIT_CONFIG makes git config, and no other command, read only the file it
     names, so with it gateseal would miss settings that a commit obeys.
     """
-    prefixes = (
-        *removed_prefixes(),
-        *(p for t in tools for p in t.definition.removed_prefixes),
-    )
     return {
-        key: value
-        for key, value in bootstrap.clean_environment().items()
-        if key != "GIT_CONFIG" and not key.startswith(prefixes)
+        key: value for key, value in clean_environment().items() if key != "GIT_CONFIG"
     }
 
 
 def uv_environment() -> dict[str, str]:
     env = tool_environment()
-    env.pop("UV_OFFLINE", None)
-    env.pop("UV_PYTHON_DOWNLOADS", None)
     for name in ("UV_CACHE_DIR", "UV_PYTHON_CACHE_DIR"):
         if name in os.environ:
             env[name] = os.environ[name]
@@ -45,22 +52,5 @@ def uv_environment() -> dict[str, str]:
             "UV_HTTP_RETRIES": "1",
             "UV_NO_PROGRESS": "1",
         }
-    )
-    return env
-
-
-def pre_commit_environment(
-    paths: bootstrap.PreparedPaths, tools: Iterable[Tool]
-) -> dict[str, str]:
-    env = tool_environment(tools)
-    env["PRE_COMMIT_HOME"] = str(paths.pre_commit_home)
-    env["PATH"] = os.pathsep.join(
-        [
-            str(paths.tools),
-            str(paths.pre_commit_python.parent),
-            str(paths.git.parent),
-            "/usr/bin",
-            "/bin",
-        ]
     )
     return env

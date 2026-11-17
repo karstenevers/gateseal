@@ -88,11 +88,3 @@ def load_directory(directory: Traversable) -> dict[str, ToolDefinition]:
 def built_in_tools() -> Mapping[str, ToolDefinition]:
     """Return every definition in the package's data/tools, by name."""
     return load_directory(files("gateseal").joinpath("data", "tools"))
-
-
-@functools.cache
-def removed_prefixes() -> tuple[str, ...]:
-    """Return every built-in tool's removed environment prefixes, sorted."""
-    return tuple(
-        sorted({p for d in built_in_tools().values() for p in d.removed_prefixes})
-    )

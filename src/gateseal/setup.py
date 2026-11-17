@@ -20,12 +20,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gateseal import __version__
-from gateseal.bootstrap import MINIMUM_GIT
-from gateseal.compiler_release import load_runtime
+from gateseal.compiler_release import MINIMUM_UV, PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment, uv_environment
 from gateseal.managed_files import read_optional, write_atomic
-from gateseal.processes import execute, find_git, find_tool
+from gateseal.processes import MINIMUM_GIT, execute, find_git, find_tool
 from gateseal.tools.release_binary import mise_problem, require_mise
 from gateseal.validation import version_key
 from gateseal.worktree import Worktree, locate_worktree
@@ -82,18 +81,16 @@ def run(clone: Path | None) -> Result:
     that existing clone, which Git's template never reaches.
     """
     home = Path.home()
-    runtime = load_runtime()
     git = _require(home, "Git", MINIMUM_GIT, find_git)
-    uv = _require(home, "uv", runtime.minimum_uv, _find_uv)
+    uv = _require(home, "uv", MINIMUM_UV, _find_uv)
     notes = _mise_notes()
     worktree = None if clone is None else locate_worktree(clone)
     layout = Layout(data_root())
     configured = _template_configured(git, layout.template)
     _refuse_hooks_path(git, Path("/") if worktree is None else worktree.root)
-    pre_commit = runtime.pre_commit
     changed: list[str] = []
-    if not _installed(layout, pre_commit, home):
-        _install(uv, layout, pre_commit, home)
+    if not _installed(layout, PRE_COMMIT, home):
+        _install(uv, layout, PRE_COMMIT, home)
         changed.append(str(layout.tools / "pre-commit"))
     launcher = _launcher(layout, home)
     if _place_launcher(layout, launcher):
@@ -107,7 +104,7 @@ def run(clone: Path | None) -> Result:
         changed.append(TEMPLATE_SETTING)
     state = "are set up" if changed else "were already set up"
     message = (
-        f"pre-commit {pre_commit} and its commit launcher {state}. "
+        f"pre-commit {PRE_COMMIT} and its commit launcher {state}. "
         "Every new clone runs pre-commit at git commit."
     )
     next_steps = ("Run gateseal setup --refresh in each clone you made before.",)
@@ -130,18 +127,17 @@ def run(clone: Path | None) -> Result:
 
 
 def require_uv(uv: str, root: Path) -> None:
-    """Refuse a uv that reports a release older than minimum_uv, or none."""
+    """Refuse a uv that reports a release older than MINIMUM_UV, or none."""
     reported = execute([uv, "--version"], root, tool_environment())
-    minimum = load_runtime().minimum_uv
     try:
         found = reported.stdout.decode().split()[1]
-        supported = version_key(found) >= version_key(minimum)
+        supported = version_key(found) >= version_key(MINIMUM_UV)
     except (IndexError, GatesealError):
         supported = False
     if not supported:
         raise GatesealError(
             "uv_version_mismatch",
-            f"gateseal {__version__} requires uv {minimum} or later.",
+            f"gateseal {__version__} requires uv {MINIMUM_UV} or later.",
             4,
         )
 
@@ -269,7 +265,7 @@ def require_pre_commit() -> str:
     A file that exists is not enough, so the install reports its versions.
     """
     layout = Layout(data_root())
-    if not _installed(layout, load_runtime().pre_commit, Path.home()):
+    if not _installed(layout, PRE_COMMIT, Path.home()):
         raise GatesealError(
             "needs_setup",
             f"The pre-commit that gateseal setup installs under {layout.tools} is "

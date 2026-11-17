@@ -26,7 +26,6 @@ GITLEAKS = """\
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -42,19 +41,15 @@ format = "toml"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{version}"
 
 [hooks.gitleaks]
 name = "Detect secrets with Gitleaks"
 args = ["dir", "--config", "{configuration}"]
-probe = ["gitleaks", "version"]
 output = "concise"
 
 [hooks.gitleaks-deep]
 name = "Detect encoded secrets with Gitleaks"
 args = ["dir", "--config", "{configuration}", "--max-decode-depth", "3"]
-probe = ["gitleaks", "version"]
 output = "concise"
 """
 

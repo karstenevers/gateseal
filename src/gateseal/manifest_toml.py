@@ -14,8 +14,8 @@ import json
 from collections.abc import Mapping
 from typing import cast
 
-from gateseal.bootstrap import MANIFEST
 from gateseal.diagnostics import GatesealError
+from gateseal.managed_files import MANIFEST
 from gateseal.manifest import ExceptionRequest, Source, policy_lines
 from gateseal.policy_toml import LINE, Table, tables
 from gateseal.validation import parse_toml

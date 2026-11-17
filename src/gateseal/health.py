@@ -12,17 +12,17 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from gateseal import lock, runtime, setup
-from gateseal.bootstrap import MANIFEST
+from gateseal import lock, setup
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment
+from gateseal.managed_files import MANIFEST
 from gateseal.tools.release_binary import (
     MINIMUM_MISE,
     BinaryTool,
     mise_problem,
     require_mise,
 )
-from gateseal.worktree import Worktree
+from gateseal.worktree import Worktree, operation_lock, preparation_directory
 
 NOT_STORED = frozenset({"policy_unavailable", "policy_content_mismatch"})
 """The codes of a Lock whose Policy this clone has not stored intact."""
@@ -70,7 +70,7 @@ def load(worktree: Worktree) -> lock.Locked:
     except GatesealError as exc:
         if exc.code not in NOT_STORED:
             raise
-    with runtime.operation_lock(runtime.preparation_directory(worktree)):
+    with operation_lock(preparation_directory(worktree)):
         lock.ensure_policy(root, preparation, worktree.git)
     return lock.load(root, preparation)
 

@@ -1,7 +1,6 @@
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["BETTERLEAKS_", "GITLEAKS_"]
 
 [source]
 repository = "https://github.com/betterleaks/betterleaks"
@@ -21,8 +20,6 @@ format = "toml"
 # SHA-256 that policy.lock records.
 [executable]
 name = "betterleaks"
-version = ["version"]
-version_output = "{version}"
 check_at_commit = true
 
 # Betterleaks redacts only a finding's own secret from the source line that
@@ -57,7 +54,6 @@ args = [
   "--report-format", "template", "--report-template", "{report}",
   "--report-path", "-", "--",
 ]
-probe = ["betterleaks", "config", "check", "--config", "{configuration}"]
 output = "concise"
 
 # The CI gate puts its revision range at {range}, so the scan reads the

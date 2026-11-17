@@ -127,9 +127,8 @@ gateseal pin.
 | `outputs` | Each generated path, its SHA-256, UTF-8 encoding, and `executable: false`. |
 | `inputs_fingerprint` | SHA-256 of the prefix `gateseal-inputs-v1`, a NUL byte, and the canonical JSON for the direct inputs before `outputs` and `inputs_fingerprint`. |
 
-Each hook repository record has `repository`, `version`, `revision`,
-`hook_ids`, and `tools`. The last field maps installed tool names to versions.
-For example, Ruff's hook repository installs `ruff` at its selected version.
+Each hook repository record has `repository`, `version`, `revision`, and
+`hook_ids`.
 
 ### The ownership ledger
 
