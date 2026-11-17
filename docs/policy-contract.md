@@ -2,6 +2,35 @@
 
 `gateseal.toml`, the Manifest, selects a policy and checks for one repository. `gateseal.lock`, the Lock, records the resolved selection and generated files. After editing the Manifest, run `gateseal configure`. Review the files together.
 
+## Example
+
+This Manifest uses the team policy from [Policy format](policy-format.md#example). It selects three capabilities, skips one optional hook, and changes one choice. Everything else keeps the policy's defaults.
+
+<!-- manifest tables: team -->
+```toml
+schema = 1
+capabilities = ["hygiene", "python", "secrets"]
+
+[policy]
+source = "git"
+repository = "https://github.com/team/gateseal-policy.git"
+path = "policy"
+commit = "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90"
+tag = "team-2026.11"
+
+[choices.hygiene]
+skip = ["check-yaml"]        # the policy lists check-yaml as optional
+
+[choices.python]
+target_version = "py312"     # the policy default is py311
+
+[exceptions]
+```
+
+You rarely write `commit` yourself. The `gateseal configure` command in [Adopt a team policy](adopt-a-team-policy.md) records it.
+
+## Example with the bundled policy
+
 This Manifest selects the bundled hygiene and Python checks:
 
 ```toml

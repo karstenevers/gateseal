@@ -22,7 +22,7 @@ cd team-gateseal-policy
 gateseal policy init policy
 ```
 
-Edit the `release` label in `policy/policy.toml`. Edit its capabilities, tool versions, and rule files for your team. See [Policy format](policy-format.md) for field rules and [Add a tool](add-a-tool.md) for complete examples.
+See the [example policy](policy-format.md#example) first. Edit the `release` label in `policy/policy.toml`. Edit its capabilities, tool versions, and rule files for your team. See [Policy format](policy-format.md) for field rules and [Add a tool](add-a-tool.md) for complete examples.
 
 The bundled `rules/betterleaks.toml` starts from the rules built into Betterleaks. To change the secret rules, edit that file:
 

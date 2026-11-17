@@ -17,7 +17,7 @@ gateseal configure --capability hygiene \
   --policy-path policy --policy-tag team-2026.11
 ```
 
-At adoption, gateseal checks that the tag points to the selected commit. It records that commit in `gateseal.toml`, the Manifest that selects the policy and checks. `gateseal.lock`, the Lock, records the selection and generated files. Review both with the generated files. Commit them together. A moved tag does not change the recorded commit.
+At adoption, gateseal checks that the tag points to the selected commit. It records that commit in `gateseal.toml`, the Manifest that selects the policy and checks. `gateseal.lock`, the Lock, records the selection and generated files. Review both with the generated files. See [an example Manifest](policy-contract.md#example) and [the policy it selects](policy-format.md#example). Commit them together. A moved tag does not change the recorded commit.
 
 To select another release from the same policy, use `gateseal upgrade --policy-tag <tag>`. See [Upgrade and roll back](upgrade.md).
 

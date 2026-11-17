@@ -8,6 +8,121 @@ gateseal policy init policy
 
 See [Author a team policy](author-a-policy.md) for editing and release steps. A repository selects a policy in `gateseal.toml`, its Manifest. The generated `gateseal.lock`, or Lock, records that selection and generated files.
 
+## Example
+
+This small policy offers three capabilities. Repositories choose from them. The comments say what each part does.
+
+<!-- policy tables: team -->
+```toml
+schema = 5
+release = "team-2026.11"
+minimum_compiler = "0.1.0"
+
+# Capability "hygiene": file checks. A repository may skip check-yaml.
+[capabilities.hygiene]
+optional = ["check-yaml"]
+
+[capabilities.hygiene.tools.pre-commit-hooks]
+hook_ids = ["trailing-whitespace", "end-of-file-fixer", "check-yaml"]
+pin = "6.0.0"                # the version repositories use
+reviewed = ["6.0.0", "5.0.0"] # versions the team has checked
+
+[capabilities.hygiene.choices]
+exclude = []                 # repositories may list paths to skip
+skip = []                    # repositories may list optional hooks to skip
+
+# Capability "python": Ruff with the team's rules in rules/ruff.toml.
+[capabilities.python.tools.ruff]
+hook_ids = ["ruff-check", "ruff-format"]
+configuration = "rules/ruff.toml"
+pin = "0.17.1"
+reviewed = ["0.17.1"]
+
+[capabilities.python.choices]
+target_version = "py311"     # default that a repository may change
+
+# Capability "secrets": Betterleaks with the team's rules.
+[capabilities.secrets.tools.betterleaks]
+configuration = "rules/betterleaks.toml"
+pin = "1.9.0"
+reviewed = ["1.9.0", "1.8.0"]
+```
+
+A repository selects this policy in its Manifest. [Manifest and Lock](policy-contract.md#example) shows the matching Manifest.
+
+```mermaid
+flowchart LR
+    accTitle: How the policy, the Manifest and the Lock connect
+    accDescr: The team policy offers capabilities and choices. The Manifest of a repository selects one policy release and picks from them. gateseal configure reads both and writes the Lock and the generated files, which the repository commits.
+    policy["policy.toml<br/>offers capabilities and choices<br/>in the team's Git repository"]
+    manifest["gateseal.toml, the Manifest<br/>picks from the policy<br/>you write it"]
+    configure(["gateseal configure"])
+    lock["gateseal.lock, the Lock<br/>and generated files<br/>gateseal writes them"]
+    policy -- "selected by tag and commit" --> manifest
+    policy --> configure
+    manifest --> configure
+    configure --> lock
+```
+
+The same fields, cut down to the lines that link the three files. A word in a comment names one fact that the files share. The same word in two files means the lines belong together. For example, `skip` is the policy allowing a skip and the Manifest using it. The list below the files explains each word.
+
+`policy.toml`, in the team's policy repository, tagged `team-2026.11`:
+
+```toml
+release = "team-2026.11"                      # release: label of this policy version
+
+[capabilities.hygiene]
+optional = ["check-yaml"]                     # skip: a repository may skip this
+
+[capabilities.python.tools.ruff]
+pin = "0.17.1"                                # pin: tool version to use
+
+[capabilities.python.choices]
+target_version = "py311"                      # default: a repository may change it
+```
+
+`gateseal.toml`, the Manifest, in the repository that adopts the policy:
+
+```toml
+[policy]
+repository = "https://github.com/team/gateseal-policy.git"
+commit = "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90"   # commit: exact policy version
+tag = "team-2026.11"                          # tag: Git tag that names the commit
+
+[choices.hygiene]
+skip = ["check-yaml"]                         # skip: allowed by the policy
+
+[choices.python]
+target_version = "py312"                      # default: replaced by this value
+```
+
+`gateseal.lock`, the Lock, which `gateseal configure` writes:
+
+```jsonc
+{
+  "policy": {
+    "release": "team-2026.11",                           // release
+    "commit": "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90", // commit
+    "tag": "team-2026.11",                               // tag
+    "digest": "sha256:acafb1dd…"
+  },
+  "choices": {
+    "hygiene": { "skip": ["check-yaml"] },               // skip
+    "python": { "target_version": "py312" }              // default, as replaced
+  },
+  "components": {
+    "ruff": { "version": "0.17.1", "revision": "38bfb07c…" }  // pin
+  }
+}
+```
+
+- `release`: the policy names its release. The Lock records that label.
+- `skip`: the policy lists which hooks are optional. The Manifest may skip only those. `check-yaml` then no longer appears in the Lock's `hook_ids`.
+- `pin`: the policy pins the tool version. The Lock records that version with the exact upstream revision.
+- `default`: the policy sets a default for a choice. The Manifest can change it. The Lock records the final value.
+- `tag`: the Manifest names the Git tag that points to the commit. gateseal checks this when you adopt the policy. The tag name does not have to equal the release label.
+- `commit`: the commit pins the exact policy files. The Lock records the same commit and a digest of their content.
+
 ## Policy fields
 
 `policy.toml` uses schema `5`. It needs a printable `release` label of at most 128 characters and `minimum_compiler` in `major.minor.patch` form. It needs at least one capability and one tool per capability. Tools and capabilities run in file order.

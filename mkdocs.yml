@@ -61,10 +61,10 @@ nav:
       - Author a team policy: author-a-policy.md
       - Add a tool: add-a-tool.md
   - Reference:
-      - Commands and results: commands-and-results.md
-      - Manifest and Lock: policy-contract.md
       - Policy format: policy-format.md
+      - Manifest and Lock: policy-contract.md
       - Tool definitions: tool-definitions.md
+      - Commands and results: commands-and-results.md
       - Glossary: glossary.md
   - About:
       - How gateseal works: architecture.md
