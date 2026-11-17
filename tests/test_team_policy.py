@@ -242,8 +242,8 @@ def test_another_releases_lock_is_named_before_any_fetch(installed, adopted, tmp
     lock.write_text(json.dumps(document))
     needed = f"gateseal.lock pins gateseal 0.1.1 from {REPOSITORY} at commit "
     step = (
-        "Install gateseal 0.1.1, or run gateseal upgrade to move gateseal.lock to "
-        f"gateseal {__version__}."
+        "Run gateseal 0.1.1 with uvx gateseal@0.1.1, or run gateseal upgrade to "
+        f"move gateseal.lock to gateseal {__version__}."
     )
     for command, code in (("status", 0), ("doctor", 3)):
         unhealthy = installed.cli(fresh, command, env=env, code=code)
