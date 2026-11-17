@@ -9,10 +9,12 @@ Use [Install gateseal](install.md) to set up a supported machine.
 | --- | --- | --- |
 | Git | 2.54.0 or later | Repository commands and commits. |
 | uv | 0.13.6 or later is tested. gateseal accepts 0.13.5. | Install gateseal and run `gateseal setup`. A commit does not start uv. |
+| pre-commit | 4.7.0 or later | Only when you skip `gateseal setup` and run `pre-commit install` yourself. |
 | mise | 2026.10.19 or later | Start release binaries such as Betterleaks. The bundled policy requires mise when you select `secrets`. |
 
-`gateseal setup` installs pre-commit and the Python it runs on. You do not
-need to install either separately. An older Git, uv, or mise produces `git_version_mismatch`,
+`gateseal setup` installs pre-commit and the Python it runs on, and a commit
+builds gateseal's own hook, so a developer installs neither gateseal nor
+Python. An older Git, uv, or mise produces `git_version_mismatch`,
 `uv_version_mismatch`, or `mise_version_mismatch`, respectively.
 
 ## Recorded test environments
@@ -29,8 +31,8 @@ build 20261026 and pre-commit 4.7.0. Tests used the bundled pre-commit-hooks
 6.0.0, Ruff 0.17.1, and Betterleaks 1.9.0. A version exception also exercised
 Betterleaks 1.8.0. See [What the tests prove](what-the-tests-prove.md).
 
-Tests of the generated workflow on GitHub's Linux runner prepared and checked
-two repositories, one with the bundled policy and one with a Git policy. They
+Tests of the generated workflow on GitHub's Linux runner configured and
+checked two repositories, one with the bundled policy and one with a Git policy. They
 covered new-branch and fast-forward pushes, passing and failing pull requests,
 and an edit to a generated file. The package tests also cover merge groups,
 manual runs, schedules, and pull requests from forks.

@@ -74,8 +74,8 @@ or a trailing slash. Include `{version}` in the pattern, for example
 
 `gateseal policy lock` records the commit each reviewed tag points to.
 pre-commit clones that commit and builds the hook environment at the hook's
-first use. A Python hook runs on the Python that `gateseal setup` installed
-pre-commit with.
+first use. A Python hook runs on the Python that pre-commit runs on. With
+setup's pre-commit, that is the Python that `gateseal setup` installed.
 
 ### `release-binary`
 

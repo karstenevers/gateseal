@@ -150,7 +150,8 @@ Both hooks redact secret values from their findings.
 
 Use this example when some repositories need Black and others use Ruff for
 formatting. Black parses code with the interpreter it runs on, which is the
-Python that `gateseal setup` installed pre-commit with.
+Python that pre-commit runs on. With setup's pre-commit, that is the Python
+that `gateseal setup` installed.
 
 Save the definition as `policy/tools/black.toml`.
 

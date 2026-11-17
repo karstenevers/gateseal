@@ -1,34 +1,36 @@
 # Work in a configured repository
 
 If a repository contains `gateseal.toml` and `gateseal.lock`, its repository
-maintainer has already selected the checks. Set up your machine once, then use
-`git commit` as usual.
+maintainer has already selected the checks. Set up pre-commit on your machine
+once, then use `git commit` as usual. You do not install gateseal.
 
 ## Set up your machine
 
-Install the gateseal version in the `gateseal.version` field of
-`gateseal.lock`. For version `0.1.0`, run:
+Run setup once per machine, with uv 0.13.6 or later. Name the gateseal
+version in the `gateseal.version` field of `gateseal.lock`:
 
 ```sh
-uv tool install --python 3.14.10 gateseal==0.1.0
-gateseal setup
+uvx gateseal@0.2.0 setup
 ```
 
-`gateseal setup` installs pre-commit and makes Git add pre-commit's commit
-launcher to every new clone. [Set up pre-commit on this
+It installs pre-commit and makes Git add pre-commit's commit launcher to every
+new clone. [Set up pre-commit on this
 machine](install.md#set-up-pre-commit-on-this-machine) says what it changes.
-In a clone that you made before setup, run `gateseal setup --refresh` once.
+In a clone that you made before setup, run
+`uvx gateseal@0.2.0 setup --refresh` once.
+If you already have pre-commit 4.7.0 or later, run `pre-commit install` in each
+clone instead. That is enough for commits.
+[Use pre-commit without gateseal setup](install.md#use-pre-commit-without-gateseal-setup)
+shows how.
 
 A release binary, such as Betterleaks, starts through mise. Install mise
 2026.10.19 or later if the repository selects one.
-[Install gateseal](install.md) lists the tools you need first, and how to
-install the commit that the Lock pins.
 
 ## Commit
 
 Commits from your terminal or Git client check the files you stage. A commit
 runs pre-commit, and pre-commit runs the gateseal that the Lock pins as its
-first hook. The installed gateseal command plays no part.
+first hook.
 
 The first commit that needs a tool downloads it, so it needs network access
 and takes longer. pre-commit builds the environment of each hook repository,
@@ -39,9 +41,12 @@ machine share them. After you pull a changed Lock, the next commit installs
 what changed.
 
 To run the checks across every tracked file, use `gateseal run`. To see
-whether the clone is ready, use `gateseal status`. If a gateseal command
-reports `selected_compiler_required`, the installed gateseal is not the
-release or build that the Lock pins.
+whether the clone is ready, use `gateseal status`. Both need the pre-commit
+that setup installs, and the gateseal version that the Lock pins, for example
+`uvx gateseal@0.2.0 run`. With another version, `gateseal run` stops with
+`selected_compiler_required`, and `gateseal status` reports a failed Lock
+check. Both name the version that the Lock pins. Without setup,
+`pre-commit run --all-files` runs the checks across every tracked file.
 
 ## When a commit stops
 
@@ -60,8 +65,9 @@ release or build that the Lock pins.
 You can stage part of an ordinary source file. Stage
 `.pre-commit-config.yaml` in full, because pre-commit stops a commit while
 that file has unstaged changes. On a branch without
-`.pre-commit-config.yaml`, the launcher skips pre-commit and the commit goes
-on. See [troubleshooting](troubleshooting.md) for other errors and recovery
+`.pre-commit-config.yaml`, the launcher that `gateseal setup` adds skips
+pre-commit and the commit goes on. One from plain `pre-commit install` stops
+the commit. See [troubleshooting](troubleshooting.md) for other errors and recovery
 steps.
 
 ## Linked worktrees
