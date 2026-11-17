@@ -37,7 +37,6 @@ import io
 import os
 import re
 import shutil
-import stat
 import tarfile
 import tempfile
 from collections.abc import Collection, Iterable, Mapping
@@ -45,17 +44,9 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import ClassVar, TypeGuard
 
-from gateseal.bootstrap import (
-    LOCK,
-    TOOL_PREFIX,
-    PreparedPaths,
-    PreparedRecord,
-    PreparedTool,
-    sha,
-)
 from gateseal.diagnostics import GatesealError
-from gateseal.paths import resolved
-from gateseal.platforms import TARGETS, Target
+from gateseal.managed_files import LOCK
+from gateseal.platforms import TARGETS
 from gateseal.processes import execute, find_tool
 from gateseal.tools.model import (
     Catalog,
@@ -78,6 +69,7 @@ from gateseal.validation import (
     digest,
     fields,
     mapping,
+    sha,
     string,
     version_key,
 )
@@ -384,7 +376,7 @@ def parse_source(value: object, field: str) -> ReleaseBinary:
     table = fields(
         value, {"repository", "tag", "archive", "checksums", "platforms"}, field
     )
-    supported = {target.mise for target in TARGETS.values()}
+    supported = set(TARGETS.values())
     platforms: dict[str, str] = {}
     for platform, name in mapping(table["platforms"], f"{field}.platforms").items():
         if platform not in supported:
@@ -585,69 +577,6 @@ def check_installs(programs: Iterable[InstalledProgram], root: Path) -> None:
         )
 
 
-def _own(tools: Iterable[object]) -> list[BinaryTool]:
-    return sorted(
-        (tool for tool in tools if isinstance(tool, BinaryTool)),
-        key=lambda tool: tool.definition.name,
-    )
-
-
-@dataclass(frozen=True)
-class NativeTool:
-    """One locked native executable for this machine, which mise installs."""
-
-    name: str
-    version: str
-    url: str
-    sha256: str
-    executable: str
-
-    @property
-    def spec(self) -> str:
-        return (
-            f"http:{self.name}[url={self.url},checksum=sha256:{self.sha256}]"
-            f"@{self.version}"
-        )
-
-
-@dataclass(frozen=True)
-class Mise:
-    """The mise that plan checked, and each release binary's archive it installs.
-
-    environment is the cleaned environment mise's own starts from.
-    """
-
-    executable: str
-    environment: dict[str, str]
-    tools: tuple[tuple[BinaryTool, NativeTool], ...]
-
-
-def plan(tools: Iterable[object], target: Target, env: dict[str, str]) -> Mise | None:
-    """Check this machine's archives and mise before any attempt exists.
-
-    Without a release binary there is nothing to install and mise is never
-    looked for. Otherwise each needs an archive for target, and mise must
-    report at least MINIMUM_MISE.
-    """
-    binaries = _own(tools)
-    if not binaries:
-        return None
-    natives: list[tuple[BinaryTool, NativeTool]] = []
-    for tool in binaries:
-        name = tool.definition.name
-        archive = tool.release.platforms.get(target.mise)
-        if archive is None:
-            raise GatesealError(
-                "unsupported_platform",
-                f"Policy has no exact {name} archive for {target.mise}.",
-            )
-        native = NativeTool(
-            name, tool.version, archive.url, archive.sha256, archive.executable
-        )
-        natives.append((tool, native))
-    return Mise(require_mise(env), env, tuple(natives))
-
-
 def require_mise(env: dict[str, str]) -> str:
     """Return the mise on PATH once it reports MINIMUM_MISE or later."""
     mise = find_tool("mise")
@@ -706,97 +635,3 @@ def _mise_environment(directory: Path, env: dict[str, str]) -> dict[str, str]:
         }
     )
     return env
-
-
-def install(
-    mise: Mise, attempt: Path, paths: PreparedPaths, root: Path, env: dict[str, str]
-) -> dict[str, tuple[Path, PreparedTool]]:
-    """Install each release binary inside attempt, link it into tools, and probe it.
-
-    Returns each tool by name with its install directory, which the record
-    seals. Commits never start mise: mise exec runs any executable on PATH when
-    the tool is missing, so the hooks run the linked binary directly. env is
-    the hooks' environment, in which the probes run.
-    """
-    directory = attempt / "mise"
-    directory.mkdir()
-    mise_env = _mise_environment(directory, mise.environment)
-    installed: dict[str, tuple[Path, PreparedTool]] = {}
-    for tool, native in mise.tools:
-        execute(
-            [mise.executable, "--no-config", "install", native.spec],
-            directory,
-            mise_env,
-        )
-        where = execute(
-            [mise.executable, "--no-config", "where", native.spec],
-            directory,
-            dict(mise_env, MISE_OFFLINE="1"),
-        )
-        location = _install_location(
-            directory, where.stdout.decode().strip(), native.name
-        )
-        executable = location / native.executable
-        info = executable.lstat() if os.path.lexists(executable) else None
-        if (
-            info is None
-            or not stat.S_ISREG(info.st_mode)
-            or not os.access(executable, os.X_OK)
-        ):
-            raise GatesealError(
-                "invalid_preparation",
-                f"mise did not install an executable {executable}.",
-                4,
-            )
-        link = paths.tools / (TOOL_PREFIX + native.name)
-        link.symlink_to(os.path.relpath(executable, paths.tools))
-        _probe(tool, native.version, link, root, env)
-        installed[native.name] = (location, PreparedTool(native.version, executable))
-    return installed
-
-
-def _install_location(directory: Path, reported: str, name: str) -> Path:
-    """Resolve the directory mise reported for name, which must lie in directory."""
-    location = Path(reported)
-    if (
-        not location.is_absolute()
-        or location.is_symlink()
-        or not location.is_dir()
-        or resolved(directory) not in resolved(location).parents
-    ):
-        raise GatesealError(
-            "invalid_preparation",
-            f"mise installed {name} outside the attempt: {location}",
-            4,
-        )
-    return resolved(location)
-
-
-def _probe(
-    tool: BinaryTool, version: str, link: Path, root: Path, env: dict[str, str]
-) -> None:
-    """Prove the version through the link, then run each hook's probe through it."""
-    reported = execute([str(link), *tool.executable.version], root, env, stdin=b"")
-    tool.executable.require_version(
-        reported.stdout.decode().strip(), version, tool.definition.name
-    )
-    for hook in tool.use.hooks:
-        execute([str(link), *hook.probe[1:]], root, env, stdin=b"")
-
-
-def probe(
-    tools: Iterable[object], record: PreparedRecord, root: Path, env: dict[str, str]
-) -> None:
-    """Re-prove every release binary the record holds, through its recorded link."""
-    binaries = {tool.definition.name: tool for tool in _own(tools)}
-    for name, prepared in record.native_tools.items():
-        tool = binaries.get(name)
-        if tool is None:
-            raise GatesealError(
-                "needs_activation",
-                f"A prepared tool is {name}, which the Lock does not select.",
-                3,
-                "gateseal activate",
-            )
-        link = record.paths.tools / (TOOL_PREFIX + name)
-        _probe(tool, prepared.version, link, root, env)

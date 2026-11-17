@@ -1,33 +1,11 @@
-"""The machines gateseal supports, named as each tool names them."""
+"""The machines gateseal supports, named as mise names them."""
 
 import platform
-from dataclasses import dataclass
+
+TARGETS = {("Darwin", "arm64"): "macos-arm64", ("Linux", "x86_64"): "linux-x64"}
+"""mise's name for each supported system and architecture."""
 
 
-@dataclass(frozen=True)
-class Target:
-    """One supported machine, named as each tool that acquires for it names it.
-
-    platform is the target triple of python-build-standalone and of uv's
-    --python-platform.
-    """
-
-    python: str
-    mise: str
-    platform: str
-
-
-TARGETS = {
-    ("Darwin", "arm64"): Target(
-        "darwin-aarch64-none", "macos-arm64", "aarch64-apple-darwin"
-    ),
-    ("Linux", "x86_64"): Target(
-        "linux-x86_64-gnu", "linux-x64", "x86_64-unknown-linux-gnu"
-    ),
-}
-"""The machines a compiler release carries a CPython for."""
-
-
-def machine() -> Target | None:
-    """Return this machine's Target, or None when gateseal does not support it."""
+def machine() -> str | None:
+    """Return mise's name for this machine, or None if gateseal does not support it."""
     return TARGETS.get((platform.system(), platform.machine()))

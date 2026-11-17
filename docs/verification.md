@@ -1,7 +1,7 @@
 # Build and verify gateseal
 
 This page is for contributors to gateseal. It shows how to build the package,
-run its test layers and its model check, and which CI jobs run them.
+run its test layers, and which CI jobs run them.
 
 **Related pages:**
 
@@ -32,17 +32,15 @@ uv run pytest tests -m 'not integration and not network'
 uv run pytest tests -n auto -m 'not network'
 ```
 
-The network layer reaches GitHub and PyPI, and part of it reads a private
-fixture repository. CI gives it a token for that repository, and without one
-those tests fail. Run it with:
+The network layer reaches GitHub and PyPI. Run it with:
 
 ```sh
 uv run pytest tests -n auto -m network
 ```
 
-The Git policy test fetches the fixture repository's copy of the bundled
-policy with the token in `GATESEAL_POLICY_TOKEN`, and pytest skips it when
-that variable is unset.
+The Git policy test fetches a private fixture repository's copy of the
+bundled policy with the token in `GATESEAL_POLICY_TOKEN`, and pytest skips it
+when that variable is unset.
 
 ### Build a wheel
 
@@ -74,11 +72,11 @@ The three pytest commands run these layers:
   the source checkout.
 - **Consumer repositories.** They are real clones and linked worktrees with
   spaces and non-ASCII characters in their paths.
-- **Hook repositories.** Activation clones each hook repository once per
-  interpreter store, into its hook entry. The `installed` fixture's
-  environment sends those clones through `url.<base>.insteadOf` to mirrors
-  that each worker makes once, and `with_git_config` adds a test's own Git
-  settings after those.
+- **Hook repositories.** pre-commit clones each hook repository once into
+  the `installed` fixture's own home. That home's Git sends gateseal's
+  repository through `url.<base>.insteadOf` to a stand-in that carries the
+  package version's tag, and `with_git_config` adds a test's own Git settings
+  after that.
 
 ### CI jobs
 
@@ -86,7 +84,6 @@ The three pytest commands run these layers:
 | --- | --- | --- |
 | `tests` | Ruff, strict Pyright, and the unit layer. | On pull requests, main pushes, and manually. |
 | `tests (Python 3.11)` | The unit layer on CPython 3.11, the oldest supported Python. | On pull requests, main pushes, and manually. |
-| `tlc` | The [model check](#model-check-the-prepared-attempts). | When formal inputs or the pre-commit pin change, on manual runs, and when the comparison is unavailable. |
 | `docs` | A strict build of the documentation site. | On pull requests, main pushes, and manually. |
 | `integration` | The unit and integration layers on Linux and macOS. | On pull requests, main pushes, every Monday at 04:43 UTC, and manually. |
 | `full-suite` | Every layer on Linux under coverage, with the private fixtures, then a check that flags functions that are both complex and poorly tested. | Like `integration`, except on pull requests from forks, which get no secrets. |
@@ -130,57 +127,3 @@ the integration layer reaches counts as missed and lowers that score, so cover
 new code in the unit layer. When only a test that downloads can reach a whole
 function, list the function in `[tool.pytestmut.suppress]` in `pyproject.toml`
 with a comment that gives the reason.
-
-## Model-check the prepared attempts
-
-The [prepared-attempt model](../formal/PreparedAttempts.tla) describes
-activations, cleanup, and commits as TLA+ steps, and TLC checks every order of
-those steps within its bounds. It checks invariants 1 to 4 and 9 of the
-[local preparation reference](local-preparation.md#prepared-attempt-invariants) and the
-two-publish bound on a commit that cannot start. Run it from the repository
-root:
-
-```sh
-uv run python formal/check.py
-```
-
-### Tools
-
-- **With mise.** The script installs TLC 1.7.4 and Java 25 with mise the
-  first time, and mise checks the TLC jar's SHA-256.
-- **Without mise.** Set `TLA2TOOLS` to that `tla2tools.jar` and `JAVA` to
-  Java 11 or later.
-- **In CI.** The `tlc` job downloads that jar from TLC's 1.7.4
-  release, checks its SHA-256, and runs the same script.
-
-### What the script checks
-
-The script checks one row for the code and one for each variant:
-
-- **The code row** describes `src/gateseal` and must hold every invariant.
-- **Each variant row** changes one design decision, such as removing the
-  commit's lock or reporting restored patches, and must break the invariant
-  that decision guards.
-
-`--trace` prints TLC's full output for one row.
-
-### Bounds and limits
-
-- **Bounds.** Two commits, three activations, and three attempts.
-- **Steps.** Each step is one action in the code, and the model names that
-  code.
-- **Not covered.** Filesystem errors other than a killed process, pre-commit's
-  hooks themselves, and larger bounds.
-
-### What one instance stands for
-
-Each worktree's preparation directory, with the interpreter store entry that
-its attempts run, is one instance of the model, whose entry also stands for a
-Hook Python's. Worktrees and repositories share only the hook and the store.
-
-- **The hook.** Every activation writes the hook with the same bytes when it
-  is missing, and none deletes it. The model's `ForeignHook` step is another
-  worktree's activation writing the hook.
-- **The store.** `OtherAcquire`, `OtherInstalled`, and `OtherStop` are another
-  repository's activation acquiring the entry, and `Collect` is an
-  activation's collection of the store.

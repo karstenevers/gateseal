@@ -5,21 +5,18 @@ from pathlib import Path
 from typing import cast
 
 from gateseal import __version__, github, sources
-from gateseal.bootstrap import (
+from gateseal.compiler_release import PRE_COMMIT, REPOSITORY, GatesealPin
+from gateseal.diagnostics import GatesealError, Note
+from gateseal.managed_files import (
     CONFIG,
     LOCK,
     LOCK_FORMAT,
     MANIFEST,
-    sha,
-    tracked_bytes,
-)
-from gateseal.compiler_release import REPOSITORY, GatesealPin, load_runtime
-from gateseal.diagnostics import GatesealError, Note
-from gateseal.managed_files import (
     make_parents,
     read,
     read_optional,
     remove,
+    tracked_bytes,
     write_atomic,
 )
 from gateseal.manifest import (
@@ -46,6 +43,7 @@ from gateseal.validation import (
     digest,
     fields,
     mapping,
+    sha,
     string,
 )
 
@@ -99,7 +97,7 @@ def compile_outputs(
     helper serves.
     """
     config = {
-        "minimum_pre_commit_version": load_runtime().pre_commit,
+        "minimum_pre_commit_version": PRE_COMMIT,
         "repos": [
             pin.hook_repository(),
             *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
@@ -303,7 +301,7 @@ def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
         "info",
         "gateseal",
         f"gateseal {pin.version} from {pin.repository} at commit {pin.commit}, "
-        f"with pre-commit {load_runtime().pre_commit}.",
+        f"with pre-commit {PRE_COMMIT}.",
     )
     return (
         identity,

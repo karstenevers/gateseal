@@ -57,14 +57,6 @@ Run these too when they apply:
   uv run pytestmut run --diff "$(git merge-base origin/main HEAD)"
   ```
 
-- **A change to how activation prepares an attempt, how a commit picks one, or
-  the interpreter store.** Run the
-  [model check](docs/verification.md#model-check-the-prepared-attempts):
-
-  ```sh
-  uv run python formal/check.py
-  ```
-
 - **A change to the documentation.** Preview the site at
   `http://127.0.0.1:8000`:
 
@@ -82,8 +74,7 @@ Run these too when they apply:
   [design record](docs/design/README.md).
 
 CI runs the same checks on Linux and macOS, mutation testing on the changed
-lines, the model check when its inputs change, and a strict build of the
-documentation.
+lines, and a strict build of the documentation.
 
 ## Release a version
 

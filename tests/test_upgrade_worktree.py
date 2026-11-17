@@ -14,11 +14,11 @@ from datetime import date
 
 import pytest
 from conftest import PIN, TRACKED, with_git_config
-from gateseal import __version__, lock, runtime, upgrade
+from gateseal import __version__, lock, upgrade
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_bundled_policy
 from gateseal.validation import canonical
-from gateseal.worktree import locate_worktree
+from gateseal.worktree import locate_worktree, operation_lock, preparation_directory
 from team_policy import URL, git, publish
 
 REASON = "Our fixtures need the older rules"
@@ -112,7 +112,7 @@ def team_commits(team, monkeypatch):
 def configure(root, *capabilities, policy=BUNDLED, ci=None):
     """Configure root as gateseal configure does; return its worktree."""
     worktree = locate_worktree(root)
-    with runtime.operation_lock(runtime.preparation_directory(worktree)):
+    with operation_lock(preparation_directory(worktree)):
         lock.configure(
             worktree.root,
             worktree.git,

@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 from conftest import TRACKED
-from gateseal import checks, ci, lock, runtime, setup
+from gateseal import checks, ci, lock, setup
 from gateseal.diagnostics import GatesealError
-from gateseal.worktree import locate_worktree
+from gateseal.worktree import locate_worktree, preparation_directory
 from installation import success
 from stand_ins import configure
 
@@ -101,7 +101,7 @@ def planned(tmp_path_factory):
     configure(worktree, ("hygiene", "secrets"))
     success(["git", "add", *TRACKED], root)
     base, head = commit(root, "base.txt"), commit(root, "notes.txt")
-    local = runtime.preparation_directory(worktree)
+    local = preparation_directory(worktree)
     return SimpleNamespace(
         root=root,
         worktree=worktree,

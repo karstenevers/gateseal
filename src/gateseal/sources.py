@@ -14,8 +14,8 @@ import uuid
 from collections.abc import Generator
 from pathlib import Path
 
-from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError
+from gateseal.environments import clean_environment
 from gateseal.managed_files import open_directory, read, write_atomic
 from gateseal.manifest import GitSource
 from gateseal.policy import Policy, content_stream, load_policy, load_policy_stream
@@ -75,7 +75,7 @@ def _environment() -> dict[str, str]:
     """
     env = {
         key: value
-        for key, value in bootstrap.clean_environment().items()
+        for key, value in clean_environment().items()
         if key not in REDIRECTS and not key.startswith("GIT_TRACE")
     }
     env.update(
@@ -293,7 +293,7 @@ def remote(
 ) -> Generator[Remote]:
     """Yield a scratch Remote for repository, and delete it afterwards.
 
-    runtime.operation_lock deletes one that a killed run left, since its name
+    worktree.operation_lock deletes one that a killed run left, since its name
     starts with .gateseal-.
     """
     directory = preparation / f".gateseal-{uuid.uuid4().hex}.git"

@@ -9,7 +9,6 @@ import json
 import os
 import subprocess
 import time
-from pathlib import Path
 
 import pytest
 from conftest import TRACKED, git_path, on_machine
@@ -537,14 +536,16 @@ def test_interrupted_fetch_stops_git(monkeypatch, tmp_path):
 
 
 FIXTURES = "https://github.com/karstenevers/gateseal-fixtures.git"
+FIXTURE_COMMIT = "29415bb17be770885d432fc19e8da7a88c061af2"
+"""The fixture repository's commit whose policy folder is the bundled policy."""
 
 
 @pytest.mark.network
 def test_private_policy_fetch_uses_a_url_scoped_credential(monkeypatch, tmp_path):
     """Fetch a private policy with a token scoped to the policy URL.
 
-    The fixture repository's commit that artifact-source.json pins holds a copy
-    of the bundled policy. Only a credential helper scoped to the policy URL
+    FIXTURE_COMMIT holds a copy of the bundled policy. Only a credential
+    helper scoped to the policy URL
     hands the token to Git; a helper for another URL gives nothing, and
     gateseal stores no credential.
     """
@@ -553,9 +554,7 @@ def test_private_policy_fetch_uses_a_url_scoped_credential(monkeypatch, tmp_path
     token = os.environ.get("GATESEAL_POLICY_TOKEN")
     if not token:
         pytest.skip("GATESEAL_POLICY_TOKEN is not set")
-    fixture = json.loads((Path(__file__).parent / "artifact-source.json").read_bytes())
-    commit = fixture["url"].split("/")[5]
-    source = GitSource(FIXTURES, "policy", commit, "-")
+    source = GitSource(FIXTURES, "policy", FIXTURE_COMMIT, "-")
     helper = (
         '!f() { test "$1" = get && echo username=x-access-token '
         '&& echo "password=$GATESEAL_POLICY_TOKEN"; }; f'

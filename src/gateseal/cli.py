@@ -11,13 +11,17 @@ from gateseal import (
     ci,
     health,
     lock,
-    runtime,
     setup,
     upgrade,
 )
 from gateseal.diagnostics import GatesealError, Result
 from gateseal.paths import resolved
-from gateseal.worktree import Worktree, locate_worktree
+from gateseal.worktree import (
+    Worktree,
+    locate_worktree,
+    operation_lock,
+    preparation_directory,
+)
 
 POLICY = {
     "init": authoring.init,
@@ -187,7 +191,7 @@ def _operation(arguments: argparse.Namespace) -> Result:
 
 
 def _configure(worktree: Worktree, arguments: argparse.Namespace) -> Result:
-    with runtime.operation_lock(runtime.preparation_directory(worktree)):
+    with operation_lock(preparation_directory(worktree)):
         changed, notes = lock.configure(
             worktree.root,
             worktree.git,

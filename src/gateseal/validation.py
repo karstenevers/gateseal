@@ -1,9 +1,14 @@
+import hashlib
 import json
+import math
 import re
-from typing import cast
+from typing import NoReturn, cast
 
-from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError
+
+
+def sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 def mapping(value: object, field: str) -> dict[str, object]:
@@ -85,12 +90,35 @@ def parse_toml(data: bytes) -> dict[str, object]:
         ) from exc
 
 
-def decode_json_value(data: bytes) -> object:
-    try:
-        return bootstrap.decode_json_value(data)
-    except bootstrap.JSONError as exc:
-        raise GatesealError("invalid_json", str(exc)) from exc
+def _pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise GatesealError("invalid_json", f"Duplicate JSON key {key!r}.")
+        result[key] = value
+    return result
+
+
+def _constant(value: str) -> NoReturn:
+    raise GatesealError(
+        "invalid_json", f"Non-finite JSON number {value} is unsupported."
+    )
+
+
+def _finite(text: str) -> float:
+    value = float(text)
+    return value if math.isfinite(value) else _constant(text)
 
 
 def decode_json(data: bytes) -> dict[str, object]:
-    return mapping(decode_json_value(data), "document")
+    """Decode a UTF-8 JSON object, rejecting duplicate keys and nonfinite numbers."""
+    try:
+        value = json.loads(
+            data.decode("utf-8"),
+            object_pairs_hook=_pairs,
+            parse_constant=_constant,
+            parse_float=_finite,
+        )
+    except ValueError as exc:
+        raise GatesealError("invalid_json", "Expected UTF-8 JSON.") from exc
+    return mapping(value, "document")

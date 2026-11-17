@@ -7,6 +7,24 @@ from pathlib import Path
 
 from gateseal.diagnostics import GatesealError
 
+MANIFEST = "gateseal.toml"
+
+LOCK = "gateseal.lock"
+
+LOCK_FORMAT = 2
+"""The Lock format, which changes only when the ownership ledger changes."""
+
+CONFIG = ".pre-commit-config.yaml"
+
+
+def tracked_bytes(data: bytes) -> bytes:
+    """Return a tracked file's bytes as Git stores them.
+
+    With core.autocrlf, Git checks these files out with CRLF line endings but
+    stores and compares them with LF, so gateseal reads them the same way.
+    """
+    return data.replace(b"\r\n", b"\n")
+
 
 def relative_name(name: str) -> str:
     if not name or "\\" in name or ":" in name or "\x00" in name:
@@ -124,7 +142,7 @@ def remove(root: Path, name: str) -> None:
         os.unlink(Path(name).name, dir_fd=parent)
 
 
-def write_atomic(path: Path, content: bytes, mode: int = 0o600) -> None:
+def write_atomic(path: Path, content: bytes, mode: int) -> None:
     with open_directory(path.parent) as parent:
         temporary = ".gateseal-" + uuid.uuid4().hex
         # pytestmut: off[bit.and_or] -- the uuid4 name is always new

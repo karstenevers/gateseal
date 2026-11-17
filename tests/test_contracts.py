@@ -4,7 +4,6 @@ import shutil
 
 import pytest
 from conftest import PIN
-from gateseal import bootstrap
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
 from gateseal.lock import compile_outputs
@@ -588,12 +587,6 @@ def test_diagnostics_keep_the_port_and_the_ssh_user():
     assert "https://host:8443/team/policy.git" in rendered
     assert "ssh://host/x" in rendered
     assert "token" not in rendered and "secret" not in rendered
-
-
-def test_hook_bytes_are_pinned():
-    assert hashlib.sha256(bootstrap.HOOK).hexdigest() == (
-        "c8b954813d52fc7394d2f9d5f8a3915525ac3132cc23cb7aa58154600e3050f6"
-    ), "Changed hook bytes make every installed gateseal hook unmanaged."
 
 
 RUN_OUTPUT = """\

@@ -4,7 +4,7 @@
 
 ## How you tested it
 
-<!-- The commands you ran, such as the unit and integration layers, and the model check when it applies. -->
+<!-- The commands you ran, such as the unit and integration layers. -->
 
 ## Checklist
 

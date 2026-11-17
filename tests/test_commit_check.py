@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from conftest import TRACKED, published_origin, stderr_refusal
 from gateseal import __version__, commit_check
-from gateseal.compiler_release import REPOSITORY, load_runtime
+from gateseal.compiler_release import PRE_COMMIT, REPOSITORY
 from gateseal.worktree import locate_worktree
 from installation import clone, process, success
 from stand_ins import configure
@@ -213,7 +213,7 @@ def test_a_developers_own_pre_commit_runs_the_hook_without_gateseal(
     success(["uv", "venv", "--quiet", "--python", python, tools], home, env)
     success(
         ["uv", "pip", "install", "--quiet", "--python", tools / "bin" / "python"]
-        + [f"pre-commit=={load_runtime().pre_commit}"],
+        + [f"pre-commit=={PRE_COMMIT}"],
         home,
         env,
     )

@@ -32,7 +32,6 @@ tool its name. Choose a name that the compiler has not reserved.
 kind = "release-binary"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["GITLEAKS_"]
 
 [source]
 repository = "https://github.com/gitleaks/gitleaks"
@@ -49,8 +48,6 @@ format = "toml"
 
 [executable]
 name = "gitleaks"
-version = ["version"]
-version_output = "{version}"
 
 # The report prints each finding's place and rule, never its source line.
 [files.report]
@@ -72,7 +69,6 @@ args = [
   "--report-format", "template", "--report-template", "{report}",
   "--report-path", "-", "--",
 ]
-probe = ["gitleaks", "stdin", "--config", "{configuration}", "--no-banner"]
 output = "concise"
 ```
 
@@ -169,7 +165,6 @@ Save the definition as `policy/tools/black.toml`.
 kind = "pre-commit-repository"
 stages = ["commit", "run", "ci"]
 scope = "files"
-removed_prefixes = ["BLACK_"]
 
 [source]
 repository = "https://github.com/psf/black-pre-commit-mirror"
@@ -178,18 +173,12 @@ tag = "{version}"
 [configuration]
 format = "toml"
 
-[executable]
-name = "black"
-version = ["--version"]
-version_output = 'black, {version} \(compiled: [a-z]+\)\nPython \(CPython\) [0-9.]+'
-
 # With --config, Black reads no other configuration. The final -- ends the
 # options before pre-commit appends file names.
 [hooks.black]
 name = "black"
 args = ["--config", "{configuration}", "--"]
 types_or = ["python", "pyi"]
-probe = ["black", "--config", "{configuration}", "--check", "-"]
 output = "plain"
 ```
 
@@ -246,8 +235,8 @@ for `Choice python.formatter: black.`
 
 This definition uses `--redact` and a report template that omits source
 text. It disables inline `gitleaks:allow` comments. The
-[tool kind](tool-definitions.md#what-a-team-definition-guarantees) verifies
-the executable, but finding suppression and file selection depend on how
+[tool kind](tool-definitions.md#what-a-team-definition-guarantees) pins the
+archive, but finding suppression and file selection depend on how
 Gitleaks handles its arguments.
 
 Gitleaks 8.30 accepts one path. When pre-commit supplies multiple filenames,

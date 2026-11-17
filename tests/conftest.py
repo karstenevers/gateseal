@@ -109,7 +109,6 @@ def pytest_configure(config):
             os.environ[name] = success(
                 ["uv", command, "dir"], Path.cwd()
             ).stdout.strip()
-    os.environ.setdefault("GATESEAL_INTERPRETER_STORE", str(home / "interpreter store"))
     for name in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
         os.environ.pop(name, None)
     os.environ.update(home_environment(home))

@@ -177,7 +177,7 @@ prove it works.
 | Use a team's policy | [Adopt a team policy](docs/adopt-a-team-policy.md) · [Authenticate to a private policy](docs/authenticate.md) |
 | Write a team policy | [Author a team policy](docs/author-a-policy.md) · [Add a tool](docs/add-a-tool.md) · [Policy format](docs/policy-format.md) |
 | Understand how it works | [How a commit runs](docs/how-a-commit-runs.md) · [Architecture](docs/architecture.md) · [Vision](VISION.md) |
-| Look up commands and files | [Commands and results](docs/commands-and-results.md) · [Manifest and Lock](docs/policy-contract.md) · [Local preparation](docs/local-preparation.md) · [Glossary](GLOSSARY.md) |
+| Look up commands and files | [Commands and results](docs/commands-and-results.md) · [Manifest and Lock](docs/policy-contract.md) · [Glossary](GLOSSARY.md) |
 | See how gateseal is tested | [What the tests prove](docs/what-the-tests-prove.md) · [Build and verify](docs/verification.md) |
 
 ## Contributing

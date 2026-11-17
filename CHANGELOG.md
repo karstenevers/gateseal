@@ -64,6 +64,7 @@ change the manifest, policy or lock format, and its entry says how to move.
   the files it lists. A listed file that the release never writes stops the
   move, and so does a bundled policy with other content under the same label.
 - The Lock no longer records the CPython and pre-commit that gateseal runs.
+- A hook repository record in the Lock no longer has `tools`.
 
 ### Removed
 
@@ -74,6 +75,10 @@ change the manifest, policy or lock format, and its entry says how to move.
 - `--compiler-wheel`, `--compiler-source` and `--compiler-sha256` of
   `gateseal configure` and `gateseal upgrade`, and the candidate compiler that
   an upgrade installed to render a compiler move.
+- The Tool Definition fields that only the removed preparation read:
+  `removed_prefixes`, a hook's `probe`, and `version` and `version_output` in
+  `[executable]`. A definition that still sets one stops with `invalid_field`.
+  A pre-commit repository no longer takes an `[executable]` table.
 
 ## [0.1.0] - 2026-11-11
 

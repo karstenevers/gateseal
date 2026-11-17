@@ -12,7 +12,7 @@ import os
 import shlex
 import shutil
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import pre_commit
@@ -155,7 +155,7 @@ def test_setup_installs_pre_commit_and_the_launcher_for_new_clones(machine, tmp_
         str(machine.launcher),
         "init.templateDir",
     ]
-    version = setup.load_runtime().pre_commit
+    version = setup.PRE_COMMIT
     assert machine.calls() == [
         ["tool", "install", "--reinstall", "--python", PYTHON]
         + [f"pre-commit=={version}", str(tools), str(machine.root / "bin")]
@@ -243,19 +243,16 @@ def test_setup_reinstalls_pre_commit_on_another_named_version(
     machine, monkeypatch, named
 ):
     gateseal("setup")
-    runtime = setup.load_runtime()
     if named == "python":
         # A prefix of the running version without its dot, such as 3.1 of 3.14.
         monkeypatch.setattr(setup, "PYTHON", PYTHON[:3])
     else:
-        monkeypatch.setattr(
-            setup, "load_runtime", lambda: replace(runtime, pre_commit="9.9.9")
-        )
+        monkeypatch.setattr(setup, "PRE_COMMIT", "9.9.9")
     code, result = gateseal("setup")
     assert (code, result["changed"][0]) == (0, str(machine.root / "tools/pre-commit"))
     assert machine.calls()[1][4:6] == [
         setup.PYTHON,
-        f"pre-commit=={setup.load_runtime().pre_commit}",
+        f"pre-commit=={setup.PRE_COMMIT}",
     ]
 
 
@@ -622,6 +619,15 @@ def test_setup_refuses_an_old_git_or_uv(machine):
     assert (code, result["code"]) == (4, "uv_version_mismatch")
     assert message(result).endswith("requires uv 0.13.5 or later.")
     assert not machine.root.exists()
+
+
+def test_setup_accepts_the_oldest_uv_it_supports(machine):
+    script = (machine.shims / "uv").read_text().removeprefix("#!/bin/sh\n")
+    machine.shim(
+        "uv", 'if [ "$1" = --version ]; then echo "uv 0.13.5"; exit 0; fi\n' + script
+    )
+    code, result = gateseal("setup")
+    assert (code, result["code"]) == (0, "set_up")
 
 
 NEED = (

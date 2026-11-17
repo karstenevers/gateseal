@@ -1,14 +1,12 @@
 import dataclasses
 import json
-from importlib.resources import files
 
 import pytest
 from conftest import TRACKED, preserved
 from gateseal import __version__
-from gateseal.compiler_release import REPOSITORY, load_runtime, parse_runtime
+from gateseal.compiler_release import PRE_COMMIT, REPOSITORY
 from gateseal.diagnostics import GatesealError
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
-from gateseal.platforms import TARGETS
 from gateseal.policy import load_bundled_policy
 from installation import (
     install,
@@ -30,130 +28,11 @@ REMOVE_EXCEPTION = (
 )
 
 
-def committed_runtime():
-    return json.loads(files("gateseal").joinpath("data", "runtime.lock").read_bytes())
-
-
-def refused(document):
-    with pytest.raises(GatesealError) as failure:
-        parse_runtime(json.dumps(document).encode())
-    return failure.value
-
-
-def test_committed_runtime_runs_every_target():
-    runtime = load_runtime()
-    assert runtime.pre_commit == "4.7.0"
-    for target in TARGETS.values():
-        [(key, record)] = runtime.interpreter(target).items()
-        assert key == f"cpython-3.14.10-{target.python}"
-        assert record["build"] == "20261026"
-    lines = runtime.requirements().decode().splitlines()
-    assert len(lines) == 11
-    assert lines[7].startswith("pre-commit==4.7.0 --hash=sha256:")
-
-
-@pytest.mark.parametrize(
-    "version",
-    [
-        "26.3",
-        "0",
-        "1.2.3",
-        "1!2.0",
-        "1.0rc1",
-        "1.0.post1",
-        "1.0.dev1",
-        "2!1.2a0.post0.dev0",
-    ],
-)
-def test_runtime_accepts_a_canonical_package_version(version):
-    document = committed_runtime()
-    document["pre_commit"]["packages"][0]["version"] = version
-    runtime = parse_runtime(json.dumps(document).encode())
-    checksum = document["pre_commit"]["packages"][0]["artifacts"][0]["sha256"]
-    assert runtime.requirements().decode().splitlines()[0] == (
-        f"cfgv=={version} --hash=sha256:{checksum}"
-    )
-
-
-@pytest.mark.parametrize(
-    "version",
-    [
-        "26.3.invalid",
-        "01.2",
-        "1.02",
-        "0!1.0",
-        "01!1.0",
-        "1.0rc01",
-        "1.0.post01",
-        "1.0.dev01",
-        "1.0\n",
-        " 1.0",
-        "1.0+local",
-        "v1.0",
-    ],
-)
-def test_runtime_refuses_a_noncanonical_package_version(version):
-    document = committed_runtime()
-    document["pre_commit"]["packages"][0]["version"] = version
-    failure = refused(document)
-    assert failure.code == "invalid_field"
-    assert "package.version" in str(failure)
-
-
-def test_runtime_refuses_a_missing_target():
-    document = committed_runtime()
-    del document["python"]["cpython-3.14.10-linux-x86_64-gnu"]
-    assert refused(document).code == "invalid_field"
-
-
-@pytest.mark.parametrize("target", ["windows-x86_64-none", None])
-def test_runtime_refuses_records_for_other_targets(target):
-    document = committed_runtime()
-    record = document["python"].pop("cpython-3.14.10-linux-x86_64-gnu")
-    if target is None:
-        document["python"] = {}
-    else:
-        system, _, libc = target.split("-")
-        document["python"]["cpython-3.14.10-" + target] = {
-            **record,
-            "os": system,
-            "libc": libc,
-        }
-    failure = refused(document)
-    assert failure.code == "invalid_field"
-
-
-def test_runtime_refuses_mixed_python_versions():
-    document = committed_runtime()
-    record = document["python"].pop("cpython-3.14.10-linux-x86_64-gnu")
-    document["python"]["cpython-3.14.9-linux-x86_64-gnu"] = {**record, "patch": 9}
-    failure = refused(document)
-    assert failure.code == "invalid_field"
-    assert "one CPython version and build" in str(failure)
-
-
-def test_runtime_refuses_an_unknown_field():
-    document = {**committed_runtime(), "surprise": "value"}
-    assert refused(document).code == "invalid_field"
-
-
-def test_runtime_refuses_a_closure_without_its_pre_commit():
-    document = committed_runtime()
-    packages = document["pre_commit"]["packages"]
-    document["pre_commit"]["packages"] = [
-        p for p in packages if p["name"] != "pre-commit"
-    ]
-    failure = refused(document)
-    assert failure.code == "invalid_field"
-    assert "disagrees with its pin" in str(failure)
-
-
 def test_hooks_need_the_pre_commit_that_renders_them(monkeypatch):
     policy = load_bundled_policy()
     source = BundledSource(policy.release)
     resolve(parse_manifest(render(("hygiene", "python", "secrets"), source)), policy)
-    old = dataclasses.replace(load_runtime(), pre_commit="4.3.0")
-    monkeypatch.setattr("gateseal.manifest.load_runtime", lambda: old)
+    monkeypatch.setattr("gateseal.manifest.PRE_COMMIT", "4.3.0")
     resolve(parse_manifest(render(("hygiene", "python"), source)), policy)
     with pytest.raises(GatesealError) as failure:
         resolve(parse_manifest(render(("hygiene", "secrets"), source)), policy)
@@ -201,18 +80,12 @@ def test_pre_commit_exception_stops_configure_and_check(installed, prepared):
 
 
 def runtime_release(installed, directory, version, pre_commit):
-    """Install a release at version whose runtime.lock pins pre_commit.
-
-    Only the pin changes, so the recorded hashes belong to another version.
-    """
+    """Install a release at version that runs pre_commit."""
     package = versioned_package(directory / "package", version)
-    path = package / "src" / "gateseal" / "data" / "runtime.lock"
-    document = json.loads(path.read_bytes())
-    document["pre_commit"]["version"] = pre_commit
-    for entry in document["pre_commit"]["packages"]:
-        if entry["name"] == "pre-commit":
-            entry["version"] = pre_commit
-    path.write_text(json.dumps(document))
+    path = package / "src" / "gateseal" / "compiler_release.py"
+    pinned = f'PRE_COMMIT = "{PRE_COMMIT}"\n'
+    assert pinned in path.read_text()
+    path.write_text(path.read_text().replace(pinned, f'PRE_COMMIT = "{pre_commit}"\n'))
     return package, dataclasses.replace(
         install(directory, package), environment=installed.environment
     )

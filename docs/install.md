@@ -74,13 +74,10 @@ the launcher runs it first.
 
 ```sh
 git config --global --unset init.templateDir
-rm -r ~/.local/share/gateseal/tools \
-  ~/.local/share/gateseal/bin \
-  ~/.local/share/gateseal/git-template
+rm -r ~/.local/share/gateseal
 ```
 
-Remove the `tools`, `bin` and `git-template` folders under
-`$XDG_DATA_HOME/gateseal` instead when that variable is set. The clones keep
+Remove `$XDG_DATA_HOME/gateseal` instead when that variable is set. The clones keep
 the launcher. Without the pre-commit that setup installed, it runs
 a `pre-commit` from your `PATH`, or stops each commit because it finds none.
 In those clones, run `pre-commit uninstall` or delete
