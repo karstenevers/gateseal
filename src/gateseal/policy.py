@@ -168,6 +168,7 @@ class Policy:
     choices: Mapping[tuple[str, str], ChoiceValue]
     assets: tuple[Asset, ...]
     content_digest: str
+    time_budget_seconds: int | None
 
     @property
     def declared(self) -> dict[tuple[str, str], Declared]:
@@ -197,6 +198,7 @@ class Review:
     catalogs: Mapping[str, Catalog]
     choices: Mapping[tuple[str, str], ChoiceValue]
     assets: tuple[Asset, ...]
+    time_budget_seconds: int | None
 
 
 CONTENT = b"gateseal-policy-content-v1\0"
@@ -275,6 +277,22 @@ def _compatibility(document: dict[str, object], compiler_version: str) -> str:
     return minimum
 
 
+TIME_BUDGET = "time_budget_seconds"
+"""The optional top-level field that sets the gate's time budget in seconds."""
+
+
+def _time_budget(value: object) -> int | None:
+    if value is None:
+        return None
+    if type(value) is not int or value < 1:
+        raise GatesealError(
+            "invalid_field",
+            f"{TIME_BUDGET} must be a positive whole number of seconds, such as "
+            "300 for five minutes.",
+        )
+    return value
+
+
 def review_policy(
     read_asset: Callable[[str], bytes], *, compiler: str = __version__
 ) -> Review:
@@ -312,13 +330,15 @@ def review_policy(
         raise GatesealError("missing_policy_asset", f"The policy has no file {POLICY}.")
     document = mapping(parse_toml(source), "policy")
     minimum = _compatibility(document, version(compiler, "compiler_version"))
+    time_budget = _time_budget(document.pop(TIME_BUDGET, None))
     required = {"schema", "release", "minimum_compiler", "capabilities"}
     extra = sorted(set(document) - required)
     if extra:
         raise GatesealError(
             "invalid_field",
             f"{POLICY} has {', '.join(extra)} at its top level, which holds only "
-            "schema, release, minimum_compiler and capabilities.",
+            "schema, release, minimum_compiler, capabilities and the optional "
+            f"{TIME_BUDGET}.",
             next_step="Write each tool as capabilities.<capability>.tools.<tool>, "
             "with its pin and reviewed versions, and each choice in "
             "capabilities.<capability>.choices.",
@@ -356,6 +376,7 @@ def review_policy(
         catalogs,
         exposed,
         tuple(assets),
+        time_budget,
     )
 
 
@@ -396,6 +417,7 @@ def load_policy(
         review.choices,
         assets,
         content_digest(assets),
+        review.time_budget_seconds,
     )
 
 

@@ -55,7 +55,7 @@ Teammates need Git, pre-commit and, for release binaries such as Betterleaks, mi
 ## What it supports
 
 - **Bundled checks:** file hygiene, Ruff for Python, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
-- **CI:** GitHub Actions. A new push to a pull request cancels the older run, so runner time goes only to the newest commit.
+- **CI:** GitHub Actions. A new push to a pull request cancels the older run, so runner time goes only to the newest commit. A policy can set a time budget, and a slower gate shows a warning on the pull request that you or a coding agent can act on.
 - **Platforms:** macOS on arm64 and Linux on x86-64.
 - **Planned:** upgrade pull requests for new tool releases, Windows, and Azure DevOps.
 

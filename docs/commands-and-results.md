@@ -36,7 +36,11 @@ Both commands report checks named `lock`, `pre-commit`, `launcher`, and `mise`. 
 
 The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. `next_steps` can be empty. Diagnostics can identify policies, tools, choices, repository hooks, version exceptions, hooks, findings, or history scans.
 
-A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, hook, finding, and history entries total at most 200. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
+A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
+
+A `duration` diagnostic gives the `gate`'s time in `seconds`, to one decimal, before its other entries. It also gives `budget_seconds` when the policy sets a [time budget](github-ci.md#time-budget). A gate over the budget also gives an `over_time_budget` warning. A `nothing_to_check` result has no time.
+
+A warning leaves the exit code unchanged. Text output prints it as a `Warning:` line. When `GITHUB_ACTIONS` is `true`, as in GitHub Actions, text output prints it as `::warning title=gateseal::<message>`, which GitHub shows as an annotation. `--json` output never holds this line.
 
 ## Exit codes
 

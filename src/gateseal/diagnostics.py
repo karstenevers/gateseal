@@ -44,6 +44,13 @@ def _safe_url(match: re.Match[str]) -> str:
         return "[redacted-url]"
 
 
+def _warning(message: str, workflow_command: bool) -> str:
+    if not workflow_command:
+        return f"Warning: {message}"
+    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    return f"::warning title=gateseal::{escaped}"
+
+
 @dataclass(frozen=True)
 class Note:
     """One diagnostic with its own severity, such as a Version Exception."""
@@ -66,7 +73,14 @@ class Result:
     entries: tuple[dict[str, object], ...] = ()
     """Structured diagnostics, such as one per hook and one per finding."""
 
-    def render(self, as_json: bool, full: bool = False) -> str:
+    def render(
+        self, as_json: bool, full: bool = False, *, workflow_commands: bool = False
+    ) -> str:
+        """Return the result as text or JSON.
+
+        workflow_commands prints each warning of text output as a GitHub
+        workflow command, which GitHub Actions shows as an annotation.
+        """
         detail = redact(self.details)
         if not full and len(detail) > 6000:
             detail = (
@@ -77,7 +91,9 @@ class Result:
         notes = [Note(n.severity, n.category, redact(n.message)) for n in self.notes]
         if not as_json:
             lines = [
-                ("Warning: " if n.severity == "warning" else "") + n.message
+                _warning(n.message, workflow_commands)
+                if n.severity == "warning"
+                else n.message
                 for n in notes
             ]
             return "\n".join(

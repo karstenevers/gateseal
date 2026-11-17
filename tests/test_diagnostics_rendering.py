@@ -3,7 +3,7 @@
 import json
 
 import pytest
-from gateseal.diagnostics import Result, redact
+from gateseal.diagnostics import Note, Result, redact
 
 
 def test_a_url_keeps_its_path_and_loses_only_a_query():
@@ -55,3 +55,30 @@ def test_a_cut_entry_list_counts_what_it_left_out():
     assert cut["category"] == "truncated"
     assert cut["message"].split()[0] == "3"
     assert "--verbose" in cut["message"]
+
+
+def test_a_workflow_command_escapes_each_warning_and_json_ignores_the_flag():
+    result = Result(
+        "check",
+        message="Consistent.",
+        notes=(
+            Note("info", "policy", "Policy 1."),
+            Note("warning", "overdue", "100%\r\nreview"),
+        ),
+        next_steps=("Look.",),
+    )
+    assert result.render(False, workflow_commands=True).splitlines() == [
+        "Consistent.",
+        "Policy 1.",
+        "::warning title=gateseal::100%25%0D%0Areview",
+        "Next: Look.",
+    ]
+    assert "Warning: 100%\r\nreview" in result.render(False)
+    assert result.render(True, workflow_commands=True) == result.render(True)
+
+
+def test_entries_stay_out_of_text_output_whatever_their_severity():
+    entry = {"severity": "warning", "category": "exception", "message": "Redundant."}
+    result = Result("upgrade", message="Upgraded.", entries=(entry,))
+    assert result.render(False) == "Upgraded."
+    assert entry in json.loads(result.render(True))["diagnostics"]

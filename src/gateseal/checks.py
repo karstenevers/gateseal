@@ -8,11 +8,13 @@ environment, as it does at git commit.
 import os
 import re
 import subprocess
+from dataclasses import replace
+from time import monotonic
 
 from gateseal import ci, lock, setup
 from gateseal.ci import OFFLINE, Scope
 from gateseal.compiler_release import CHECK_HOOK
-from gateseal.diagnostics import Result
+from gateseal.diagnostics import Note, Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import execute, pre_commit_command
@@ -104,6 +106,7 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     if scope.head is not None:
         ci.require_checked_out(worktree, scope.head)
     env = dict(os.environ) | OFFLINE
+    started = monotonic()
     process = execute(
         pre_commit_command(python, [*hook_run(Stage.CI), *files, "--color", "never"]),
         locked.root,
@@ -123,8 +126,9 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
                 allow_failure=True,
             )
             scans.append((definition, scanned))
+    duration, over = _duration(monotonic() - started, locked.policy.time_budget_seconds)
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    entries = hook_results(details, locked.selection.hooks, "ci")
+    entries = [duration, *hook_results(details, locked.selection.hooks, "ci")]
     outcomes: set[str] = set()
     for definition, scanned in scans:
         output = scanned.stdout.decode("utf-8", errors="replace")
@@ -134,7 +138,32 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         outcomes.add(outcome)
         entries.append(_scan_entry(definition, revisions, outcome))
         entries += findings
-    return _gate_result(scope.reason, process.returncode, outcomes, details, entries)
+    result = _gate_result(scope.reason, process.returncode, outcomes, details, entries)
+    return replace(result, notes=over)
+
+
+def _duration(
+    elapsed: float, budget: int | None
+) -> tuple[dict[str, object], tuple[Note, ...]]:
+    """Return the gate's time to one decimal, and a warning if it broke the budget."""
+    seconds = round(elapsed, 1)
+    took = f"The gate took {seconds:.1f} seconds"
+    entry: dict[str, object] = {
+        "severity": "info",
+        "category": "duration",
+        "seconds": seconds,
+        "message": f"{took}.",
+    }
+    if budget is None:
+        return entry, ()
+    entry["budget_seconds"] = budget
+    if seconds <= budget:
+        return entry, ()
+    warning = (
+        f"{took}, over the policy's time budget of {budget} seconds. Speed up its "
+        "slowest checks, or raise time_budget_seconds in the policy."
+    )
+    return entry, (Note("warning", "over_time_budget", warning),)
 
 
 def _scan_outcome(returncode: int, findings: list[dict[str, object]]) -> str:

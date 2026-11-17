@@ -12,6 +12,8 @@ See [Author a team policy](author-a-policy.md) for editing and release steps. A 
 
 `policy.toml` uses schema `5`. It needs a printable `release` label of at most 128 characters and `minimum_compiler` in `major.minor.patch` form. It needs at least one capability and one tool per capability. Tools and capabilities run in file order.
 
+Optional `time_budget_seconds` sets the CI gate's [time budget](github-ci.md#time-budget) in whole seconds, such as `300` for five minutes. A slower gate warns but never fails.
+
 | Field under `capabilities.<name>` | Meaning |
 | --- | --- |
 | `tools.<tool>.hook_ids` | Optional ordered, distinct hook IDs. Omit it for every hook in definition order. |

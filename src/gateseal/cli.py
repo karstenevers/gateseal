@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -336,5 +337,6 @@ def main(argv: list[str] | None = None) -> int:
         result = Result(
             command, "interrupted", "Operation interrupted. Retry the same command.", 4
         )
-    print(result.render(as_json, full))
+    annotate = os.environ.get("GITHUB_ACTIONS") == "true"
+    print(result.render(as_json, full, workflow_commands=annotate))
     return result.exit_code

@@ -300,7 +300,7 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     assert result.code == "checks_failed"
     assert [
         (entry["category"], entry["tool"], entry["origin"], entry.get("file"))
-        for entry in result.entries
+        for entry in result.entries[1:]
     ] == [
         ("history", "gitleaks", "team-defined", None),
         ("finding", "gitleaks", "team-defined", "leak.env"),
