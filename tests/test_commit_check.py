@@ -15,6 +15,7 @@ import pytest
 from conftest import TRACKED, published_origin, stderr_refusal
 from gateseal import __version__, commit_check
 from gateseal.compiler_release import PRE_COMMIT, REPOSITORY
+from gateseal.diagnostics import NEXT_STEPS
 from gateseal.worktree import locate_worktree
 from installation import clone, process, success
 from stand_ins import configure
@@ -94,6 +95,19 @@ def test_the_hook_reads_the_index_that_git_names(staged, capsys, monkeypatch):
     assert hook(capsys)[1][0] == "This commit has no gateseal.lock."
     monkeypatch.delenv("GIT_INDEX_FILE")
     assert hook(capsys) == (0, "")
+
+
+def test_a_refusal_without_its_own_step_names_the_default(
+    tmp_path, capsys, monkeypatch
+):
+    monkeypatch.setenv("PATH", str(tmp_path))
+    assert hook(capsys) == (
+        1,
+        (
+            "Install the documented git prerequisite.",
+            NEXT_STEPS["missing_prerequisite"],
+        ),
+    )
 
 
 def edit_lock(root, change):

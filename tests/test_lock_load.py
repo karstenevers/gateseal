@@ -9,6 +9,7 @@ from datetime import date
 import pytest
 from conftest import PIN
 from gateseal import lock
+from gateseal.diagnostics import NEXT_STEPS
 from gateseal.manifest import BundledSource
 from gateseal.validation import canonical
 from test_lock_configure import (
@@ -155,7 +156,7 @@ def surprise_from_another_gateseal(document):
         (
             outputs_edit(lambda o: o.update({CONFIG: o[CONFIG] + b"#\n"})),
             "ownership_conflict",
-            "",
+            f"Undo the edit to {CONFIG}",
             (CONFIG,),
         ),
         (
@@ -204,7 +205,7 @@ def test_load_refuses_disagreement(tmp_path, change, code, step, named):
         (root / name).write_bytes(content)
     error = refused(lock.load, root, preparation(root))
     assert error.code == code
-    assert step in error.next_step if step else error.next_step == ""
+    assert step in error.next_step if step else error.next_step == NEXT_STEPS[code]
     assert all(value in str(error) for value in named)
 
 

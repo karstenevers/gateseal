@@ -11,6 +11,7 @@ import urllib.request
 import pytest
 from conftest import named_flags
 from gateseal.cli import main
+from gateseal.diagnostics import NEXT_STEPS
 from installation import package_version, success
 
 HELP = "gateseal --help"
@@ -90,7 +91,7 @@ def test_an_unknown_option_is_an_invalid_invocation(capsys, repository):
     assert (code, result["status"], result["command"]) == (2, "failed", "check")
     assert result["code"] == "invalid_invocation"
     assert named_flags(result["diagnostics"][0]["message"]) == {"--bogus", "--help"}
-    assert result["next_steps"] == []
+    assert result["next_steps"] == [NEXT_STEPS["invalid_invocation"]]
 
 
 def test_an_invalid_invocation_without_json_is_text(capsys, repository):
@@ -203,6 +204,7 @@ def test_a_filesystem_failure_exits_4(capsys, tmp_path):
         "filesystem_error",
     )
     assert str(occupied / "policy") in result["diagnostics"][0]["message"]
+    assert result["next_steps"] == [NEXT_STEPS["filesystem_error"]]
 
 
 class Interrupt(urllib.request.BaseHandler):
@@ -225,4 +227,5 @@ def test_an_interrupted_download_asks_for_a_retry(capsys, started, monkeypatch):
         "policy lock",
         "interrupted",
     )
+    assert result["next_steps"] == [NEXT_STEPS["interrupted"]]
     assert (started / "policy.lock").read_bytes() == lock

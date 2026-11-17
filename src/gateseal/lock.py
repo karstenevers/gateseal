@@ -532,6 +532,8 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
                 raise GatesealError(
                     "ownership_conflict",
                     f"Restore the owned {name}; it has been edited.",
+                    next_step=f"Undo the edit to {name}, or move it aside and run "
+                    "gateseal configure to write it again.",
                 )
         snapshot = Snapshot(manifest, lock, found)
         return Locked(root, policy, pin, snapshot, source, selection)
@@ -677,6 +679,7 @@ def owned_changes(
                 "ownership_conflict",
                 f"Existing {name} differs from the generated file; "
                 "preserve or move it.",
+                next_step=f"Move {name} aside to keep it, then run the command again.",
             )
         writes[name] = content
     return Changes(writes, removes)
