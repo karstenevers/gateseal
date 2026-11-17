@@ -15,7 +15,7 @@ from datetime import date
 import pytest
 from conftest import PIN, TRACKED, with_git_config
 from gateseal import __version__, lock, upgrade
-from gateseal.diagnostics import GatesealError
+from gateseal.diagnostics import NEXT_STEPS, GatesealError
 from gateseal.policy import load_bundled_policy
 from gateseal.validation import canonical
 from gateseal.worktree import locate_worktree, operation_lock, preparation_directory
@@ -298,14 +298,14 @@ def test_policy_moves_that_break_the_exceptions_write_nothing(consumer, team_com
     dropped = refused(worktree, request(lock.PolicyRequest(tag="v5")))
     assert dropped.code == "unsupported_capability"
     assert "secrets" in str(dropped)
-    assert dropped.next_step == ""
+    assert dropped.next_step == NEXT_STEPS["unsupported_capability"]
 
 
 def test_only_a_manifest_ahead_of_its_lock_names_the_restore(consumer):
     with pytest.raises(GatesealError) as missing:
         upgrade.run(locate_worktree(consumer), request())
     assert missing.value.code == "missing_configuration"
-    assert missing.value.next_step == ""
+    assert missing.value.next_step == NEXT_STEPS["missing_configuration"]
 
     worktree = configure(consumer, "hygiene")
     manifest = consumer / "gateseal.toml"

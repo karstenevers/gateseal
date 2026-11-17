@@ -46,6 +46,7 @@ HISTORY_FINDING = f"leak.txt:1:7: aws-access-token (AWS) in commit {COMMIT}\n"
 CURRENT_FINDING = "leak.txt:1:7: aws-access-token (AWS)\n"
 FIX = "finding"
 RECOMMIT = "gateseal run"
+READ = "output of each failed hook"
 REVIEW = "git diff"
 STAGE = "gateseal run"
 
@@ -336,7 +337,7 @@ def test_pre_commit_stopping_is_a_tool_failure(attempt, planned):
         (YAML_PASSED + SECRET_FOUND + WHITESPACE_FIXED, (FIX, RECOMMIT)),
         (YAML_PASSED + WHITESPACE_FIXED, (RECOMMIT,)),
         (YAML_PASSED + SECRET_FOUND, (FIX,)),
-        (YAML_PASSED + EOF_FAILED, ()),
+        (YAML_PASSED + EOF_FAILED, (READ,)),
     ],
     ids=["finding and fix", "fix", "finding", "failure"],
 )

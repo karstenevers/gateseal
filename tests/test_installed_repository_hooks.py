@@ -66,6 +66,7 @@ def test_commit_run_and_gate_run_the_repository_hook(installed, hooked, text, co
             "scripts/no-markers.sh",
             "failed" if code else "passed",
         )
+        assert bool(result["next_steps"]) == bool(code)
     committed = process(["git", "commit", "-m", "Add notes"], hooked)
     shown = committed.stdout + committed.stderr
     assert committed.returncode == code, shown

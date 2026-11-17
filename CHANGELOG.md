@@ -48,6 +48,10 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- Every failed result names at least one next step: a command to run or a
+  plain fix. In `--json`, `next_steps` is never empty when `status` is
+  `failed`, and text output and the `gateseal-check` hook print a `Next:`
+  line.
 - With `GITHUB_ACTIONS=true`, text output prints each warning as a
   `::warning` workflow command instead of a `Warning:` line, which GitHub
   shows as an annotation. This also applies to the overdue and redundant

@@ -230,6 +230,10 @@ def _gate_result(
             "Run gateseal run in a clone, review and commit what the hooks change, "
             "then push."
         )
+    if not steps:
+        steps.append(
+            "Read the output of each failed hook, fix what it reports, then push again."
+        )
     return Result(
         "gate",
         "checks_failed",

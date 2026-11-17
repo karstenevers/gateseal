@@ -5,7 +5,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
-from typing import cast
+from typing import TypeGuard, cast
 
 from gateseal import __version__
 from gateseal.compiler_release import PRE_COMMIT
@@ -216,16 +216,21 @@ def _source(value: object) -> Source:
     )
 
 
+def valid_reason(reason: object) -> TypeGuard[str]:
+    """Whether reason says why on one line, in at most REASON_LIMIT characters."""
+    return (
+        isinstance(reason, str)
+        and bool(reason.strip())
+        and len(reason) <= REASON_LIMIT
+        and reason.isprintable()
+    )
+
+
 def _exception(component: str, value: object) -> ExceptionRequest:
     field = f"exceptions.{component}"
     entry = fields(value, {"version", "reason", "review_by"}, field)
     reason = entry["reason"]
-    if (
-        not isinstance(reason, str)
-        or not reason.strip()
-        or len(reason) > REASON_LIMIT
-        or not reason.isprintable()
-    ):
+    if not valid_reason(reason):
         raise GatesealError(
             "invalid_exception",
             f"{field}.reason must say why on one line, in at most {REASON_LIMIT} "

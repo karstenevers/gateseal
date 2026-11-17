@@ -28,7 +28,7 @@ gateseal keeps one reviewed set of commit checks in every repository, on develop
 - **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock.
 - **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries must match recorded checksums.
 - **Fast CI out of the box.** The generated workflow checks only what a pull request changed. With the secrets checks on, Betterleaks scans its commits. A scheduled run checks every file. You do not have to maintain this logic. [How it works](docs/github-ci.md#what-the-gate-checks).
-- **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and list the next command when one exists.
+- **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and the next step.
 
 ## When not to use it
 

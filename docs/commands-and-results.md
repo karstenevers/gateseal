@@ -34,7 +34,7 @@ Both commands report checks named `lock`, `pre-commit`, `launcher`, and `mise`. 
 
 ## JSON results
 
-The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. `next_steps` can be empty. Diagnostics can identify policies, tools, choices, repository hooks, version exceptions, hooks, findings, or history scans.
+The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. A `failed` result always has at least one next step: a command to run or a plain fix. Diagnostics can identify policies, tools, choices, repository hooks, version exceptions, hooks, findings, or history scans.
 
 A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
 
