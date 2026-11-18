@@ -2,6 +2,17 @@
 
 `gateseal.toml`, the Manifest, selects a policy and checks for one repository. `gateseal.lock`, the Lock, records the resolved selection and generated files. After editing the Manifest, run `gateseal configure`. Review the files together.
 
+## What you edit
+
+| Part | Who writes it |
+| --- | --- |
+| `gateseal.toml`: `schema`, `[policy]` | `gateseal configure` writes them at first. `gateseal upgrade` rewrites `[policy]` when it moves the policy. |
+| `gateseal.toml`: `capabilities` | You choose them with `--capability` at first. Edit them later, then run `gateseal configure`. |
+| `gateseal.toml`: `[choices]`, `[exceptions]` | Empty at first. Edit them only to leave a policy default. `gateseal upgrade` can write an exception. |
+| `gateseal.toml`: `[hooks]`, `[ci]` | Optional. Add them when you need your own script or CI. `--ci github` writes `[ci]` at first. |
+| `gateseal.lock` | `gateseal configure` and `gateseal upgrade` write it. Never edit it. |
+| `.pre-commit-config.yaml`, `.gateseal/`, the workflow | Generated with the Lock. Never edit them. |
+
 ## Example
 
 This Manifest uses the team policy from [Policy format](policy-format.md#example). It selects three capabilities, skips one optional hook, and changes one choice. Everything else keeps the policy's defaults.

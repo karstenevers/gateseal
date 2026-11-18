@@ -48,9 +48,10 @@ nav:
   - Home: index.md
   - Get started:
       - Install gateseal: install.md
-      - Configure a repository: configure-a-repository.md
       - Try gateseal: demo.md
+      - Configure a repository: configure-a-repository.md
       - Work in a configured repository: work-in-a-configured-repository.md
+      - How gateseal works: architecture.md
       - Troubleshooting: troubleshooting.md
   - Manage checks:
       - Adjust a setup: adjust-a-setup.md
@@ -66,9 +67,6 @@ nav:
       - Tool definitions: tool-definitions.md
       - Commands and results: commands-and-results.md
       - Glossary: glossary.md
-  - About:
-      - How gateseal works: architecture.md
-      - Vision: vision.md
 
 markdown_extensions:
   - github-callouts
