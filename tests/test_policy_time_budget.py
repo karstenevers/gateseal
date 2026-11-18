@@ -1,10 +1,9 @@
 """A policy may set the gate's time budget as a positive whole number of seconds."""
 
 import pytest
+from conftest import BUNDLED_MINIMUM as MINIMUM
 from gateseal.policy import load_policy
 from test_policy_review import assets, refused
-
-MINIMUM = 'minimum_compiler = "0.1.0"'
 
 
 def budget(value):

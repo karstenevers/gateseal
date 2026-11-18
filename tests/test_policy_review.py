@@ -5,6 +5,7 @@ gateseal policy check does for a policy's files.
 """
 
 import pytest
+from conftest import BUNDLED_MINIMUM
 from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import (
@@ -52,7 +53,7 @@ def refused(read_asset, code="invalid_field"):
 
 
 def test_a_policy_records_the_compiler_it_requires():
-    edited = assets('minimum_compiler = "0.1.0"', 'minimum_compiler = "0.0.9"')
+    edited = assets(BUNDLED_MINIMUM, 'minimum_compiler = "0.0.9"')
     assert review_policy(edited).minimum_compiler == "0.0.9"
     assert load_policy(edited).minimum_compiler == "0.0.9"
 

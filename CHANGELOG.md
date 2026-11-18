@@ -7,6 +7,13 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-18
+
+This release keeps no compatibility with 0.1.0. Every command refuses a Lock
+that 0.1.0 wrote, and `gateseal activate` is gone. To move a repository from
+0.1.0, delete `gateseal.lock`, `.pre-commit-config.yaml`, `.gateseal/` and
+`.github/workflows/gateseal.yml`, then run `gateseal configure`.
+
 ### Added
 
 - `gateseal setup` prepares a machine once: it installs pre-commit in a folder
@@ -117,9 +124,7 @@ change the manifest, policy or lock format, and its entry says how to move.
   release tag, which `gateseal configure` reads with the user's Git. The
   generated workflow installs gateseal from that commit. This is Lock format 2,
   and every command refuses a Lock of another format with
-  `unsupported_schema`. To move a repository from 0.1.0, delete
-  `gateseal.lock`, `.pre-commit-config.yaml`, `.gateseal/` and
-  `.github/workflows/gateseal.yml`, then run `gateseal configure`.
+  `unsupported_schema`.
 - `gateseal upgrade` run by another gateseal release moves the Lock to that
   release, newer or older. It reads only the old Lock's ownership ledger: its
   format, its gateseal pin, the Manifest's SHA-256, the policy's digest and
@@ -171,5 +176,6 @@ The first release.
 - One sealed store per machine that every repository shares for its Python
   interpreters and pre-commit hook environments.
 
-[Unreleased]: https://github.com/karstenevers/gateseal/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/karstenevers/gateseal/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/karstenevers/gateseal/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/karstenevers/gateseal/releases/tag/v0.1.0

@@ -10,7 +10,7 @@ import dataclasses
 import json
 
 import pytest
-from conftest import TRACKED, adopt, commit_hygiene
+from conftest import BUNDLED_MINIMUM, TRACKED, adopt, commit_hygiene
 from gateseal.compiler_release import REPOSITORY
 from installation import (
     clone,
@@ -150,8 +150,9 @@ def test_an_older_gateseal_cannot_move_below_the_policys_minimum(
 
     def newer(data):
         text = (data / "policy.toml").read_text()
+        assert BUNDLED_MINIMUM in text
         (data / "policy.toml").write_text(
-            text.replace('minimum_compiler = "0.1.0"', f'minimum_compiler = "{NEXT}"')
+            text.replace(BUNDLED_MINIMUM, f'minimum_compiler = "{NEXT}"')
         )
 
     publish(origin, "v1", newer)
