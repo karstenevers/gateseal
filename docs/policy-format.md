@@ -137,4 +137,6 @@ See [Author a team policy](author-a-policy.md#review-a-tool-version) for review 
 
 ## Policy digest
 
-The digest is the SHA-256 of the policy content stream. Start the stream with `gateseal-policy-content-v1` and a NUL byte. Sort the policy files by UTF-8 path. For each file, append its path length, path bytes, content length, and content bytes. Encode each length as an eight-byte big-endian integer. Include `policy.toml`, named rule files, named tool definitions, and `policy.lock`. The digest identifies the content. It does not authenticate the publisher.
+The digest is a fingerprint of all policy files: `policy.toml`, the named rule files, the named tool definitions, and `policy.lock`. The same content always gives the same digest. Any change to these files, such as an edit or a new, removed or renamed file, gives a new digest. The digest identifies the content. It does not prove who published it.
+
+The digest is a SHA-256 over each file's path and content, in path order. For the exact byte format, see `content_stream` in [`policy.py`](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/policy.py).
