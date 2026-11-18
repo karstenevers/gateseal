@@ -19,4 +19,4 @@ See [Configure a repository](docs/configure-a-repository.md) for the complete st
 - pre-commit runs hooks, mise installs selected release binaries, and CI runs the gate.
 - The Lock pins direct inputs; it does not freeze every transitive dependency.
 
-The bundled policy includes hygiene, Ruff, and Betterleaks. GitHub Actions is supported. Scheduled discovery of new releases with upgrade pull requests, Windows, and Azure DevOps are planned. See [How gateseal works](docs/architecture.md) for costs and limits.
+The bundled policy includes hygiene, Ruff, and Betterleaks. GitHub Actions and Azure Pipelines are supported. Scheduled discovery of new releases with upgrade pull requests and Windows are planned. See [How gateseal works](docs/architecture.md) for costs and limits.

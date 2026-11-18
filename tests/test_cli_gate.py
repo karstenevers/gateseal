@@ -56,8 +56,9 @@ def commits(tmp_path_factory):
         ["--base", "{first}", "--head", "{second}"],
         ["--before", "{first}", "--after", "{second}"],
         ["--before", ZEROS, "--after", "{second}"],
+        ["--after", "{second}"],
     ],
-    ids=["every file", "change", "push", "new branch"],
+    ids=["every file", "change", "push", "new branch", "push without before"],
 )
 def test_a_planned_scope_reaches_pre_commit(commits, flags, tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
@@ -102,16 +103,37 @@ def test_each_revision_is_checked_against_the_clone(commits, flags, flag):
         ["--base", "{first}"],
         ["--head", "{second}"],
         ["--before", "{first}"],
-        ["--after", "{second}"],
         ["--base", "{first}", "--after", "{second}"],
         ["--base", "{first}", "--head", "{second}", "--before", "{first}"]
         + ["--after", "{second}"],
+        ["--merge", "{second}", "--after", "{second}"],
+        ["--merge", "{second}", "--base", "{first}", "--head", "{second}"],
+        ["--merge", "{second}", "--head", "{second}"],
     ],
-    ids=["base", "head", "before", "after", "base and after", "both pairs"],
+    ids=[
+        "base",
+        "head",
+        "before",
+        "base and after",
+        "both pairs",
+        "merge and after",
+        "merge and change",
+        "merge and head",
+    ],
 )
-def test_revision_flags_must_form_one_complete_pair(commits, flags):
+def test_revision_flags_must_form_one_complete_group(commits, flags):
     root, first, second = commits
     filled = [f.format(first=first, second=second) for f in flags]
     code, found, text = gate(root, *filled)
     assert (code, found) == (2, "invalid_invocation")
-    assert named_flags(text) == {"--base", "--head", "--before", "--after"}
+    assert named_flags(text) == {"--base", "--head", "--merge", "--before", "--after"}
+
+
+def test_a_merge_flag_plans_from_the_commit_it_names(commits):
+    root, _, second = commits
+    code, found, text = gate(root, "--merge", second)
+    assert (code, found) == (2, "invalid_invocation")
+    assert second in text and "fewer than two parents" in text
+    code, found, text = gate(root, "--merge", "HEAD")
+    assert (code, found) == (2, "invalid_invocation")
+    assert named_flags(text) == {"--merge"}

@@ -33,4 +33,4 @@ The release tag must appear. gateseal fetches without an interactive terminal. E
 
 `status` uses the stored policy without network access. Other repository commands fetch the selected commit if the stored copy is missing or damaged. The server must allow fetching that commit. Keep it reachable from a tag or branch so new clones can fetch it.
 
-For private GitHub policies used by CI, see [Private policy access in GitHub CI](github-ci.md#private-policy-access).
+For private policies used by CI, see private policy access in [GitHub CI](github-ci.md#private-policy-access) or [Azure Pipelines](azure-pipelines.md#private-policy-access).

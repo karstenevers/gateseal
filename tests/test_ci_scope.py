@@ -85,6 +85,58 @@ def test_a_push_without_its_own_range_is_checked_whole(repository, case, reason)
     assert reason in scope.reason
 
 
+def test_a_push_that_names_no_replaced_commit_is_checked_whole(repository):
+    commit(repository, "a")
+    after = commit(repository, "b")
+    scope = ci.push_scope(locate_worktree(repository), None, after)
+    assert scope is not None
+    assert (scope.files, scope.history, scope.head) == (None, after, after)
+    assert "does not name the commit that the push replaced" in scope.reason
+
+
+def merged(root):
+    """Merge topic into main, as a pull request's merge commit does."""
+    success(["git", "merge", "--quiet", "--no-ff", "-m", "merge", "topic"], root)
+    return success(["git", "rev-parse", "HEAD"], root).stdout.strip()
+
+
+def test_a_merge_commit_is_checked_from_its_first_parent(repository):
+    commit(repository, "a")
+    success(["git", "switch", "--quiet", "-c", "topic"], repository)
+    commit(repository, "b")
+    success(["git", "switch", "--quiet", "main"], repository)
+    target = commit(repository, "c")
+    merge = merged(repository)
+    scope = ci.merge_scope(locate_worktree(repository), merge)
+    assert scope.files == (target, merge)
+    assert scope.history == f"{target}..{merge}"
+    assert scope.head == merge
+    assert scope.reason == (
+        f"The gate checks the files and commits that the merge commit {merge} "
+        f"adds to its first parent {target}."
+    )
+
+
+def test_a_merge_of_a_branch_that_holds_its_target_is_still_a_merge(repository):
+    target = commit(repository, "a")
+    success(["git", "switch", "--quiet", "-c", "topic"], repository)
+    commit(repository, "b")
+    success(["git", "switch", "--quiet", "main"], repository)
+    merge = merged(repository)
+    scope = ci.merge_scope(locate_worktree(repository), merge)
+    assert scope.files == (target, merge)
+
+
+@pytest.mark.parametrize("parents", [0, 1])
+def test_a_commit_that_merges_nothing_is_refused(repository, parents):
+    head = commit(repository, "a")
+    if parents:
+        head = commit(repository, "b")
+    failure = refused(ci.merge_scope, locate_worktree(repository), head)
+    assert (failure.code, failure.exit_code) == ("invalid_invocation", 2)
+    assert head in str(failure) and "--merge" in str(failure)
+
+
 def test_a_deleted_ref_leaves_nothing_to_check(repository):
     before = commit(repository, "a")
     assert ci.push_scope(locate_worktree(repository), before, ZEROS) is None
@@ -106,6 +158,8 @@ def test_only_full_object_ids_are_revisions(repository, revision):
         (ci.change_scope, (head, revision)),
         (ci.push_scope, (revision, head)),
         (ci.push_scope, (head, revision)),
+        (ci.push_scope, (None, revision)),
+        (ci.merge_scope, (revision,)),
     ):
         assert refused(plan, worktree, *revisions).code == "invalid_invocation"
 
@@ -118,6 +172,8 @@ def test_a_revision_the_clone_lacks_names_full_history(repository):
         refused(ci.change_scope, worktree, missing, head),
         refused(ci.change_scope, worktree, head, missing),
         refused(ci.push_scope, worktree, head, missing),
+        refused(ci.push_scope, worktree, None, missing),
+        refused(ci.merge_scope, worktree, missing),
     ):
         assert failure.code == "unknown_revision"
         assert failure.exit_code == 2

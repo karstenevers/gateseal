@@ -1,45 +1,39 @@
 import re
 from importlib.resources import files
+from pathlib import Path
 
 import pytest
-import yaml
 from conftest import PIN
+from gate_files import BRANCH, SERVED, gate_file
+from gateseal.ci_providers import PROVIDERS
+from gateseal.ci_providers.github import CHECKOUT
 from gateseal.diagnostics import GatesealError
-from gateseal.github import CHECKOUT, MISE_SHA256, MISE_URL, UV_SHA256, UV_URL
-from gateseal.lock import compile_lock, compile_outputs
+from gateseal.lock import compile_outputs
 from gateseal.manifest import CI as Table
-from gateseal.manifest import BundledSource, git_source, parse_manifest, render, resolve
+from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy
-from gateseal.setup import PYTHON
 from gateseal.tools import load_definition
 from gateseal.tools.model import HOOK_STAGES, Origin, Stage
 
-WORKFLOW = ".github/workflows/gateseal.yml"
-CI = '\n[ci]\nprovider = "github"\ndefault_branch = "release/2.x"\n'
-GIT = "https://github.com/team/gateseal-policy.git"
 POLICY = load_bundled_policy()
+EXPECTED = Path(__file__).with_name("expected_github_workflow.yml")
 
 
-def outputs(manifest, source=None):
-    parsed = parse_manifest(manifest)
-    return compile_outputs(
-        resolve(parsed, POLICY), PIN, source or BundledSource(POLICY.release)
-    )
-
-
-def bundled(extra=CI):
+def bundled(extra=""):
+    """Return a Manifest without [ci], or with the text of an invalid table."""
     return render(("hygiene", "secrets"), BundledSource(POLICY.release)) + (
         extra.encode()
     )
 
 
-def workflow(source=None):
-    document = yaml.safe_load(outputs(bundled(), source=source)[WORKFLOW])
-    return document, document["jobs"]["gateseal"]
+def test_the_workflow_equals_the_reviewed_file():
+    """A change of these bytes makes every repository run gateseal configure."""
+    assert gate_file("github", SERVED["github"]).data == EXPECTED.read_bytes()
 
 
 def test_the_workflow_guards_every_event_with_read_only_full_history():
-    document, job = workflow()
+    document = gate_file("github").document
+    job = document["jobs"]["gateseal"]
     events = document[True]
     assert set(events) == {
         "push",
@@ -48,7 +42,7 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
         "workflow_dispatch",
         "schedule",
     }
-    assert events["push"] == {"branches": ["release/2.x"]}
+    assert events["push"] == {"branches": [BRANCH]}
     assert all(
         value is None
         for name, value in events.items()
@@ -113,7 +107,7 @@ def run_concurrency(event, run_id, pull_request=None):
     github = {"event_name": event, "run_id": run_id, "event": {}}
     if pull_request is not None:
         github["event"]["pull_request"] = {"number": pull_request}
-    concurrency = workflow()[0]["concurrency"]
+    concurrency = gate_file("github").document["concurrency"]
     return (
         evaluate(concurrency["group"], github),
         evaluate(concurrency["cancel-in-progress"], github),
@@ -148,65 +142,10 @@ def test_every_other_run_has_a_group_of_its_own_and_never_cancels(event):
     assert not {first[0], second[0]} & pull_requests
 
 
-def test_preparation_pins_its_tools_and_the_locked_gateseal():
-    _, job = workflow()
-    env = job["steps"][1]["env"]
-    assert (env["GATESEAL_UV_URL"], env["GATESEAL_UV_SHA256"]) == (UV_URL, UV_SHA256)
-    assert (env["GATESEAL_MISE_URL"], env["GATESEAL_MISE_SHA256"]) == (
-        MISE_URL,
-        MISE_SHA256,
-    )
-    assert (env["GATESEAL_REPOSITORY"], env["GATESEAL_COMMIT"]) == (
-        PIN.repository,
-        PIN.commit,
-    )
-    assert env["GATESEAL_PYTHON"] == PYTHON
-    assert (
-        '"gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"'
-        in job["steps"][1]["run"]
-    )
-    assert not any("TOKEN" in key or key.startswith("GIT_CONFIG") for key in env)
-    assert "NETRC" not in job["steps"][1]["run"]
-
-
-@pytest.mark.parametrize(
-    "repository,helped",
-    [
-        (GIT, True),
-        ("https://gitlab.com/team/gateseal-policy.git", False),
-        ("ssh://git@github.com/team/gateseal-policy.git", False),
-    ],
-)
-def test_only_a_github_https_policy_gets_a_scoped_token(repository, helped):
-    source = git_source(repository, ".", "c" * 40, "v1.0.0")
-    _, job = workflow(source)
-    env = job["steps"][1]["env"]
-    tokens = {key for key in env if "TOKEN" in key}
-    assert tokens == ({"GATESEAL_POLICY_TOKEN"} if helped else set())
-    if helped:
-        assert env["GIT_CONFIG_COUNT"] == "3"
-        assert env["GIT_CONFIG_VALUE_1"] == ""
-        assert env["GIT_CONFIG_KEY_2"] == f"credential.{GIT}.helper"
-    else:
-        assert not any(key.startswith("GIT_CONFIG") for key in env)
-
-
 def test_a_manifest_without_ci_has_no_workflow():
-    assert WORKFLOW not in outputs(bundled(""))
-
-
-def test_the_lock_records_the_workflow():
-    manifest = bundled()
-    source = BundledSource(POLICY.release)
-    selection = resolve(parse_manifest(manifest), POLICY)
-    lock = compile_lock(manifest, source, POLICY, PIN, selection)
-    assert WORKFLOW in lock["outputs"]
-
-
-def test_the_workflow_passes_its_own_hygiene():
-    data = outputs(bundled())[WORKFLOW]
-    assert data.endswith(b"\n") and not data.endswith(b"\n\n")
-    assert all(line == line.rstrip() for line in data.decode().splitlines())
+    selection = resolve(parse_manifest(bundled()), POLICY)
+    outputs = compile_outputs(selection, PIN, BundledSource(POLICY.release))
+    assert PROVIDERS["github"].path not in outputs
 
 
 @pytest.mark.parametrize(

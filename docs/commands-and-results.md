@@ -38,9 +38,9 @@ The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, 
 
 A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
 
-A `duration` diagnostic gives the `gate`'s time in `seconds`, to one decimal, before its other entries. It also gives `budget_seconds` when the policy sets a [time budget](github-ci.md#time-budget). A gate over the budget also gives an `over_time_budget` warning. A `nothing_to_check` result has no time.
+A `duration` diagnostic gives the `gate`'s time in `seconds`, to one decimal, before its other entries. It also gives `budget_seconds` when the policy sets a [time budget](ci-gate.md#time-budget). A gate over the budget also gives an `over_time_budget` warning. A `nothing_to_check` result has no time.
 
-A warning leaves the exit code unchanged. Text output prints it as a `Warning:` line. When `GITHUB_ACTIONS` is `true`, as in GitHub Actions, text output prints it as `::warning title=gateseal::<message>`, which GitHub shows as an annotation. `--json` output never holds this line.
+A warning leaves the exit code unchanged. Text output prints it as a `Warning:` line. In GitHub Actions, where `GITHUB_ACTIONS` is `true`, text output prints it as `::warning title=gateseal::<message>`. In Azure Pipelines, where `TF_BUILD` is `True`, text output prints it as `##vso[task.logissue type=warning]<message>`. Each provider shows that line as a warning on the run. `--json` output never holds this line.
 
 ## Exit codes
 

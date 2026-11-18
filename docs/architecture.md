@@ -8,7 +8,7 @@ For example, this Manifest fragment selects the bundled Python checks:
 capabilities = ["hygiene", "python"]
 ```
 
-After an edit, `gateseal configure` writes the Lock and the pre-commit configuration. If enabled, it also writes a GitHub Actions workflow. See [Adjust a setup](adjust-a-setup.md).
+After an edit, `gateseal configure` writes the Lock and the pre-commit configuration. If enabled, it also writes a GitHub Actions workflow or an Azure Pipelines file. See [Adjust a setup](adjust-a-setup.md).
 
 ```mermaid
 flowchart LR
@@ -109,7 +109,7 @@ The first commit hook compares staged generated files with the staged Lock. CI c
 
 A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, the host, and the policy's authors must be trusted.
 
-A local user can bypass hooks with `git commit --no-verify`. A repository administrator can require the GitHub CI check before merging. See [GitHub CI](github-ci.md) for event scopes and private policy access.
+A local user can bypass hooks with `git commit --no-verify`. A repository administrator can require the CI check before merging. See [the CI gate](ci-gate.md) for event scopes, and [GitHub CI](github-ci.md) or [Azure Pipelines](azure-pipelines.md) for the setup and private policy access.
 
 ## Alternatives and costs
 

@@ -72,19 +72,49 @@ def change_scope(worktree: Worktree, base: str, head: str) -> Scope:
     )
 
 
-def push_scope(worktree: Worktree, before: str, after: str) -> Scope | None:
+def merge_scope(worktree: Worktree, merge: str) -> Scope:
+    """Check what a pull request's merge commit brings to its target branch.
+
+    A CI provider that names no base checks out the merge of a pull request
+    into its target branch. The first parent of that commit is the target's
+    commit, so it is the base, and the merge commit is the head.
+    """
+    _require(worktree, _object_id(merge, "--merge"))
+    listed = _git(worktree, "rev-list", "--parents", "--max-count=1", merge)
+    parents = listed.stdout.decode().split()[1:]
+    if len(parents) < 2:
+        raise GatesealError(
+            "invalid_invocation",
+            f"--merge needs the merge commit of a pull request, and {merge} has "
+            "fewer than two parents.",
+        )
+    target = parents[0]
+    return Scope(
+        (target, merge),
+        f"{target}..{merge}",
+        merge,
+        f"The gate checks the files and commits that the merge commit {merge} "
+        f"adds to its first parent {target}.",
+    )
+
+
+def push_scope(worktree: Worktree, before: str | None, after: str) -> Scope | None:
     """Check what a push added, or return None when it deleted its ref.
 
     A new branch, a before the clone lacks, and a rewrite that drops before
     from after's history all leave no range the push alone added, so every
-    file and every commit reachable from after are checked.
+    file and every commit reachable from after are checked. So are they when
+    before is None, for a CI provider that does not name the replaced commit.
     """
-    _object_id(before, "--before")
+    if before is not None:
+        _object_id(before, "--before")
     _object_id(after, "--after")
     if DELETED.fullmatch(after):
         return None
     _require(worktree, after)
-    if DELETED.fullmatch(before):
+    if before is None:
+        why = "The event does not name the commit that the push replaced"
+    elif DELETED.fullmatch(before):
         why = "The push created its branch"
     elif not _is_commit(worktree, before):
         why = f"The clone lacks {before}, the commit the push replaced"

@@ -181,6 +181,50 @@ def test_a_secret_that_a_merge_added_fails_the_history_scan(installed, adopted):
     assert SECRET not in json.dumps(result)
 
 
+def test_a_merge_commit_is_gated_from_its_first_parent(installed, adopted):
+    """As a pull request's validation build, which names only its merge commit."""
+    unchecked(adopted, "old.txt", f"key = {SECRET}\n", "A key the target already has")
+    success(["git", "checkout", "-q", "-b", "topic"], adopted)
+    unchecked(adopted, "topic.txt", "topic\n", "Topic")
+    success(["git", "checkout", "-q", "-"], adopted)
+    target = unchecked(adopted, "main.txt", "main\n", "Main")
+    success(["git", "merge", "-q", "--no-ff", "-m", "Merge topic", "topic"], adopted)
+    passed = installed.cli(adopted, "gate", "--merge", head(adopted))
+    assert passed["code"] == "checks_passed"
+    [history] = [d for d in passed["diagnostics"] if d["category"] == "history"]
+    assert f"{target}..{head(adopted)}" in history["message"]
+    success(["git", "checkout", "-q", "topic"], adopted)
+    leaked = unchecked(adopted, "leak.txt", f"key = {SECRET}\n", "Leak")
+    success(["git", "checkout", "-q", "-"], adopted)
+    success(["git", "merge", "-q", "--no-ff", "-m", "Merge the leak", "topic"], adopted)
+    success(["git", "branch", "-D", "topic"], adopted)
+    failed = installed.cli(adopted, "gate", "--merge", head(adopted), code=1)
+    findings = [d for d in failed["diagnostics"] if d["category"] == "finding"]
+    assert {(f["file"], f["hook"]) for f in findings} == {
+        ("leak.txt", "betterleaks"),
+        ("leak.txt", "history"),
+    }
+    assert {f.get("commit") for f in findings} == {None, leaked, head(adopted)}
+    not_a_merge = installed.cli(adopted, "gate", "--merge", leaked, code=2)
+    assert not_a_merge["code"] == "invalid_invocation"
+
+
+def test_a_push_without_its_replaced_commit_scans_every_commit(installed, adopted):
+    """As a push build of a CI provider that does not name the replaced commit."""
+    leaked = unchecked(adopted, "leak.txt", f"key = {SECRET}\n", "Leak")
+    success(["git", "rm", "-q", "leak.txt"], adopted)
+    success(["git", "commit", "-q", "-m", "Remove the leak"], adopted)
+    clean = unchecked(adopted, "clean.txt", "clean\n", "Clean")
+    ranged = installed.cli(adopted, "gate", "--before", head(adopted), "--after", clean)
+    assert ranged["code"] == "checks_passed"
+    whole = installed.cli(adopted, "gate", "--after", clean, code=1)
+    findings = [d for d in whole["diagnostics"] if d["category"] == "finding"]
+    assert [(f["file"], f["hook"], f["commit"]) for f in findings] == [
+        ("leak.txt", "history", leaked)
+    ]
+    assert SECRET not in json.dumps(whole)
+
+
 def test_events_without_a_checkable_range(installed, adopted):
     current = head(adopted)
     deleted = installed.cli(adopted, "gate", "--before", current, "--after", ZEROS)

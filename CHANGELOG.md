@@ -45,6 +45,21 @@ change the manifest, policy or lock format, and its entry says how to move.
   it in whole seconds. Each `gateseal gate` that checks files reports its time
   in a `duration` diagnostic. A gate over the budget also gives an
   `over_time_budget` warning and keeps the exit code that its checks decide.
+- Azure Pipelines as a second CI provider. `gateseal configure --ci azure`
+  writes `azure-pipelines-gateseal.yml`, which the Lock owns. Its builds run
+  the CI gate on a Microsoft-hosted `ubuntu-24.04` agent for pull request
+  validation, pushes to the default branch, a weekly schedule and manual
+  runs. A Git policy on an `https://dev.azure.com/` URL gets the job's token,
+  or the secret variable `GATESEAL_POLICY_TOKEN`, for that repository only.
+  The pipeline names that repository as a resource that its job uses, which
+  the job's token needs to read it.
+  With `TF_BUILD=True`, text output prints each warning as a
+  `##vso[task.logissue type=warning]` logging command.
+- `gateseal gate --merge COMMIT` checks what a pull request's merge commit
+  adds to its first parent, for a CI provider that names no base commit.
+  `gateseal gate --after COMMIT` without `--before` checks every file and
+  scans every commit reachable from that commit, for a push whose event does
+  not name the commit it replaced.
 
 ### Changed
 
