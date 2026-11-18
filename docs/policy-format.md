@@ -6,7 +6,16 @@ A policy directory contains `policy.toml`, its rule files, optional tool definit
 gateseal policy init policy
 ```
 
-See [Author a team policy](author-a-policy.md) for editing and release steps. A repository selects a policy in `gateseal.toml`, its Manifest. The generated `gateseal.lock`, or Lock, records that selection and generated files.
+See [Author a team policy](author-a-policy.md) for editing and release steps. A repository selects a release of it in its [Manifest](policy-contract.md).
+
+## What you edit
+
+| File | Who writes it |
+| --- | --- |
+| `policy.toml` | `gateseal policy init` creates it. You edit it. `policy add` and `policy pin` change only their own lines. |
+| `rules/` | `policy init` creates the bundled rules. Edit them for your team. |
+| `tools/<name>.toml` | Optional. Write one only to add a tool that gateseal does not ship. |
+| `policy.lock` | `gateseal policy init`, `lock` and `add` write it. Never edit it. |
 
 ## Example
 
@@ -50,78 +59,7 @@ reviewed = ["1.9.0", "1.8.0"]
 
 A repository selects this policy in its Manifest. [Manifest and Lock](policy-contract.md#example) shows the matching Manifest.
 
-```mermaid
-flowchart LR
-    accTitle: How the policy, the Manifest and the Lock connect
-    accDescr: The team policy offers capabilities and choices. The Manifest of a repository selects one policy release and picks from them. gateseal configure reads both and writes the Lock and the generated files, which the repository commits.
-    policy["policy.toml<br/>offers capabilities and choices<br/>in the team's Git repository"]
-    manifest["gateseal.toml, the Manifest<br/>picks from the policy<br/>you write it"]
-    configure(["gateseal configure"])
-    lock["gateseal.lock, the Lock<br/>and generated files<br/>gateseal writes them"]
-    policy -- "selected by tag and commit" --> manifest
-    policy --> configure
-    manifest --> configure
-    configure --> lock
-```
-
-The same fields, cut down to the lines that link the three files. A word in a comment names one fact that the files share. The same word in two files means the lines belong together. For example, `skip` is the policy allowing a skip and the Manifest using it. The list below the files explains each word.
-
-`policy.toml`, in the team's policy repository, tagged `team-2026.11`:
-
-```toml
-release = "team-2026.11"                      # release: label of this policy version
-
-[capabilities.hygiene]
-optional = ["check-yaml"]                     # skip: a repository may skip this
-
-[capabilities.python.tools.ruff]
-pin = "0.17.1"                                # pin: tool version to use
-
-[capabilities.python.choices]
-target_version = "py311"                      # default: a repository may change it
-```
-
-`gateseal.toml`, the Manifest, in the repository that adopts the policy:
-
-```toml
-[policy]
-repository = "https://github.com/team/gateseal-policy.git"
-commit = "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90"   # commit: exact policy version
-tag = "team-2026.11"                          # tag: Git tag that names the commit
-
-[choices.hygiene]
-skip = ["check-yaml"]                         # skip: allowed by the policy
-
-[choices.python]
-target_version = "py312"                      # default: replaced by this value
-```
-
-`gateseal.lock`, the Lock, which `gateseal configure` writes:
-
-```jsonc
-{
-  "policy": {
-    "release": "team-2026.11",                           // release
-    "commit": "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90", // commit
-    "tag": "team-2026.11",                               // tag
-    "digest": "sha256:acafb1dd…"
-  },
-  "choices": {
-    "hygiene": { "skip": ["check-yaml"] },               // skip
-    "python": { "target_version": "py312" }              // default, as replaced
-  },
-  "components": {
-    "ruff": { "version": "0.17.1", "revision": "38bfb07c…" }  // pin
-  }
-}
-```
-
-- `release`: the policy names its release. The Lock records that label.
-- `skip`: the policy lists which hooks are optional. The Manifest may skip only those. `check-yaml` then no longer appears in the Lock's `hook_ids`.
-- `pin`: the policy pins the tool version. The Lock records that version with the exact upstream revision.
-- `default`: the policy sets a default for a choice. The Manifest can change it. The Lock records the final value.
-- `tag`: the Manifest names the Git tag that points to the commit. gateseal checks this when you adopt the policy. The tag name does not have to equal the release label.
-- `commit`: the commit pins the exact policy files. The Lock records the same commit and a digest of their content.
+[How gateseal works](architecture.md#how-the-policy-manifest-and-lock-connect) shows how the policy, the Manifest and the Lock connect, with excerpts of all three.
 
 ## Policy fields
 

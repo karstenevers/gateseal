@@ -29,6 +29,69 @@ flowchart LR
     commit -- "pre-commit and mise install and run" --> tools
 ```
 
+## How the policy, Manifest and Lock connect
+
+The policy offers capabilities and choices. The Manifest selects one release of the policy by its Git tag and commit, and picks from the offer. `gateseal configure` reads both and writes the Lock and the generated files. You write the Manifest. gateseal writes the Lock.
+
+These excerpts are cut down to the lines that link the three files. See [Policy format](policy-format.md#example) and [Manifest and Lock](policy-contract.md#example) for the full examples. A word in a comment names one fact that the files share. The same word in two files means the lines belong together. For example, `skip` is the policy allowing a skip and the Manifest using it. The list below the files explains each word.
+
+`policy.toml`, in the team's policy repository, tagged `team-2026.11`:
+
+```toml
+release = "team-2026.11"                      # release: label of this policy version
+
+[capabilities.hygiene]
+optional = ["check-yaml"]                     # skip: a repository may skip this
+
+[capabilities.python.tools.ruff]
+pin = "0.17.1"                                # pin: tool version to use
+
+[capabilities.python.choices]
+target_version = "py311"                      # default: a repository may change it
+```
+
+`gateseal.toml`, the Manifest, in the repository that adopts the policy:
+
+```toml
+[policy]
+repository = "https://github.com/team/gateseal-policy.git"
+commit = "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90"   # commit: exact policy version
+tag = "team-2026.11"                          # tag: Git tag that names the commit
+
+[choices.hygiene]
+skip = ["check-yaml"]                         # skip: allowed by the policy
+
+[choices.python]
+target_version = "py312"                      # default: replaced by this value
+```
+
+`gateseal.lock`, the Lock, which `gateseal configure` writes:
+
+```jsonc
+{
+  "policy": {
+    "release": "team-2026.11",                           // release
+    "commit": "3f2a9c1d5e7b4a60918c2d4e6f8a0b1c3d5e7f90", // commit
+    "tag": "team-2026.11",                               // tag
+    "digest": "sha256:acafb1dd…"
+  },
+  "choices": {
+    "hygiene": { "skip": ["check-yaml"] },               // skip
+    "python": { "target_version": "py312" }              // default, as replaced
+  },
+  "components": {
+    "ruff": { "version": "0.17.1", "revision": "38bfb07c…" }  // pin
+  }
+}
+```
+
+- `release`: the policy names its release. The Lock records that label.
+- `skip`: the policy lists which hooks are optional. The Manifest may skip only those. `check-yaml` then no longer appears in the Lock's `hook_ids`.
+- `pin`: the policy pins the tool version. The Lock records that version with the exact upstream revision.
+- `default`: the policy sets a default for a choice. The Manifest can change it. The Lock records the final value.
+- `tag`: the Manifest names the Git tag that points to the commit. gateseal checks this when you adopt the policy. The tag name does not have to equal the release label.
+- `commit`: the commit pins the exact policy files. The Lock records the same commit and a digest of their content.
+
 ## What the checks trust
 
 ```mermaid
@@ -44,7 +107,7 @@ flowchart TD
 
 The first commit hook compares staged generated files with the staged Lock. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI.
 
-A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, the host, and the policy's authors must be trusted.
+A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, the host, and the policy's authors must be trusted.
 
 A local user can bypass hooks with `git commit --no-verify`. A repository administrator can require the GitHub CI check before merging. See [GitHub CI](github-ci.md) for event scopes and private policy access.
 

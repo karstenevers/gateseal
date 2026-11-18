@@ -24,7 +24,7 @@ from mkdocs.structure.files import File, Files
 from mkdocs.structure.pages import Page
 from pymdownx.superfences import fence_code_format
 
-ROOT_PAGES = {"GLOSSARY.md": "glossary.md", "VISION.md": "vision.md"}
+ROOT_PAGES = {"GLOSSARY.md": "glossary.md"}
 # Links that leave this repository and render as plain text. An entry that no
 # page uses fails the build, so the list only shrinks.
 OUTSIDE_LINKS: tuple[str, ...] = ()
