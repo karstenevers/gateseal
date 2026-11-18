@@ -4,7 +4,9 @@ from datetime import date
 from pathlib import Path
 from typing import cast
 
-from gateseal import __version__, github, sources
+from gateseal import __version__, sources
+from gateseal.ci_providers import PROVIDERS
+from gateseal.ci_providers.model import GateJob
 from gateseal.compiler_release import PRE_COMMIT, REPOSITORY, GatesealPin
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import (
@@ -36,6 +38,7 @@ from gateseal.manifest import (
 )
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
+from gateseal.setup import PYTHON
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.validation import (
@@ -47,6 +50,9 @@ from gateseal.validation import (
     sha,
     string,
 )
+
+CI_FILES = tuple(sorted(provider.path for provider in PROVIDERS.values()))
+"""Every file a CI provider can own, whichever one the Manifest selects."""
 
 
 @dataclass(frozen=True)
@@ -93,9 +99,9 @@ def compile_outputs(
     choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it, so a file is kept from a tool only by a
     policy that exposes exclude in that tool's capability. The Manifest's
-    Repository Hooks come last. A Manifest's [ci] adds the provider's
-    workflow, which names the gateseal commit CI installs and the policy
-    repository its credential helper serves.
+    Repository Hooks come last. A Manifest's [ci] adds the provider's file,
+    which names the gateseal commit CI installs and the policy repository its
+    credential helper serves.
     """
     repositories = [
         pin.hook_repository(),
@@ -108,8 +114,14 @@ def compile_outputs(
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
     if selection.ci is not None:
-        outputs[github.WORKFLOW] = github.workflow(selection.ci, pin, source)
+        provider = PROVIDERS[selection.ci.provider]
+        outputs[provider.path] = provider.write(_gate_job(selection.ci, pin, source))
     return dict(sorted(outputs.items()))
+
+
+def _gate_job(ci: CI, pin: GatesealPin, source: Source) -> GateJob:
+    policy = source.repository if isinstance(source, GitSource) else None
+    return GateJob(ci.default_branch, PYTHON, pin.repository, pin.commit, policy)
 
 
 def policy_record(source: Source, policy: Policy) -> dict[str, object]:
@@ -343,7 +355,7 @@ def ledger_pin(lock: dict[str, object]) -> GatesealPin:
             next_step=f"Install the newer gateseal that wrote {LOCK}."
             if newer
             else f"Delete {LOCK} and the files gateseal wrote ({CONFIG}, "
-            f"{OWNED}/ and {github.WORKFLOW}), then run gateseal configure.",
+            f"{OWNED}/ and {PROVIDERS['github'].path}), then run gateseal configure.",
         )
     try:
         return GatesealPin.parse(lock.get("gateseal"))
@@ -875,7 +887,7 @@ def _obsolete(
     """Return the outputs the old Lock owns and the new selection drops.
 
     Each still holds the bytes that Lock records, so configure can delete it, as
-    for the workflow that a removed [ci] would otherwise leave running. An
+    for the CI file that a removed [ci] would otherwise leave running. An
     edited one stops configure, as an edited output it writes does. A name this
     gateseal could never own stops it too, so an edited Lock, or one that
     another release wrote, cannot have it delete another file.
@@ -912,4 +924,4 @@ def _obsolete(
 
 
 def _ownable(name: str) -> bool:
-    return name == CONFIG or name == github.WORKFLOW or name.startswith(OWNED + "/")
+    return name == CONFIG or name in CI_FILES or name.startswith(OWNED + "/")

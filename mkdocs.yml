@@ -55,7 +55,9 @@ nav:
       - Troubleshooting: troubleshooting.md
   - Manage checks:
       - Adjust a setup: adjust-a-setup.md
+      - The CI gate: ci-gate.md
       - GitHub CI: github-ci.md
+      - Azure Pipelines: azure-pipelines.md
       - Upgrade and roll back: upgrade.md
   - Team policies:
       - Adopt a team policy: adopt-a-team-policy.md

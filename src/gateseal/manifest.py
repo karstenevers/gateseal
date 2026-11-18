@@ -8,6 +8,7 @@ from datetime import date
 from typing import TypeGuard, cast
 
 from gateseal import __version__
+from gateseal.ci_providers import PROVIDERS
 from gateseal.compiler_release import PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import MANIFEST, relative_name
@@ -40,8 +41,6 @@ SCP = re.compile(
     r"([A-Za-z0-9_][A-Za-z0-9._-]*@)?([A-Za-z0-9][A-Za-z0-9.-]*):(?!//)(.+)"
 )
 REASON_LIMIT = 500
-CI_PROVIDERS = frozenset({"github"})
-"""The CI providers whose workflow this compiler renders."""
 BRANCH = re.compile(r"[A-Za-z0-9._/-]+")
 
 
@@ -130,9 +129,9 @@ class ExceptionRequest:
 
 @dataclass(frozen=True)
 class CI:
-    """The CI provider whose workflow configure writes, and the branch it guards.
+    """The CI provider whose file configure writes, and the branch it guards.
 
-    default_branch is the branch whose pushes the workflow checks.
+    default_branch is the branch whose pushes the provider's file checks.
     """
 
     provider: str
@@ -142,7 +141,7 @@ class CI:
 def _ci(value: object) -> CI:
     table = fields(value, {"provider", "default_branch"}, "manifest.ci")
     provider = string(table["provider"], "ci.provider")
-    if provider not in CI_PROVIDERS:
+    if provider not in PROVIDERS:
         raise GatesealError(
             "unsupported_ci_provider",
             f"ci.provider is {provider!r}, which gateseal {__version__} does not "

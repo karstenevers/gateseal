@@ -27,7 +27,7 @@ gateseal keeps one reviewed set of commit checks in every repository, on develop
 - **Drift detection.** Each commit and CI run compares the generated files with the Lock.
 - **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock.
 - **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries must match recorded checksums.
-- **Fast CI out of the box.** The generated workflow checks only what a pull request changed. With the secrets checks on, Betterleaks scans its commits. A scheduled run checks every file. You do not have to maintain this logic. [How it works](docs/github-ci.md#what-the-gate-checks).
+- **Fast CI out of the box.** Pull requests check only changed files, and a scheduled run checks everything. A new push cancels the older run, and an optional time budget warns when the gate gets slow. [How it works](docs/ci-gate.md#what-the-gate-checks).
 - **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and the next step.
 
 ## When not to use it
@@ -55,14 +55,14 @@ Teammates need Git, pre-commit and, for release binaries such as Betterleaks, mi
 ## What it supports
 
 - **Bundled checks:** file hygiene, Ruff for Python, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
-- **CI:** GitHub Actions. A new push to a pull request cancels the older run, so runner time goes only to the newest commit. A policy can set a time budget, and a slower gate shows a warning on the pull request that you or a coding agent can act on.
+- **CI:** GitHub Actions and Azure Pipelines (Azure DevOps).
 - **Platforms:** macOS on arm64 and Linux on x86-64.
-- **Planned:** upgrade pull requests for new tool releases, Windows, and Azure DevOps.
+- **Planned:** upgrade pull requests for new tool releases, and Windows.
 
 ## Documentation
 
 - [Try gateseal](docs/demo.md) in a scratch repository.
-- [Adjust checks](docs/adjust-a-setup.md), [enable CI](docs/github-ci.md), or [upgrade](docs/upgrade.md).
+- [Adjust checks](docs/adjust-a-setup.md), enable CI on [GitHub](docs/github-ci.md) or [Azure Pipelines](docs/azure-pipelines.md), or [upgrade](docs/upgrade.md).
 - [Adopt a team policy](docs/adopt-a-team-policy.md) or [author one](docs/author-a-policy.md).
 - [Troubleshoot](docs/troubleshooting.md), look up [commands](docs/commands-and-results.md), or read [how gateseal works](docs/architecture.md).
 - [Contribute](CONTRIBUTING.md) or report a vulnerability as [SECURITY.md](SECURITY.md) describes.

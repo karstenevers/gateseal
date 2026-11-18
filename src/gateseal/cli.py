@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from typing import NoReturn, cast
@@ -15,6 +16,7 @@ from gateseal import (
     setup,
     upgrade,
 )
+from gateseal.ci_providers import PROVIDERS
 from gateseal.diagnostics import GatesealError, Result
 from gateseal.paths import resolved
 from gateseal.worktree import (
@@ -89,6 +91,7 @@ def _parser() -> Parser:
         ),
         "run": "gateseal run; gateseal --repo '/work/team repo' run --json",
         "gate": "gateseal gate; gateseal gate --base BASE_SHA --head HEAD_SHA; "
+        "gateseal gate --merge MERGE_SHA; gateseal gate --after AFTER_SHA; "
         "gateseal gate --before BEFORE_SHA --after AFTER_SHA --json",
         "setup": "gateseal setup; gateseal setup --refresh; gateseal setup --json",
         "status": "gateseal status --json",
@@ -106,7 +109,7 @@ def _parser() -> Parser:
             child.add_argument("--policy-path", help="Policy directory, default .")
             child.add_argument("--policy-tag", help="Tag that must name the commit")
             child.add_argument(
-                "--ci", choices=["github"], help="Write the CI provider's workflow"
+                "--ci", choices=sorted(PROVIDERS), help="Write the CI provider's file"
             )
         elif command == "setup":
             child.add_argument(
@@ -166,10 +169,12 @@ def _policy_actions(policy: argparse.ArgumentParser) -> None:
 GATE_SCOPES = {
     "--base": "Base commit of a pull request or merge group",
     "--head": "Head commit of a pull request or merge group",
-    "--before": "Commit a push replaced",
+    "--merge": "Merge commit of a pull request, whose first parent is the base",
+    "--before": "Commit a push replaced, when the event names it",
     "--after": "Commit a push left its ref at",
 }
-"""gate's revision flags, in pairs: --base and --head, or --before and --after."""
+"""gate's revision flags, in groups: --base and --head, or --merge, or --after
+with the --before that the event names."""
 
 
 def _operation(arguments: argparse.Namespace) -> Result:
@@ -262,27 +267,37 @@ def _upgrade(worktree: Worktree, arguments: argparse.Namespace) -> Result:
 
 
 def _scope(worktree: Worktree, arguments: argparse.Namespace) -> ci.Scope | None:
-    """Plan the gate's scope from at most one complete pair of revision flags."""
+    """Plan the gate's scope from at most one complete group of revision flags."""
     given = cast(dict[str, str | None], vars(arguments))
-    change, push = (given["base"], given["head"]), (given["before"], given["after"])
-    pairs = [pair for pair in (change, push) if pair != (None, None)]
-    if len(pairs) > 1 or any(None in pair for pair in pairs):
+    base, head, merge = given["base"], given["head"], given["merge"]
+    before, after = given["before"], given["after"]
+    groups = [(base, head), (merge,), (before, after)]
+    named = [group for group in groups if any(flag is not None for flag in group)]
+    halved = (base is None) != (head is None) or (before is not None and after is None)
+    if len(named) > 1 or halved:
         raise GatesealError(
             "invalid_invocation",
-            "Pass --base with --head, or --before with --after, or neither pair "
-            "to check every file.",
+            "Pass --base with --head, or --merge, or --after with the --before "
+            "that the event names, or none of them to check every file.",
         )
-    base, head = change
-    before, after = push
-    # pytestmut: off[bool.and_or] -- the check above sets a pair or neither
+    # pytestmut: off[bool.and_or] -- the check above sets both or neither
     if base is not None and head is not None:
         return ci.change_scope(worktree, base, head)
     # pytestmut: on
-    # pytestmut: off[bool.and_or] -- the check above sets a pair or neither
-    if before is not None and after is not None:
+    if merge is not None:
+        return ci.merge_scope(worktree, merge)
+    if after is not None:
         return ci.push_scope(worktree, before, after)
-    # pytestmut: on
     return ci.full_scope()
+
+
+def _annotation(environment: Mapping[str, str]) -> Callable[[str], str] | None:
+    """Return how the CI provider that runs this process shows a warning."""
+    for provider in PROVIDERS.values():
+        variable, value = provider.running
+        if environment.get(variable) == value:
+            return provider.warning
+    return None
 
 
 def _command_name(raw: list[str]) -> str:
@@ -338,6 +353,5 @@ def main(argv: list[str] | None = None) -> int:
             exc.exit_code,
             next_steps=(exc.next_step,) if exc.next_step else (),
         )
-    annotate = os.environ.get("GITHUB_ACTIONS") == "true"
-    print(result.render(as_json, full, workflow_commands=annotate))
+    print(result.render(as_json, full, annotation=_annotation(os.environ)))
     return result.exit_code

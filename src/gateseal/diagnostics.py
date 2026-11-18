@@ -1,5 +1,6 @@
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 ENTRY_LIMIT = 200
@@ -187,13 +188,6 @@ def _safe_url(match: re.Match[str]) -> str:
         return "[redacted-url]"
 
 
-def _warning(message: str, workflow_command: bool) -> str:
-    if not workflow_command:
-        return f"Warning: {message}"
-    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    return f"::warning title=gateseal::{escaped}"
-
-
 @dataclass(frozen=True)
 class Note:
     """One diagnostic with its own severity, such as a Version Exception."""
@@ -217,12 +211,16 @@ class Result:
     """Structured diagnostics, such as one per hook and one per finding."""
 
     def render(
-        self, as_json: bool, full: bool = False, *, workflow_commands: bool = False
+        self,
+        as_json: bool,
+        full: bool = False,
+        *,
+        annotation: Callable[[str], str] | None = None,
     ) -> str:
         """Return the result as text or JSON.
 
-        workflow_commands prints each warning of text output as a GitHub
-        workflow command, which GitHub Actions shows as an annotation.
+        annotation turns each warning of text output into the command that a
+        CI provider shows as an annotation of the run.
         """
         detail = redact(self.details)
         if not full and len(detail) > 6000:
@@ -234,7 +232,7 @@ class Result:
         notes = [Note(n.severity, n.category, redact(n.message)) for n in self.notes]
         if not as_json:
             lines = [
-                _warning(n.message, workflow_commands)
+                (annotation or "Warning: {}".format)(n.message)
                 if n.severity == "warning"
                 else n.message
                 for n in notes

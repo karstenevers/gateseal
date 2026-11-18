@@ -1,6 +1,7 @@
-"""In GitHub Actions, text output prints each warning as a workflow command.
+"""In CI, text output prints each warning as the provider's own command.
 
-GitHub shows a ::warning command as an annotation of the run. A consumer whose
+GitHub shows a ::warning command, and Azure Pipelines a task.logissue command,
+as an annotation of the run. A consumer whose
 Version Exception selects the policy's pin gets a redundant_exception warning
 from gateseal check, through main in-process.
 """
@@ -42,33 +43,44 @@ def excepted(tmp_path_factory):
 
 
 @pytest.mark.parametrize(
-    "value,prefix",
+    "variable,value,prefix,percent",
     [
-        ("true", "::warning title=gateseal::"),
-        ("false", "Warning: "),
-        (None, "Warning: "),
+        ("GITHUB_ACTIONS", "true", "::warning title=gateseal::", "100%25"),
+        ("GITHUB_ACTIONS", "false", "Warning: ", "100%"),
+        ("TF_BUILD", "True", "##vso[task.logissue type=warning]", "100%AZP25"),
+        ("TF_BUILD", "true", "Warning: ", "100%"),
+        (None, None, "Warning: ", "100%"),
     ],
-    ids=["github actions", "false", "unset"],
+    ids=[
+        "github actions",
+        "not github actions",
+        "azure pipelines",
+        "not azure",
+        "unset",
+    ],
 )
-def test_a_warning_is_a_workflow_command_only_in_github_actions(
-    excepted, monkeypatch, value, prefix
+def test_a_warning_is_the_command_of_the_ci_provider_that_runs_it(
+    excepted, monkeypatch, variable, value, prefix, percent
 ):
-    if value is None:
-        monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
-    else:
-        monkeypatch.setenv("GITHUB_ACTIONS", value)
+    for name in ("GITHUB_ACTIONS", "TF_BUILD"):
+        monkeypatch.delenv(name, raising=False)
+    if variable is not None:
+        monkeypatch.setenv(variable, value)
     [warning] = [
         line for line in gateseal(excepted, "check").splitlines() if MESSAGE in line
     ]
     assert warning.startswith(prefix + MESSAGE)
-    assert ("100%25" in warning) == (value == "true")
+    assert f"{percent} of hooks" in warning
 
 
-def test_json_output_has_no_workflow_command(excepted, monkeypatch):
-    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+@pytest.mark.parametrize(
+    "variable,value", [("GITHUB_ACTIONS", "true"), ("TF_BUILD", "True")]
+)
+def test_json_output_has_no_command(excepted, monkeypatch, variable, value):
+    monkeypatch.setenv(variable, value)
     output = gateseal(excepted, "--json", "check")
     [warning] = [
         d for d in json.loads(output)["diagnostics"] if d["severity"] == "warning"
     ]
     assert warning["message"].startswith(MESSAGE)
-    assert "::warning" not in output
+    assert "::warning" not in output and "##vso" not in output

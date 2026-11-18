@@ -118,13 +118,23 @@ def test_a_gate_past_its_budget_warns_and_keeps_its_result(
     assert not [line for line in lines if line.startswith("::warning")]
 
 
-def test_in_github_actions_the_warning_is_a_workflow_command(installed, team, slow):
+@pytest.mark.parametrize(
+    "variable,value,command",
+    [
+        ("GITHUB_ACTIONS", "true", "::warning title=gateseal::"),
+        ("TF_BUILD", "True", "##vso[task.logissue type=warning]"),
+    ],
+    ids=["github actions", "azure pipelines"],
+)
+def test_in_ci_the_warning_is_the_providers_command(
+    installed, team, slow, variable, value, command
+):
     (slow / "notes.txt").write_text("ready\n")
     success(["git", "add", "notes.txt"], slow)
-    shown = gate_text(installed, slow, dict(team, GITHUB_ACTIONS="true"))
+    shown = gate_text(installed, slow, dict(team, **{variable: value}))
     assert shown.returncode == 0, shown.stdout + shown.stderr
     lines = shown.stdout.splitlines()
-    [warning] = [line for line in lines if line.startswith("::warning")]
-    assert warning.startswith(f"::warning title=gateseal::{TOOK}")
+    [warning] = [line for line in lines if line.startswith(command)]
+    assert warning.startswith(f"{command}{TOOK}")
     assert "time_budget_seconds" in warning
     assert not [line for line in lines if line.startswith("Warning:")]

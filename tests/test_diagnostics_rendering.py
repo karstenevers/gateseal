@@ -57,7 +57,7 @@ def test_a_cut_entry_list_counts_what_it_left_out():
     assert "--verbose" in cut["message"]
 
 
-def test_a_workflow_command_escapes_each_warning_and_json_ignores_the_flag():
+def test_an_annotation_replaces_each_warning_and_json_ignores_it():
     result = Result(
         "check",
         message="Consistent.",
@@ -67,14 +67,15 @@ def test_a_workflow_command_escapes_each_warning_and_json_ignores_the_flag():
         ),
         next_steps=("Look.",),
     )
-    assert result.render(False, workflow_commands=True).splitlines() == [
+    assert result.render(False, annotation="[{}]".format).splitlines() == [
         "Consistent.",
         "Policy 1.",
-        "::warning title=gateseal::100%25%0D%0Areview",
+        "[100%",
+        "review]",
         "Next: Look.",
     ]
     assert "Warning: 100%\r\nreview" in result.render(False)
-    assert result.render(True, workflow_commands=True) == result.render(True)
+    assert result.render(True, annotation="[{}]".format) == result.render(True)
 
 
 def test_entries_stay_out_of_text_output_whatever_their_severity():

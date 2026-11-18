@@ -9,9 +9,9 @@
 | `gateseal.toml`: `schema`, `[policy]` | `gateseal configure` writes them at first. `gateseal upgrade` rewrites `[policy]` when it moves the policy. |
 | `gateseal.toml`: `capabilities` | You choose them with `--capability` at first. Edit them later, then run `gateseal configure`. |
 | `gateseal.toml`: `[choices]`, `[exceptions]` | Empty at first. Edit them only to leave a policy default. `gateseal upgrade` can write an exception. |
-| `gateseal.toml`: `[hooks]`, `[ci]` | Optional. Add them when you need your own script or CI. `--ci github` writes `[ci]` at first. |
+| `gateseal.toml`: `[hooks]`, `[ci]` | Optional. Add them when you need your own script or CI. `--ci` writes `[ci]` at first. |
 | `gateseal.lock` | `gateseal configure` and `gateseal upgrade` write it. Never edit it. |
-| `.pre-commit-config.yaml`, `.gateseal/`, the workflow | Generated with the Lock. Never edit them. |
+| `.pre-commit-config.yaml`, `.gateseal/`, the CI file | Generated with the Lock. Never edit them. |
 
 ## Example
 
@@ -126,12 +126,12 @@ Commit the script with a `#!` line and executable permission. gateseal does not 
 
 ### CI
 
-`[ci]` accepts `provider = "github"` and `default_branch`. See [GitHub CI](github-ci.md). An unsupported provider gives `unsupported_ci_provider`.
+`[ci]` accepts `provider`, which is `"github"` or `"azure"`, and `default_branch`. See [GitHub CI](github-ci.md) and [Azure Pipelines](azure-pipelines.md). An unsupported provider gives `unsupported_ci_provider`.
 
 ## Lock
 
 The Lock is generated JSON with schema `2`. Review its `gateseal` repository, version and commit, and its `policy` release and digest. Review its `components`, `native_artifacts`, `choices`, `exceptions`, and `outputs`. Each output records its path and SHA-256. Release binary records include archive URLs and checksums by platform. A binary with commit-time verification also records the executable's SHA-256.
 
-The generated files include `.pre-commit-config.yaml`, selected files under `.gateseal/`, and the GitHub workflow when enabled. Do not hand-edit them. Configure refuses a conflicting or edited generated file with `ownership_conflict`. It writes the Lock last, so an interrupted operation can be retried. See [Troubleshoot gateseal](troubleshooting.md).
+The generated files include `.pre-commit-config.yaml`, selected files under `.gateseal/`, and the CI file when enabled. Do not hand-edit them. Configure refuses a conflicting or edited generated file with `ownership_conflict`. It writes the Lock last, so an interrupted operation can be retried. See [Troubleshoot gateseal](troubleshooting.md).
 
 Generated files must be regular, readable, non-executable files. The Manifest, Lock, and generated text use LF line endings. Validation also accepts CRLF. Staged files need Git mode `100644`. Unknown fields, duplicate JSON keys, and nonfinite JSON numbers are invalid.
