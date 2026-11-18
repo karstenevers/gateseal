@@ -25,7 +25,7 @@ This small policy offers three capabilities. Repositories choose from them. The 
 ```toml
 schema = 5
 release = "team-2026.11"
-minimum_compiler = "0.1.0"
+minimum_compiler = "0.2.0"
 
 # Capability "hygiene": file checks. A repository may skip check-yaml.
 [capabilities.hygiene]

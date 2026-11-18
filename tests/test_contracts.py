@@ -3,7 +3,7 @@ import json
 import shutil
 
 import pytest
-from conftest import PIN
+from conftest import BUNDLED_MINIMUM, PIN
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
 from gateseal.lock import compile_outputs
@@ -95,7 +95,7 @@ PYTHON = (
         ("schema = 5", "schema = 4", "unsupported_schema"),
         ("schema = 5", "schema = 6\nsurprise = 1", "unsupported_schema"),
         (
-            'minimum_compiler = "0.1.0"',
+            BUNDLED_MINIMUM,
             'minimum_compiler = "99.0.0"\nsurprise = 1',
             "incompatible_compiler",
         ),

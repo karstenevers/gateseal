@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from gateseal import __version__, lock
 from gateseal.compiler_release import REPOSITORY, GatesealPin
+from gateseal.policy import load_bundled_policy
 from installation import (
     clone,
     install,
@@ -24,6 +25,8 @@ TRACKED = ("gateseal.toml", "gateseal.lock", ".pre-commit-config.yaml")
 
 PIN = GatesealPin(REPOSITORY, __version__, "5ea1" + "0" * 36)
 """The gateseal release that the tests run in this process pin."""
+BUNDLED_MINIMUM = f'minimum_compiler = "{load_bundled_policy().minimum_compiler}"'
+"""The bundled policy's minimum_compiler line, which tests edit into variants."""
 
 
 def overwrite(path, data, info=None):

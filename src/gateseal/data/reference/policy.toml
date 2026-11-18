@@ -1,6 +1,6 @@
 schema = 5
 release = "2026.11-team-tools"
-minimum_compiler = "0.1.0"
+minimum_compiler = "0.2.0"
 
 # pre-commit-hooks is the project pre-commit/pre-commit-hooks.
 [capabilities.hygiene.tools.pre-commit-hooks]

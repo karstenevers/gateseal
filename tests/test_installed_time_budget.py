@@ -7,7 +7,7 @@ as the checks decide.
 """
 
 import pytest
-from conftest import on_machine
+from conftest import BUNDLED_MINIMUM, on_machine
 from installation import clone, process, success
 from team_policy import URL, environment, git, publish
 
@@ -27,11 +27,15 @@ TOOK = "The gate took "
 def budget(seconds):
     def change(data):
         path = data / "policy.toml"
-        minimum = 'minimum_compiler = "0.1.0"\n'
-        text = path.read_text().replace(
-            minimum, f"{minimum}time_budget_seconds = {seconds}\n", 1
+        text = path.read_text()
+        assert BUNDLED_MINIMUM in text
+        path.write_text(
+            text.replace(
+                BUNDLED_MINIMUM,
+                f"{BUNDLED_MINIMUM}\ntime_budget_seconds = {seconds}",
+                1,
+            )
         )
-        path.write_text(text)
 
     return change
 

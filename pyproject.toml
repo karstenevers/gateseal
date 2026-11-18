@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "gateseal"
-version = "0.1.0"
+version = "0.2.0"
 description = "Compile reviewed repository policy into native checks"
 dynamic = ["readme"]
 license = "MIT"
