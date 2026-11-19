@@ -1,0 +1,17 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# Pyright reads each path relative to this file's folder, .gateseal/. So the
+# paths start at "..", the repository root. The exclude list repeats Pyright's
+# defaults from there, the import roots are the root and its src/ folder, and
+# stubPath is Pyright's default folder for stubs, typings/ at the root.
+# Pyright reads packages from .venv, the project's environment, where uv
+# installs what uv.lock pins. Without these two settings it would ask the
+# Python that starts it, and that Python finds Pyright's own dependencies
+# before the project's.
+[tool.pyright]
+include = [".."]
+exclude = ["../**/node_modules", "../**/__pycache__", "../**/.*"]
+extraPaths = ["..", "../src"]
+stubPath = "../typings"
+venvPath = ".."
+venv = ".venv"
+typeCheckingMode = "strict"

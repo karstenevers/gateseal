@@ -3,9 +3,9 @@
 Every test drives the installed command. Offline, the hook repositories are
 local Git repositories that their GitHub URLs reach through
 url.<base>.insteadOf, and a urllib opener that the driver installs serves
-Betterleaks' release files from a directory, so gateseal policy lock and add
-run their own code against fixtures. The network tests resolve versions from
-the real upstream.
+Betterleaks' release files and PyPI's release pages from a directory, so
+gateseal policy lock and add run their own code against fixtures. The network
+tests resolve versions from the real upstream.
 """
 
 import hashlib
@@ -38,6 +38,7 @@ from pathlib import Path
 from gateseal.cli import main
 
 root = Path(sys.argv[1])
+SERVED = ("https://github.com/", "https://pypi.org/")
 edited = os.environ.get("EDIT_DURING_DOWNLOAD")
 unreachable = os.environ.get("UNREACHABLE")
 
@@ -50,7 +51,7 @@ class Fixtures(urllib.request.BaseHandler):
         if edited:
             with open(edited, "a") as policy:
                 policy.write("# Edited during a download.\\n")
-        if unreachable or not url.startswith("https://github.com/"):
+        if unreachable or not url.startswith(SERVED):
             raise urllib.error.URLError("offline")
         path = root / url.removeprefix("https://")
         headers = email.message.Message()
@@ -104,7 +105,7 @@ class Upstream:
 
 @pytest.fixture
 def upstream(installed, tmp_path):
-    """Offline upstream with the bundled policy's tags and Betterleaks releases.
+    """Offline upstream with the bundled policy's tags and releases.
 
     Every tag is annotated, which policy lock peels, except the lightweight
     v6.0.0.
@@ -121,6 +122,10 @@ def upstream(installed, tmp_path):
         settings[f"url.{repository.as_uri()}.insteadOf"] = url
     for version in SECRETS.versions:
         release(root, version)
+    for version in BUNDLED_TOOLS["pyright"].versions:
+        page = root / f"pypi.org/pypi/pyright/{version}/json"
+        page.parent.mkdir(parents=True)
+        page.write_bytes(b"{}")
     environment = {
         key: value
         for key, value in installed.environment.items()
@@ -152,6 +157,7 @@ def started(installed, tmp_path):
         "policy.lock",
         "policy.toml",
         "rules/betterleaks.toml",
+        "rules/pyright.toml",
         "rules/ruff.toml",
     ]
     return directory

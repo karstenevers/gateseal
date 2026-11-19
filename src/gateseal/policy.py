@@ -20,6 +20,7 @@ from gateseal.tools.choices import Choice
 from gateseal.tools.model import (
     Catalog,
     Release,
+    Scope,
     Tool,
     ToolDefinition,
     ToolUse,
@@ -532,19 +533,28 @@ def _exposed(toolset: Toolset) -> dict[tuple[str, str], ChoiceValue]:
 def _require_unscanned(
     exposed: Mapping[tuple[str, str], ChoiceValue], toolset: Toolset
 ) -> None:
-    """Require no capability that exposes exclude to hold a tool with a history scan.
+    """Require no capability that exposes exclude to hold a tool that reads every path.
 
     A commit skips the excluded paths, but the gate's history scan reads every
-    path, so the two would check different files.
+    path, so the two would check different files. A tool with the project
+    scope gets no file names, so it reads the excluded paths at a commit too.
     """
     for tool, use in toolset.uses.items():
-        if (use.capability, EXCLUDE) in exposed and toolset.definitions[
-            tool
-        ].history is not None:
+        if (use.capability, EXCLUDE) not in exposed:
+            continue
+        definition = toolset.definitions[tool]
+        reads = (
+            "scans history"
+            if definition.history is not None
+            else "checks the whole project"
+            if definition.scope is Scope.PROJECT
+            else None
+        )
+        if reads is not None:
             raise GatesealError(
                 "invalid_field",
                 f"capabilities.{use.capability}.choices exposes {EXCLUDE}, but "
-                f"{tool} in {use.capability} scans history, which reads every "
+                f"{tool} in {use.capability} {reads}, which reads every "
                 "path.",
                 next_step=f"Move {tool} to a capability that exposes no "
                 f"{EXCLUDE}, or stop exposing {EXCLUDE} in {use.capability}.",

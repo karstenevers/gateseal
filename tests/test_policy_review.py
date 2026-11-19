@@ -87,7 +87,7 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
     text = BUNDLED["policy.toml"].decode().replace("\n" + SECRETS, "")
     text = text.replace(RUFF, RUFF + 'requires."0.17.1" = { betterleaks = "1.9.0" }\n')
     review = review_policy(reader(text))
-    assert review.capabilities == ("hygiene", "python")
+    assert review.capabilities == ("hygiene", "python", "python-types")
     unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
     assert review.catalogs["ruff"].requires == unrequired | {
         "0.17.1": {"betterleaks": "1.9.0"}

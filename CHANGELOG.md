@@ -7,8 +7,26 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+### Added
+
+- The `uv-project` tool kind. A tool of this kind runs in the repository's own
+  uv project, so a type checker reads the packages that the project installs.
+  Its hook starts the program with `uv run --locked --all-packages --with
+  <package>==<version>`: the policy pins the tool, and the repository's
+  `uv.lock` pins what the tool reads. `gateseal configure` and `gateseal
+  check` stop with `missing_project` in a repository without `pyproject.toml`
+  or `uv.lock`, or with `tool.uv.managed = false`.
+- The `project` scope of a tool definition. Its hooks run at every commit, get
+  no file names and check the whole project.
+- The bundled policy's `python-types` capability, which runs Pyright in strict
+  mode as a built-in `uv-project` tool. A repository that selects `python`
+  alone gets no new check.
+
 ### Changed
 
+- The bundled policy offers a hook with the ID and name `pyright`. A Manifest
+  with a repository hook of that ID or name stops with `duplicate_identifier`,
+  also when it does not select `python-types`. Rename the repository hook.
 - The bundled policy pins Ruff 0.17.5 and Betterleaks 1.10.1. It still reviews
   Ruff 0.17.1 and Betterleaks 1.9.0 and 1.8.0, so a Version Exception can keep
   one of them. The policy keeps its label `2026.11-team-tools`, so

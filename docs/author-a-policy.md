@@ -44,7 +44,7 @@ paths = ['''(?:^|/)tests/fixtures/''']
 
 The file's own rules fill gaps in the built-in ones. Its top-level `filter` replaces the filter built into Betterleaks, which drops findings that look like placeholders. A new Betterleaks version can change its built-in rules and filter, so review them when you review the version.
 
-If you remove a capability, remove its tables and rule files. Run `gateseal policy lock policy` after changing reviewed versions or tools. The generated `policy.lock` records the reviewed upstream commits and archive checksums. Check the policy. Then commit it:
+If you remove a capability, remove its tables and rule files. Run `gateseal policy lock policy` after changing reviewed versions or tools. The generated `policy.lock` records the reviewed upstream commits, archive checksums and PyPI packages. Check the policy. Then commit it:
 
 ```sh
 gateseal policy check policy

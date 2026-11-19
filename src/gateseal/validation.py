@@ -19,6 +19,15 @@ def mapping(value: object, field: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
+def nested(document: object, *keys: str) -> object:
+    """Return the value at keys in nested tables, or None when a table lacks one."""
+    for key in keys:
+        if not isinstance(document, dict):
+            return None
+        document = cast(dict[object, object], document).get(key)
+    return document
+
+
 def fields(value: object, names: set[str], field: str) -> dict[str, object]:
     result = mapping(value, field)
     if set(result) != names:

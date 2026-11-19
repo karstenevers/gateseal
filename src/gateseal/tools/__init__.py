@@ -14,7 +14,7 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 
 from gateseal.diagnostics import GatesealError
-from gateseal.tools import pre_commit_repository, release_binary
+from gateseal.tools import pre_commit_repository, release_binary, uv_project
 from gateseal.tools.model import (
     NAME,
     Origin,
@@ -30,6 +30,7 @@ SUFFIX = ".tool.toml"
 KINDS: Mapping[str, Callable[[object, str], Source]] = {
     pre_commit_repository.PreCommitRepository.kind: pre_commit_repository.parse_source,
     release_binary.ReleaseBinary.kind: release_binary.parse_source,
+    uv_project.UvProject.kind: uv_project.parse_source,
 }
 """Each kind's parser of a definition's [source], by its value of kind."""
 

@@ -1,6 +1,6 @@
 # Work in a configured repository
 
-Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, install mise 2026.10.19 or later too. A separate gateseal installation is not needed to commit.
+Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, install mise 2026.10.19 or later too. If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A separate gateseal installation is not needed to commit.
 
 From each clone's root, install the commit hook:
 
@@ -19,7 +19,7 @@ git add example.txt
 git commit -m 'Update example'
 ```
 
-Replace `example.txt` with your changed file. The first hook runs the version recorded in `gateseal.lock`, the Lock. The Lock records the policy selection and generated files. The hook refuses staged generated files that differ from the Lock. The other hooks check staged files. Stage `.pre-commit-config.yaml` in full. pre-commit stops if it has unstaged changes.
+Replace `example.txt` with your changed file. The first hook runs the version recorded in `gateseal.lock`, the Lock. The Lock records the policy selection and generated files. The hook refuses staged generated files that differ from the Lock. The other hooks check staged files. A hook that checks the whole project, such as Pyright, runs at every commit. Stage `.pre-commit-config.yaml` in full. pre-commit stops if it has unstaged changes.
 
 To check all tracked files, run:
 

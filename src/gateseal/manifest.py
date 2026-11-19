@@ -20,7 +20,7 @@ from gateseal.policy import (
 )
 from gateseal.policy_tools import CAPABILITY, SKIP
 from gateseal.repository_hooks import RepositoryHook, parse_hooks, require_own_ids
-from gateseal.tools.model import Hook, Origin, Tool, require_local_hooks
+from gateseal.tools.model import Hook, Origin, Starts, Tool, require_local_hooks
 from gateseal.validation import (
     fields,
     mapping,
@@ -392,7 +392,7 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
         (
             hook
             for tool in tools
-            if tool.definition.source.local
+            if tool.definition.source.starts is not Starts.UPSTREAM_HOOKS
             for hook in tool.use.hooks
         ),
         PRE_COMMIT,
@@ -574,7 +574,8 @@ def tool_note(tool: Tool) -> Note:
         "info",
         "tool",
         f"Tool {definition.name} {tool.version} for {tool.use.capability}: "
-        f"{definition.origin}, {definition.source.kind}{caveat}.",
+        f"{definition.origin}, {definition.source.kind}"
+        f"{definition.source.remark}{caveat}.",
     )
 
 

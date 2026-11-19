@@ -312,7 +312,7 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     [
         ('kind = "release-binary"', 'kind = "node-package"', "kind"),
         ('"run", "ci"]', '"run", "ci", "push"]', "stages"),
-        ('scope = "files"', 'scope = "project"', "scope"),
+        ('scope = "files"', 'scope = "workspace"', "scope"),
         ('output = "concise"', 'output = "sarif"', "hooks.gitleaks.output"),
         ('format = "toml"', 'format = "yaml"', "configuration.format"),
     ],

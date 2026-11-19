@@ -41,6 +41,7 @@ from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.setup import PYTHON
 from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
+from gateseal.tools.uv_project import require_project
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -519,7 +520,9 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
     outputs False leaves the outputs unread: the Manifest and Lock must agree,
     and the snapshot holds the outputs they compile to. An upgrade reads that,
     since an output may hold what an interrupted upgrade wrote, and
-    owned_changes decides what it may replace.
+    owned_changes decides what it may replace. It also leaves the uv project
+    unchecked, because an upgrade requires the project of its target, which
+    may run no tool in it.
     """
     try:
         manifest = tracked(root, MANIFEST)
@@ -527,6 +530,8 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
         inputs = _lock_inputs(manifest, lock, preparation)
         source, policy = inputs.manifest.source, inputs.policy
         pin, selection = inputs.pin, inputs.selection
+        if outputs:
+            require_project(root, selection.tools)
         compiled = compile_outputs(selection, pin, source)
         found = {
             name: tracked(root, name) if outputs else content
@@ -749,6 +754,7 @@ def configure(
         pin = _locked_pin(recorded)
     policy, checks = acquire(parsed, recorded.get("policy"), preparation, git)
     selection = resolve(parsed, policy)
+    require_project(root, selection.tools)
     outputs = compile_outputs(selection, pin, parsed.source)
     document = compile_lock(manifest, parsed.source, policy, pin, selection)
     if _other_build(recorded, document, parsed.source):

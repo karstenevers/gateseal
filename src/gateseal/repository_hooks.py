@@ -16,7 +16,7 @@ from gateseal.compiler_release import CHECK_HOOK, CHECK_HOOK_NAME
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import MANIFEST
 from gateseal.paths import resolved
-from gateseal.tools.model import NAME, Hook, Origin, OutputFormat, Stage
+from gateseal.tools.model import NAME, Hook, Origin, OutputFormat, Scope, Stage
 from gateseal.validation import mapping, sequence, string
 
 FIELDS = frozenset({"name", "run", "args", "files"})
@@ -174,7 +174,7 @@ def repository_entry(hooks: tuple[RepositoryHook, ...]) -> dict[str, object]:
     return {
         "repo": "local",
         "hooks": [
-            hook.hook.base_entry(None, frozenset(Stage))
+            hook.hook.base_entry(None, frozenset(Stage), Scope.FILES)
             | {
                 "language": "unsupported_script",
                 "entry": shlex.join([hook.run, *hook.args]),

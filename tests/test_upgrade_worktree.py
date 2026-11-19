@@ -190,6 +190,20 @@ def test_a_gateseal_move_reads_only_the_ledger_of_another_releases_lock(consumer
     assert "git diff" in review
 
 
+def test_a_gateseal_move_needs_the_uv_project_before_it_writes(consumer):
+    for name in ("pyproject.toml", "uv.lock"):
+        (consumer / name).write_text("")
+    worktree = configure(consumer, "hygiene", "python-types")
+    path = consumer / "gateseal.lock"
+    document = json.loads(path.read_bytes())
+    written_by_a_newer_release(document)
+    path.write_bytes(canonical(document))
+    (consumer / "uv.lock").unlink()
+    failure = refused(worktree, request())
+    assert failure.code == "missing_project"
+    assert "the repository has no uv.lock" in str(failure)
+
+
 def bundled_by_a_newer_release(root, release, digest):
     """Make root's Manifest and Lock those of gateseal 9.0.0 and its bundled policy."""
     manifest = root / "gateseal.toml"

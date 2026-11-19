@@ -19,7 +19,7 @@ See [Author a team policy](author-a-policy.md) for editing and release steps. A 
 
 ## Example
 
-This small policy offers three capabilities. Repositories choose from them. The comments say what each part does.
+This small policy offers four capabilities. Repositories choose from them. The comments say what each part does.
 
 <!-- policy tables: team -->
 ```toml
@@ -50,6 +50,12 @@ reviewed = ["0.17.5", "0.17.1"]
 [capabilities.python.choices]
 target_version = "py311"     # default that a repository may change
 
+# Capability "python-types": Pyright with the team's rules, for uv projects.
+[capabilities.python-types.tools.pyright]
+configuration = "rules/pyright.toml"
+pin = "1.1.414"
+reviewed = ["1.1.414"]
+
 # Capability "secrets": Betterleaks with the team's rules.
 [capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
@@ -78,7 +84,7 @@ Optional `time_budget_seconds` sets the CI gate's [time budget](ci-gate.md#time-
 | `optional` | Distinct hooks the repository may skip. |
 | `choices.<choice>` | Exposed choice and its default. |
 
-Capability and tool names match `[a-z][a-z0-9-]*`, and choice names match `[a-z][a-z0-9_]*`. gateseal checks the schema and minimum compiler before other fields. A mismatch gives `unsupported_schema` or `incompatible_compiler`. The compiler supplies definitions for `pre-commit-hooks`, `ruff`, and `betterleaks`. Other definitions belong in `tools/<name>.toml`; see [Tool definitions](tool-definitions.md). A missing definition gives `unknown_tool`. A reserved name gives `reserved_tool_name`. Duplicate hooks, names, outputs, or tool assignments give `duplicate_identifier`.
+Capability and tool names match `[a-z][a-z0-9-]*`, and choice names match `[a-z][a-z0-9_]*`. gateseal checks the schema and minimum compiler before other fields. A mismatch gives `unsupported_schema` or `incompatible_compiler`. The compiler supplies definitions for `pre-commit-hooks`, `ruff`, `pyright`, and `betterleaks`. Other definitions belong in `tools/<name>.toml`; see [Tool definitions](tool-definitions.md). A missing definition gives `unknown_tool`. A reserved name gives `reserved_tool_name`. Duplicate hooks, names, outputs, or tool assignments give `duplicate_identifier`.
 
 ### Alternatives
 
@@ -113,21 +119,21 @@ The `skip` default is empty. A repository can skip only a hook named in `optiona
 
 ### Choices and rules
 
-A policy can expose a tool's declared choice, an alternative, `skip`, or `exclude`. `exclude` skips paths for the entire capability. A capability with a history scan cannot expose `exclude`. A rule file cannot set a key that the policy exposes as a choice.
+A policy can expose a tool's declared choice, an alternative, `skip`, or `exclude`. `exclude` skips paths for the entire capability. A capability with a history scan or a tool with the `project` scope cannot expose `exclude`. A rule file cannot set a key that the policy exposes as a choice.
 
-Rule files use UTF-8 TOML and LF line endings. They must be regular, non-executable files under distinct relative paths. Path segments use lowercase letters, digits, dots, underscores, and hyphens. A segment cannot be `.` or `..`. A Betterleaks or Gitleaks rule file can have an `extend` table with only `useDefault` and `disabledRules`. It then starts from the rules built into the tool and turns off the rules that `disabledRules` names. Any other `extend` is invalid, because it could load another file.
+Rule files use UTF-8 TOML and LF line endings. They must be regular, non-executable files under distinct relative paths. Path segments use lowercase letters, digits, dots, underscores, and hyphens. A segment cannot be `.` or `..`. A Betterleaks or Gitleaks rule file can have an `extend` table with only `useDefault` and `disabledRules`. It then starts from the rules built into the tool and turns off the rules that `disabledRules` names. Any other `extend` is invalid, because it could load another file. A Pyright rule file cannot set `extends` in `[tool.pyright]`, for the same reason. Either gives `invalid_field`.
 
 Each release is flat. The keys `extends`, `extend`, `inherit`, `include`, and `base` give `policy_inheritance`. A pin must be reviewed and meet the other selected tools' requirements. Incompatible pins give `incompatible_policy`.
 
 ## Policy lock
 
-`policy.lock` is generated JSON. It records the upstream Git commit or archive URL and SHA-256 for each reviewed version. `gateseal policy check` validates the file offline. `gateseal policy lock` and `gateseal policy add` check upstream data and download new archives before writing. An executable marked `check_at_commit` also gets an executable SHA-256.
+`policy.lock` is generated JSON. It records the upstream Git commit, the archive URL and SHA-256, or the PyPI package for each reviewed version. `gateseal policy check` validates the file offline. `gateseal policy lock` and `gateseal policy add` check upstream data and download new archives before writing. An executable marked `check_at_commit` also gets an executable SHA-256.
 
 | Code | Meaning |
 | --- | --- |
 | `policy_lock_missing`, `policy_lock_stale`, `policy_lock_unreviewed`, `policy_lock_edited` | The file is missing or does not agree with the policy. Run `gateseal policy lock`. |
-| `upstream_changed` | A recorded tag or checksum changed. Investigate before accepting it. |
-| `upstream_tag_missing`, `upstream_asset_missing`, `upstream_checksum_missing` | The expected upstream release data is missing. |
+| `upstream_changed` | A recorded tag, checksum or package changed. Investigate before accepting it. |
+| `upstream_tag_missing`, `upstream_asset_missing`, `upstream_checksum_missing`, `upstream_release_missing` | The expected upstream release data is missing. |
 | `upstream_checksum_mismatch`, `upstream_executable_missing` | The downloaded archive failed verification or lacks the expected executable. |
 | `upstream_unavailable` | Git or an HTTPS download failed. Check access. Retry. |
 | `policy_changed` | A policy file changed during the operation. Review it. Retry. |

@@ -25,12 +25,10 @@ def add_black(data, locked=True):
         (data / name).write_text(example("add-a-tool.md", f"policy file: {name}"))
     policy = data / "policy.toml"
     text = policy.read_text()
-    start, end = (
-        text.index("[capabilities.python."),
-        text.index("[capabilities.secrets."),
-    )
+    last = 'target_version = "py311"\n'
+    start, end = text.index("[capabilities.python."), text.index(last) + len(last)
     tables = example("add-a-tool.md", "policy tables: black")
-    policy.write_text(text[:start] + tables + "\n" + text[end:])
+    policy.write_text(text[:start] + tables + text[end:])
     lock = json.loads((data / "policy.lock").read_bytes())
     lock["components"]["black"] = {"versions": {"26.10.1": {"revision": REVISION}}}
     if locked:

@@ -9,7 +9,7 @@ gateseal configure --capability hygiene --capability secrets --ci github
 pre-commit install
 ```
 
-`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. Its built-in rules find cloud keys, private keys, passwords and many service tokens, and the bundled policy adds a rule for an AWS access key ID alone. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. For Azure Pipelines, use `--ci azure` and follow [Azure Pipelines](azure-pipelines.md). Omit `--ci` if you use neither. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
+`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. Its built-in rules find cloud keys, private keys, passwords and many service tokens, and the bundled policy adds a rule for an AWS access key ID alone. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. In a uv project, add `--capability python-types` for Pyright in strict mode. Pyright runs at every commit in the project's own environment, so the repository needs a `uv.lock`. For Azure Pipelines, use `--ci azure` and follow [Azure Pipelines](azure-pipelines.md). Omit `--ci` if you use neither. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
 
 See [an example Manifest](policy-contract.md#example-with-the-bundled-policy) for how it looks. Review the Manifest, Lock, `.pre-commit-config.yaml`, and the CI file if generated. If you omitted `--ci`, omit `.github/workflows/gateseal.yml` from the next command. With `--ci azure`, add `azure-pipelines-gateseal.yml` in its place. Then commit them:
 
@@ -29,4 +29,4 @@ Each `--capability` option adds one capability. Without `secrets`, the repositor
 gateseal configure
 ```
 
-Review the Manifest, Lock, and generated files. Commit them together. Python and secrets also generate files under `.gateseal/`. See [Adjust a setup](adjust-a-setup.md) for repository hooks and policy choices.
+Review the Manifest, Lock, and generated files. Commit them together. Python, Pyright and secrets also generate files under `.gateseal/`. See [Adjust a setup](adjust-a-setup.md) for repository hooks and policy choices.

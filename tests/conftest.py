@@ -116,9 +116,10 @@ def pytest_configure(config):
     --basetemp or PYTEST_DEBUG_TEMPROOT chooses, so no test reads or writes
     the developer's Git configuration, pre-commit or mise. gateseal setup never
     runs in this home. The installed fixture makes a second home for it. uv
-    keeps the developer's cache and Pythons. GITHUB_ACTIONS and TF_BUILD are
-    unset, so text output prints a warning as Warning: even when a CI provider
-    runs the tests.
+    keeps the developer's cache and Pythons. UV_PROJECT_ENVIRONMENT is unset,
+    so uv installs each test project in its own .venv. GITHUB_ACTIONS and
+    TF_BUILD are unset, so text output prints a warning as Warning: even when a
+    CI provider runs the tests.
     """
     root = config.option.basetemp or os.environ.get(
         "PYTEST_DEBUG_TEMPROOT", tempfile.gettempdir()
@@ -135,6 +136,7 @@ def pytest_configure(config):
         "XDG_DATA_HOME",
         "XDG_CONFIG_HOME",
         "XDG_CACHE_HOME",
+        "UV_PROJECT_ENVIRONMENT",
         "GITHUB_ACTIONS",
         "TF_BUILD",
     ):

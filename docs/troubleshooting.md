@@ -24,7 +24,15 @@ Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit 
 
 ## The first commit fails
 
-The first commit downloads hook environments and selected binaries. Check network access. Then retry. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
+The first commit downloads hook environments and selected binaries. Check network access. Then retry. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
+
+## A type checker does not read the project's packages
+
+The bundled Pyright reads `.venv` at the repository root, where uv installs the project's packages. `UV_PROJECT_ENVIRONMENT` makes uv install them in another folder. Pyright then reads an outdated `.venv`. Without a `.venv`, it prints that it did not find one and reads the packages of the Python that starts it, which finds Pyright's own dependencies first. Unset the variable for commits, or ask the policy author to name the other folder in the Pyright rules.
+
+If a commit passes and the CI gate reports a missing import, `.venv` holds a package that the hook does not install. Run `uv sync`. Then retry. The hook installs each package's dependencies and its default dependency groups. For a package from an extra or another group, add the group to `tool.uv.default-groups` in `pyproject.toml`, or name the extra in the `dev` group.
+
+A team's tool that imports the project's packages itself needs a uv cache whose path holds no space. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
 
 ## A generated file differs
 
