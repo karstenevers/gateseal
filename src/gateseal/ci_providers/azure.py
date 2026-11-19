@@ -9,6 +9,8 @@ a push checks every file and scans every commit reachable from it.
 
 A job's own token reads a second repository only when the job names that
 repository as a resource it uses, so the file names an Azure Repos policy.
+A file that the team's own pipeline includes holds only the job, since the
+team's pipeline owns the triggers and an included file declares no resources.
 """
 
 import json
@@ -18,12 +20,15 @@ from gateseal.ci_providers.model import (
     GENERATED,
     IMAGE,
     SCHEDULE,
-    TIMEOUT_MINUTES,
     GateJob,
+    Triggers,
+    flow,
+    job_home,
     prepare,
     scoped_helper,
     script,
 )
+from gateseal.validation import string
 
 PIPELINE = "azure-pipelines-gateseal.yml"
 
@@ -31,8 +36,10 @@ AZURE_REPOS = "https://dev.azure.com/"
 
 PREPARE = prepare("$AGENT_TEMPDIRECTORY", 'echo "##vso[task.prependpath]$tools"')
 
-GATE = """\
-set -euo pipefail
+GATE = (
+    "set -euo pipefail\n"
+    + job_home("$AGENT_TEMPDIRECTORY")
+    + """\
 gateseal="$AGENT_TEMPDIRECTORY/gateseal-command/bin/gateseal"
 case "$GATESEAL_REASON" in
   PullRequest) "$gateseal" gate --merge "$GATESEAL_HEAD" ;;
@@ -44,6 +51,7 @@ case "$GATESEAL_REASON" in
     ;;
 esac
 """
+)
 """The gate step. It uses no array, so that a Bash older than 4.4 runs it too."""
 
 GATE_ENV = {
@@ -52,6 +60,16 @@ GATE_ENV = {
 }
 
 RUNNING = ("TF_BUILD", "True")
+
+RUNNER_KEY = "pool"
+
+DEMANDS = ["Agent.OS -equals Linux", "Agent.OSArchitecture -equals X64"]
+"""What a self-hosted agent in a mixed pool must offer to run the job."""
+
+
+def runner(value: object) -> tuple[str, ...]:
+    """Return the self-hosted agent pool that the Manifest names."""
+    return (string(value, f"ci.{RUNNER_KEY}"),)
 
 
 def warning(message: str) -> str:
@@ -107,7 +125,9 @@ def pipeline(job: GateJob) -> bytes:
 
     Only a Git policy in Azure Repos over https gets a token, through a
     credential helper scoped to its repository. The job uses that repository
-    as a resource, which lets the job's own token read it.
+    as a resource, which lets the job's own token read it. A file that the
+    team's pipeline includes keeps the job's use of the resource, and the
+    team's pipeline declares it.
     """
     env: dict[str, str] = {}
     resources: list[str] = []
@@ -126,35 +146,61 @@ def pipeline(job: GateJob) -> bytes:
             ]
             uses = ["    uses:", "      repositories:", f"        - {RESOURCE}"]
     env |= job.pins()
-    branch = json.dumps(job.default_branch)
     lines = [
         GENERATED,
-        "trigger:",
-        "  batch: false",
-        "  branches:",
-        f"    include: [{branch}]",
-        "schedules:",
-        f'  - cron: "{SCHEDULE}"',
-        "    displayName: Weekly gateseal gate",
-        "    branches:",
-        f"      include: [{branch}]",
-        "    always: true",
-        *resources,
+        *([] if job.triggers is None else [*_triggers(job.triggers), *resources]),
         "jobs:",
         "  - job: gateseal",
-        "    pool:",
-        f"      vmImage: {IMAGE}",
-        f"    timeoutInMinutes: {TIMEOUT_MINUTES}",
+        *_pool(job.runner),
+        f"    timeoutInMinutes: {job.timeout_minutes}",
         *uses,
         "    steps:",
         "      - checkout: self",
         "        displayName: Check out the repository with its full history",
+        "        clean: true",
         "        fetchDepth: 0",
         "        persistCredentials: false",
         *_step("Set up the locked gateseal, pre-commit and the policy", env, PREPARE),
         *_step("Run the gateseal gate", GATE_ENV, GATE),
     ]
     return ("\n".join(lines) + "\n").encode()
+
+
+def _triggers(triggers: Triggers) -> list[str]:
+    """Return the push trigger and, when the Manifest asks, the weekly run.
+
+    The weekly run checks the default branch only, since Azure Pipelines
+    starts one scheduled run for each branch its filter matches.
+    """
+    default = flow([triggers.default_branch])
+    schedule = [
+        "schedules:",
+        f'  - cron: "{SCHEDULE}"',
+        "    displayName: Weekly gateseal gate",
+        "    branches:",
+        f"      include: {default}",
+        "    always: true",
+    ]
+    return [
+        "trigger:",
+        "  batch: false",
+        "  branches:",
+        f"    include: {flow((triggers.default_branch, *triggers.branches))}",
+        *(schedule if triggers.schedule else []),
+    ]
+
+
+def _pool(runner: tuple[str, ...]) -> list[str]:
+    """Return the hosted image, or the team's pool with the demands of the job."""
+    if not runner:
+        return ["    pool:", f"      vmImage: {IMAGE}"]
+    [name] = runner
+    return [
+        "    pool:",
+        f"      name: {json.dumps(name)}",
+        "      demands:",
+        *(f"        - {demand}" for demand in DEMANDS),
+    ]
 
 
 def _step(name: str, env: dict[str, str], lines: str) -> list[str]:

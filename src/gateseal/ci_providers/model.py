@@ -2,13 +2,20 @@
 
 A writer turns a GateJob into its provider's file. It owns the triggers, the
 checkout, the temporary directory, how PATH reaches the next step, the token
-source and the mapping from events to gate flags. The pinned downloads, the
-preparation and the credential helper's scope are the same for every provider.
-Every value the Lock supplies is a JSON-quoted YAML scalar and reaches a script
-only through env.
+source and the mapping from events to gate flags. The check of the machine,
+the job's own home, the pinned downloads, the preparation and the credential
+helper's scope are the same for every provider. Every value the Lock supplies
+is a JSON-quoted YAML scalar and reaches a script only through env.
+
+The job leaves the agent user's home folder and global Git configuration as
+they were, since a self-hosted agent keeps both between runs. Each step moves
+HOME into the job's temporary directory, which holds everything the job
+installs. The job's global Git configuration includes the agent's, so settings
+an administrator made there still apply.
 """
 
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 UV_URL = (
@@ -27,22 +34,42 @@ GENERATED = (
     "change it; do not edit it."
 )
 SCHEDULE = "37 4 * * 1"
+"""The weekly run's time, Monday 04:37 UTC."""
 IMAGE = "ubuntu-24.04"
-TIMEOUT_MINUTES = 30
+"""The hosted image that a job without a runner of the team's own runs on."""
+
+
+@dataclass(frozen=True)
+class Triggers:
+    """When a pipeline of its own runs.
+
+    default_branch is the branch whose pushes the gate checks, and the one the
+    weekly run checks when schedule is true. branches are further entries as
+    the Manifest writes them: a branch name, or a name followed by /* for every
+    branch below it.
+    """
+
+    default_branch: str
+    branches: tuple[str, ...]
+    schedule: bool
 
 
 @dataclass(frozen=True)
 class GateJob:
     """The gate of one Lock, before any provider's syntax.
 
-    default_branch is the branch whose pushes the gate checks. python is the
-    version that gateseal setup installs pre-commit with. repository and
-    commit name the gateseal that the Lock pins. policy_repository is the URL
-    of a Git policy, or None for a bundled policy. Each provider decides
-    whether its credential helper serves that URL.
+    triggers is None when the team's own pipeline includes the job and owns
+    when it runs. runner is empty for the hosted image, or names the machine in
+    the provider's own terms. python is the version that gateseal setup
+    installs pre-commit with. repository and commit name the gateseal that the
+    Lock pins. policy_repository is the URL of a Git policy, or None for a
+    bundled policy. Each provider decides whether its credential helper serves
+    that URL.
     """
 
-    default_branch: str
+    triggers: Triggers | None
+    timeout_minutes: int
+    runner: tuple[str, ...]
     python: str
     repository: str
     commit: str
@@ -61,17 +88,80 @@ class GateJob:
         }
 
 
+MACHINE = r"""read -r system architecture < <(uname -s -m)
+machine="$system on $architecture"
+if [ "$machine" = "Linux on x86_64" ] && ! getconf GNU_LIBC_VERSION >/dev/null 2>&1
+then
+  machine="$machine without glibc"
+fi
+if [ "$machine" != "Linux on x86_64" ]; then
+  echo "gateseal: the gate job needs Linux on x86-64 with glibc," \
+    "and this machine is $machine." >&2
+  exit 1
+fi
+"""
+"""The lines that stop the job on a machine its downloads cannot run on.
+
+Bash names a missing curl, tar, sha256sum or git itself, and Git's version
+stays gateseal's own check.
+"""
+
+
+def job_home(temporary: str) -> str:
+    """Return the lines that give a step the job's own home folder.
+
+    temporary is the provider's variable for a directory that lasts one job.
+    Every XDG folder falls back to its place in that home, so pre-commit, uv
+    and mise store nothing in the agent's. The agent's own storage variables,
+    its environment for uv projects and its template folder are dropped,
+    since each would take precedence, and so is every mise setting, such as
+    one that turns auto-install off and lets
+    mise start an unchecked program from PATH. mise's system folder moves into
+    the home too, so a tool installed for every user of the agent never stands
+    in for the job's own. The agent's SKIP is dropped, so pre-commit runs
+    every selected hook.
+    """
+    return f"""\
+export HOME="{temporary}/gateseal-home"
+unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME
+unset GIT_CONFIG_GLOBAL GIT_TEMPLATE_DIR PRE_COMMIT_HOME SKIP
+unset UV_CACHE_DIR UV_PYTHON_CACHE_DIR UV_PYTHON_INSTALL_DIR UV_CONFIG_FILE
+unset UV_PROJECT_ENVIRONMENT PIP_CACHE_DIR VIRTUALENV_OVERRIDE_APP_DATA
+for name in ${{!MISE_@}}; do
+  unset "$name"
+done
+export MISE_SYSTEM_DATA_DIR="$HOME/mise-system"
+"""
+
+
 def prepare(temporary: str, extend_path: str) -> str:
     """Return the bash script that installs the pinned tools and checks the Lock.
 
     temporary is the provider's variable for a directory that lasts one job.
     extend_path is the command that puts $tools on PATH for the later steps.
-    A fresh agent builds gateseal from the Lock's commit, on the Python that
-    gateseal setup installs pre-commit with.
+    The script first stops on a machine that cannot run the job. The job's
+    global Git configuration then includes the agent's files, in Git's own
+    order. Git writes the paths, so it quotes them, and it skips an include
+    that names no file. The job builds gateseal from the Lock's commit, on the
+    Python that gateseal setup installs pre-commit with. gateseal setup reads
+    and writes only a Git configuration of its own, with no system file and
+    no settings from the environment, so a template folder or hooks path that
+    the agent set up does not stop it. The job never clones, so it needs no
+    commit launcher.
     """
     return f"""\
 set -euo pipefail
-umask 077
+{MACHINE}umask 077
+agent_home=$HOME
+agent_config=${{XDG_CONFIG_HOME:-$HOME/.config}}
+agent_global=${{GIT_CONFIG_GLOBAL:-}}
+{job_home(temporary)}mkdir -p "$HOME"
+if [ -n "$agent_global" ]; then
+  git config --file "$HOME/.gitconfig" --add include.path "$agent_global"
+else
+  git config --file "$HOME/.gitconfig" --add include.path "$agent_config/git/config"
+  git config --file "$HOME/.gitconfig" --add include.path "$agent_home/.gitconfig"
+fi
 tools="{temporary}/gateseal-tools"
 mkdir -p "$tools"
 curl --fail --location --silent --show-error "$GATESEAL_UV_URL" \\
@@ -88,7 +178,9 @@ command="{temporary}/gateseal-command"
 uv venv --no-config --managed-python --python "$GATESEAL_PYTHON" "$command"
 uv pip install --no-config --python "$command/bin/python" \\
   "gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"
-"$command/bin/gateseal" setup
+GIT_CONFIG_GLOBAL="$HOME/.gitconfig-setup" GIT_CONFIG_NOSYSTEM=1 \\
+  GIT_CONFIG_COUNT=0 GIT_CONFIG_PARAMETERS= \\
+  "$command/bin/gateseal" setup
 "$command/bin/gateseal" check
 """
 
@@ -110,6 +202,11 @@ def scoped_helper(repository: str, helper: str) -> dict[str, str]:
         "GIT_CONFIG_KEY_2": json.dumps(f"credential.{repository}.helper"),
         "GIT_CONFIG_VALUE_2": json.dumps(helper),
     }
+
+
+def flow(values: Iterable[str]) -> str:
+    """Return values as a YAML flow sequence of JSON-quoted scalars."""
+    return "[" + ", ".join(map(json.dumps, values)) + "]"
 
 
 def script(lines: str, indent: str) -> list[str]:

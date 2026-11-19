@@ -24,11 +24,8 @@ def test_a_push_to_the_default_branch_starts_one_build_each():
     assert trigger == {"batch": False, "branches": {"include": [BRANCH]}}
 
 
-def test_a_weekly_build_runs_even_when_nothing_changed():
-    [schedule] = gate_file("azure").document["schedules"]
-    assert schedule["cron"] == "37 4 * * 1"
-    assert schedule["branches"] == {"include": [BRANCH]}
-    assert schedule["always"] is True
+def test_the_checkout_removes_what_an_earlier_run_left_on_the_agent():
+    assert gate_file("azure").checkout["clean"] is True
 
 
 def test_pull_request_builds_are_left_to_the_branch_policy():

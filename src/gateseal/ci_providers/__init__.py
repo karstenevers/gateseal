@@ -18,18 +18,33 @@ class Provider:
     path is the file it owns, and write renders that file. running is the
     environment variable and value that every run on the provider sets.
     warning turns a message into the command that the provider shows as an
-    annotation of the run.
+    annotation of the run. runner_key is the [ci] key that names a machine of
+    the team's own, and runner parses its value into GateJob.runner.
     """
 
     path: str
     write: Callable[[GateJob], bytes]
     running: tuple[str, str]
     warning: Callable[[str], str]
+    runner_key: str
+    runner: Callable[[object], tuple[str, ...]]
 
 
 PROVIDERS = {
-    "azure": Provider(azure.PIPELINE, azure.pipeline, azure.RUNNING, azure.warning),
+    "azure": Provider(
+        azure.PIPELINE,
+        azure.pipeline,
+        azure.RUNNING,
+        azure.warning,
+        azure.RUNNER_KEY,
+        azure.runner,
+    ),
     "github": Provider(
-        github.WORKFLOW, github.workflow, github.RUNNING, github.warning
+        github.WORKFLOW,
+        github.workflow,
+        github.RUNNING,
+        github.warning,
+        github.RUNNER_KEY,
+        github.runner,
     ),
 }
