@@ -8,6 +8,7 @@ Git's global configuration is a file of each test's own.
 import json
 
 import pytest
+from conftest import BUNDLED_TOOLS
 from gateseal import authoring
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_policy_tree
@@ -157,11 +158,12 @@ def test_pin_refuses_an_unreviewed_version(started):
 
 
 def test_pin_refuses_a_version_that_another_pin_rules_out(started):
-    add_requires(started, "ruff", "0.17.1", '{ betterleaks = "1.9.0" }')
+    ruff = BUNDLED_TOOLS["ruff"].pin
+    add_requires(started, "ruff", ruff, '{ betterleaks = "1.9.0" }')
     before = files(started)
     error = refused(authoring.pin, started, "betterleaks", "1.8.0")
     assert error.code == "requires_conflict"
-    named = ("ruff 0.17.1", "betterleaks 1.9.0", "betterleaks 1.8.0")
+    named = (f"ruff {ruff}", "betterleaks 1.9.0", "betterleaks 1.8.0")
     assert all(value in str(error) for value in named)
     assert all(value in error.next_step for value in ("requires", "policy.toml"))
     assert files(started) == before

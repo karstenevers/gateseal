@@ -7,11 +7,14 @@ policy check refuse it the same way.
 import json
 
 import pytest
+from conftest import reviewed_line
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_policy_tree
 from test_contracts import relock, tree
 
 STEP = "Run gateseal policy lock in the policy directory."
+RUFF = reviewed_line("ruff")
+SECRETS = reviewed_line("betterleaks")
 
 
 def refused(root):
@@ -36,8 +39,8 @@ def test_a_newly_reviewed_version_makes_the_lock_stale(tmp_path):
     path = tmp_path / "policy.toml"
     path.write_text(
         path.read_text()
-        .replace('["0.17.1"]', '["0.17.1", "0.17.0"]')
-        .replace('["1.9.0", "1.8.0"]', '["1.9.0", "1.8.0", "1.7.0"]')
+        .replace(RUFF, RUFF.replace("]", ', "0.17.0"]'))
+        .replace(SECRETS, SECRETS.replace("]", ', "1.7.0"]'))
     )
     error = refused(tmp_path)
     assert (error.code, str(error)) == (

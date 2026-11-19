@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from archives import tar_gz
-from conftest import with_git_config
+from conftest import BUNDLED_TOOLS, newer_release, reviewed_line, with_git_config
 from gateseal.policy import bundled_root
 from installation import clone, process, success
 
@@ -27,6 +27,10 @@ RELEASES = "github.com/betterleaks/betterleaks/releases/download"
 TEAM = "https://policy.example/team/gateseal-policy.git"
 IDENTITY = ["-c", "user.name=Policy author", "-c", "user.email=policy@example.invalid"]
 STEP = "Run gateseal policy lock in the policy directory."
+RUFF_PIN = BUNDLED_TOOLS["ruff"].pin
+SECRETS = BUNDLED_TOOLS["betterleaks"]
+NEWER = newer_release("betterleaks")
+NEWER_RUFF = newer_release("ruff")
 
 OFFLINE = """
 import email.message, io, os, sys, urllib.error, urllib.request, urllib.response
@@ -102,20 +106,20 @@ class Upstream:
 def upstream(installed, tmp_path):
     """Offline upstream with the bundled policy's tags and Betterleaks releases.
 
-    v5.0.0 and v0.17.1 are annotated tags, which policy lock peels; v6.0.0 is
-    lightweight.
+    Every tag is annotated, which policy lock peels, except the lightweight
+    v6.0.0.
     """
     root = tmp_path / "upstream"
     settings = {}
-    for url, tags in ((HOOKS, ("v5.0.0", "v6.0.0")), (RUFF, ("v0.17.1",))):
+    for url, tool in ((HOOKS, "pre-commit-hooks"), (RUFF, "ruff")):
         repository = root / url.rsplit("/", 1)[1]
         repository.mkdir(parents=True)
         git(repository, "init", "-q", "--initial-branch=main")
-        for tag in tags:
+        for tag in (f"v{version}" for version in BUNDLED_TOOLS[tool].versions):
             git(repository, "commit", "-q", "--allow-empty", "-m", tag)
             git(repository, "tag", *(["-a", "-m", tag] if tag != "v6.0.0" else []), tag)
         settings[f"url.{repository.as_uri()}.insteadOf"] = url
-    for version in ("1.8.0", "1.9.0"):
+    for version in SECRETS.versions:
         release(root, version)
     environment = {
         key: value
@@ -250,17 +254,17 @@ def review(directory, tool, version):
     [
         (lambda root: None, "upstream_tag_missing"),
         (
-            lambda root: release(root, "1.10.0", ("linux_x64",)),
+            lambda root: release(root, NEWER, ("linux_x64",)),
             "upstream_checksum_missing",
         ),
         (
             lambda root: (
-                release(root, "1.10.0") / "betterleaks_1.10.0_linux_x64.tar.gz"
+                release(root, NEWER) / f"betterleaks_{NEWER}_linux_x64.tar.gz"
             ).write_bytes(b"replaced"),
             "upstream_checksum_mismatch",
         ),
         (
-            lambda root: (release(root, "1.10.0") / "checksums.txt").unlink(),
+            lambda root: (release(root, NEWER) / "checksums.txt").unlink(),
             "upstream_asset_missing",
         ),
     ],
@@ -275,7 +279,7 @@ def test_lock_writes_nothing_when_upstream_lacks_a_fact(
     if code == "upstream_tag_missing":
         review(started, "ruff", "0.17.2")
     else:
-        review(started, "betterleaks", "1.10.0")
+        review(started, "betterleaks", NEWER)
     before = (started / "policy.lock").read_bytes()
     refused = policy_command(installed, upstream, started, "lock", code=2)
     assert refused["code"] == code, refused
@@ -394,37 +398,37 @@ def files(directory):
 
 
 def test_add_reviews_a_version_and_pin_makes_it_the_pin(installed, upstream, locked):
-    release(upstream.root, "1.10.0")
+    release(upstream.root, NEWER)
     before = files(locked)
-    added = policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")
+    added = policy_command(installed, upstream, locked, "add", "betterleaks", NEWER)
     assert (added["code"], added["changed"]) == ("added", list(POLICY_FILES))
-    assert "gateseal policy pin betterleaks 1.10.0" in added["next_steps"][0]
+    assert f"gateseal policy pin betterleaks {NEWER}" in added["next_steps"][0]
+    old = reviewed_line("betterleaks")
+    new = old.replace('["', f'["{NEWER}", "')
     assert (locked / "policy.toml").read_bytes() == before["policy.toml"].replace(
-        b'reviewed = ["1.9.0", "1.8.0"]', b'reviewed = ["1.10.0", "1.9.0", "1.8.0"]'
+        old.encode(), new.encode()
     )
-    record = lock_document(locked)["components"]["betterleaks"]["versions"]["1.10.0"]
-    name = "betterleaks_1.10.0_linux_x64.tar.gz"
+    record = lock_document(locked)["components"]["betterleaks"]["versions"][NEWER]
+    name = f"betterleaks_{NEWER}_linux_x64.tar.gz"
     assert record["platforms"]["linux-x64"] == {
         "executable": "betterleaks",
         "executable_sha256": hashlib.sha256(name.encode()).hexdigest(),
         "sha256": hashlib.sha256(archive(name)).hexdigest(),
-        "url": f"https://{RELEASES}/v1.10.0/{name}",
+        "url": f"https://{RELEASES}/v{NEWER}/{name}",
     }
-    again = policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")
+    again = policy_command(installed, upstream, locked, "add", "betterleaks", NEWER)
     assert (again["code"], again["changed"]) == ("added", [])
     reviewed = files(locked)
-    pinned = installed.cli(
-        locked, "policy", "pin", "betterleaks", "1.10.0", str(locked)
-    )
+    pinned = installed.cli(locked, "policy", "pin", "betterleaks", NEWER, str(locked))
     assert (pinned["code"], pinned["changed"]) == ("pinned", ["policy.toml"])
-    assert "1.9.0 stays reviewed" in pinned["diagnostics"][0]["message"]
+    assert f"{SECRETS.pin} stays reviewed" in pinned["diagnostics"][0]["message"]
     assert files(locked) == {
         "policy.toml": reviewed["policy.toml"].replace(
-            b'pin = "1.9.0"', b'pin = "1.10.0"'
+            f'pin = "{SECRETS.pin}"'.encode(), f'pin = "{NEWER}"'.encode()
         ),
         "policy.lock": reviewed["policy.lock"],
     }
-    again = installed.cli(locked, "policy", "pin", "betterleaks", "1.10.0", str(locked))
+    again = installed.cli(locked, "policy", "pin", "betterleaks", NEWER, str(locked))
     assert (again["code"], again["changed"]) == ("pinned", [])
     assert installed.cli(locked, "policy", "check", str(locked))["code"] == "consistent"
 
@@ -463,12 +467,13 @@ def test_add_and_pin_keep_the_authors_comments_and_order(installed, upstream, lo
     """The two commands change only their own lines of a commented policy.toml."""
     path = locked / "policy.toml"
     path.write_text(COMMENTED.replace("BEFORE", "1.9.0"))
+    policy_command(installed, upstream, locked, "lock")
     assert installed.cli(locked, "policy", "check", str(locked))["code"] == "consistent"
-    release(upstream.root, "1.10.0")
-    policy_command(installed, upstream, locked, "add", "betterleaks", "1.10.0")
-    installed.cli(locked, "policy", "pin", "betterleaks", "1.10.0", str(locked))
-    assert path.read_text() == COMMENTED.replace("BEFORE", "1.10.0").replace(
-        '    "1.9.0",', '    "1.10.0",\n    "1.9.0",'
+    release(upstream.root, NEWER)
+    policy_command(installed, upstream, locked, "add", "betterleaks", NEWER)
+    installed.cli(locked, "policy", "pin", "betterleaks", NEWER, str(locked))
+    assert path.read_text() == COMMENTED.replace("BEFORE", NEWER).replace(
+        '    "1.9.0",', f'    "{NEWER}",\n    "1.9.0",'
     )
     assert installed.cli(locked, "policy", "check", str(locked))["code"] == "consistent"
 
@@ -478,20 +483,20 @@ def test_add_and_pin_keep_the_authors_comments_and_order(installed, upstream, lo
     [
         (lambda root: None, "ruff 0.17.2", "upstream_tag_missing"),
         (
-            lambda root: release(root, "1.10.0", ("linux_x64",)),
-            "betterleaks 1.10.0",
+            lambda root: release(root, NEWER, ("linux_x64",)),
+            f"betterleaks {NEWER}",
             "upstream_checksum_missing",
         ),
         (
             lambda root: (
-                release(root, "1.10.0") / "betterleaks_1.10.0_linux_x64.tar.gz"
+                release(root, NEWER) / f"betterleaks_{NEWER}_linux_x64.tar.gz"
             ).write_bytes(b"replaced"),
-            "betterleaks 1.10.0",
+            f"betterleaks {NEWER}",
             "upstream_checksum_mismatch",
         ),
         (
-            lambda root: (release(root, "1.10.0") / "checksums.txt").unlink(),
-            "betterleaks 1.10.0",
+            lambda root: (release(root, NEWER) / "checksums.txt").unlink(),
+            f"betterleaks {NEWER}",
             "upstream_asset_missing",
         ),
         (lambda root: None, "betterleaks latest", "invalid_invocation"),
@@ -522,7 +527,7 @@ def test_add_writes_nothing_when_a_fact_is_missing(
 
 def test_add_never_replaces_an_edit_saved_while_it_runs(installed, upstream, locked):
     """An author's edit saved during the downloads stays, and add writes nothing."""
-    release(upstream.root, "1.10.0")
+    release(upstream.root, NEWER)
     path, lock = locked / "policy.toml", (locked / "policy.lock").read_bytes()
     refused = policy_command(
         installed,
@@ -530,7 +535,7 @@ def test_add_never_replaces_an_edit_saved_while_it_runs(installed, upstream, loc
         locked,
         "add",
         "betterleaks",
-        "1.10.0",
+        NEWER,
         code=2,
         env={"EDIT_DURING_DOWNLOAD": str(path)},
     )
@@ -539,7 +544,7 @@ def test_add_never_replaces_an_edit_saved_while_it_runs(installed, upstream, loc
         ["Run the command again."],
     )
     assert path.read_text().endswith("# Edited during a download.\n")
-    assert "1.10.0" not in path.read_text()
+    assert NEWER not in path.read_text()
     assert (locked / "policy.lock").read_bytes() == lock
 
 
@@ -600,23 +605,25 @@ def add_requires(directory, tool, version, requires):
     [
         (
             lambda directory: None,
-            "betterleaks 1.10.0",
+            f"betterleaks {NEWER}",
             "version_unreviewed",
-            "does not review betterleaks 1.10.0",
+            f"does not review betterleaks {NEWER}",
         ),
         (
-            lambda d: add_requires(d, "ruff", "0.17.1", '{ betterleaks = "1.9.0" }'),
+            lambda d: add_requires(d, "ruff", RUFF_PIN, '{ betterleaks = "1.9.0" }'),
             "betterleaks 1.8.0",
             "requires_conflict",
-            "ruff 0.17.1 needs betterleaks 1.9.0 or newer, but the pins select "
+            f"ruff {RUFF_PIN} needs betterleaks 1.9.0 or newer, but the pins select "
             "betterleaks 1.8.0.",
         ),
         (
-            lambda d: add_requires(d, "betterleaks", "1.8.0", '{ ruff = "0.18.0" }'),
+            lambda d: add_requires(
+                d, "betterleaks", "1.8.0", f'{{ ruff = "{NEWER_RUFF}" }}'
+            ),
             "betterleaks 1.8.0",
             "requires_conflict",
-            "betterleaks 1.8.0 needs ruff 0.18.0 or newer, but the pins select "
-            "ruff 0.17.1.",
+            f"betterleaks 1.8.0 needs ruff {NEWER_RUFF} or newer, but the pins "
+            f"select ruff {RUFF_PIN}.",
         ),
     ],
     ids=["unreviewed", "pinned requires it", "it requires a newer pin"],
@@ -636,7 +643,8 @@ def test_pin_refuses_an_unreviewed_or_conflicting_version(
     assert message in refused["diagnostics"][0]["message"]
     if code == "version_unreviewed":
         assert refused["next_steps"] == [
-            "Run gateseal policy add betterleaks 1.10.0 in the policy directory first."
+            f"Run gateseal policy add betterleaks {NEWER} in the policy directory "
+            "first."
         ]
     assert files(started) == before
 
@@ -649,7 +657,8 @@ def test_add_refuses_a_policy_toml_it_cannot_edit(installed, started):
     path.write_text(
         f"{head}[capabilities.python]\n"
         'tools.ruff = { hook_ids = ["ruff-check", "ruff-format"], '
-        'configuration = "rules/ruff.toml", pin = "0.17.1", reviewed = ["0.17.1"] }\n'
+        f'configuration = "rules/ruff.toml", pin = "{RUFF_PIN}", '
+        f"{reviewed_line('ruff')} }}\n"
         + table[table.index("\n[capabilities.python.choices]") :]
     )
     assert (
@@ -657,7 +666,7 @@ def test_add_refuses_a_policy_toml_it_cannot_edit(installed, started):
     )
     before = files(started)
     refused = installed.cli(
-        started, "policy", "add", "ruff", "0.18.0", str(started), code=2
+        started, "policy", "add", "ruff", NEWER_RUFF, str(started), code=2
     )
     assert refused["code"] == "policy_edit_unsupported"
     assert files(started) == before
@@ -665,12 +674,12 @@ def test_add_refuses_a_policy_toml_it_cannot_edit(installed, started):
 
 @pytest.mark.parametrize("read", ["git", "download"])
 @pytest.mark.parametrize(
-    "action", [("lock",), ("add", "betterleaks", "1.10.0")], ids=["lock", "add"]
+    "action", [("lock",), ("add", "betterleaks", NEWER)], ids=["lock", "add"]
 )
 def test_a_failed_upstream_read_names_the_command_to_rerun(
     installed, upstream, locked, read, action
 ):
-    release(upstream.root, "1.10.0")
+    release(upstream.root, NEWER)
     if read == "git":
         upstream.repository(HOOKS).rename(upstream.root / "unreachable")
     before = files(locked)

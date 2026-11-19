@@ -2,13 +2,13 @@ import hashlib
 import json
 
 import pytest
-from conftest import on_machine, preserved
+from conftest import BUNDLED_TOOLS, on_machine, preserved
 from gateseal.policy import load_bundled_policy
 from installation import clone, process, success
 
 pytestmark = pytest.mark.integration
 
-RUFF = "0.17.1"
+RUFF = BUNDLED_TOOLS["ruff"]
 POLICY = load_bundled_policy()
 TRACKED = (
     "gateseal.toml",
@@ -75,8 +75,8 @@ def test_python_capability_locks_and_renders_ruff(installed, consumer):
     assert list(lock["outputs"]) == [".gateseal/ruff.toml", ".pre-commit-config.yaml"]
     assert lock["components"]["ruff"] == {
         "repository": "https://github.com/astral-sh/ruff-pre-commit",
-        "version": RUFF,
-        "revision": "38bfb07c0c64c304f47eb52090f8288150c77730",
+        "version": RUFF.pin,
+        "revision": RUFF.versions[RUFF.pin].revision,
         "hook_ids": ["ruff-check", "ruff-format"],
     }
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())

@@ -48,5 +48,6 @@ def test_the_example_manifest_configures_against_the_example_policy(
         "hygiene": {"exclude": [], "skip": ["check-yaml"]},
         "python": {"target_version": "py312"},
     }
-    assert written["components"]["ruff"]["version"] == "0.17.1"
+    ruff = tomllib.loads(POLICY)["capabilities"]["python"]["tools"]["ruff"]
+    assert written["components"]["ruff"]["version"] == ruff["pin"]
     assert "check-yaml" not in written["components"]["pre-commit-hooks"]["hook_ids"]

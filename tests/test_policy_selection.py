@@ -3,7 +3,7 @@ import json
 from datetime import date
 
 import pytest
-from conftest import PIN
+from conftest import BUNDLED_TOOLS, PIN
 from gateseal.diagnostics import GatesealError, Result
 from gateseal.lock import acquire, compile_outputs, exclusion
 from gateseal.manifest import (
@@ -18,6 +18,8 @@ from gateseal.policy import load_bundled_policy
 
 POLICY = load_bundled_policy()
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
+SECRETS_PIN = BUNDLED_TOOLS["betterleaks"].pin
+RUFF = BUNDLED_TOOLS["ruff"]
 ALL = ("hygiene", "python", "secrets")
 (RULES,) = (a.content for a in POLICY.assets if a.path == "rules/ruff.toml")
 
@@ -43,8 +45,8 @@ def test_defaults_select_every_pin():
     ]
     assert chosen.exceptions == {}
     assert {tool.definition.name: tool.version for tool in chosen.tools} == {
-        "betterleaks": "1.9.0",
-        "pre-commit-hooks": "6.0.0",
+        "betterleaks": SECRETS_PIN,
+        "pre-commit-hooks": BUNDLED_TOOLS["pre-commit-hooks"].pin,
     }
 
 
@@ -71,8 +73,8 @@ def test_python_selects_the_ruff_hook_repository():
     ]
     assert components[1][2] == {
         "repository": "https://github.com/astral-sh/ruff-pre-commit",
-        "version": "0.17.1",
-        "revision": "38bfb07c0c64c304f47eb52090f8288150c77730",
+        "version": RUFF.pin,
+        "revision": RUFF.versions[RUFF.pin].revision,
         "hook_ids": ["ruff-check", "ruff-format"],
     }
     assert tuple(hook.id for hook in chosen.hooks) == (
@@ -201,7 +203,7 @@ def test_exception_selects_a_reviewed_version_with_its_reason():
     ]
     granted = chosen.exceptions["betterleaks"]
     assert (granted.pin, granted.reason, granted.review_by) == (
-        "1.9.0",
+        SECRETS_PIN,
         "Upstream bug",
         date(2026, 12, 31),
     )
@@ -286,7 +288,8 @@ def test_notes_name_active_overdue_and_redundant_exceptions():
     )
     found = {note.category: note for note in notes(chosen, date(2026, 10, 27))}
     assert found["overdue_exception"].severity == "warning"
-    assert "betterleaks 1.8.0 (policy pin 1.9.0)" in found["overdue_exception"].message
+    overdue = f"betterleaks 1.8.0 (policy pin {SECRETS_PIN})"
+    assert overdue in found["overdue_exception"].message
     assert "stays in effect" in found["overdue_exception"].message
     assert found["redundant_exception"].severity == "warning"
     assert found["policy_choice"].message == "Choice hygiene.exclude: nothing."

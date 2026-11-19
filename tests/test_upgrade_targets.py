@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from conftest import PIN, named_flags
+from conftest import BUNDLED_TOOLS, PIN, named_flags
 from gateseal import __version__, upgrade
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import Locked, Snapshot, compile_lock
@@ -34,6 +34,7 @@ from test_upgrade_worktree import REASON, REVIEW_BY, older_pins
 KEPT_REASON = "Kept for the migration"
 KEPT_DATE = date(2026, 12, 31)
 EXCEPTION_FLAGS = {"--reason", "--review-by"}
+BETTERLEAKS = BUNDLED_TOOLS["betterleaks"]
 
 
 def reviews_hooks_4_6(root):
@@ -171,7 +172,7 @@ def test_another_reviewed_version_without_both_flags_is_refused(
         current(bundled), bundled, {"betterleaks": "1.8.0"}, reason, review_by
     )
     assert error.code == "invalid_exception"
-    assert all(value in str(error) for value in ("betterleaks 1.8.0", "1.9.0"))
+    assert all(value in str(error) for value in ("betterleaks 1.8.0", BETTERLEAKS.pin))
     assert named_flags(error.next_step) == EXCEPTION_FLAGS
 
 
@@ -198,7 +199,10 @@ def test_an_unreviewed_target_lists_the_reviewed_versions(policies):
     bundled = policies["bundled"]
     error = refused(current(bundled), bundled, {"betterleaks": "1.7.0"})
     assert error.code == "unknown_version"
-    assert str(error).endswith("1.8.0, 1.9.0.")
+    ascending = sorted(
+        BETTERLEAKS.versions, key=lambda v: tuple(map(int, v.split(".")))
+    )
+    assert str(error).endswith(f"{', '.join(ascending)}.")
     assert "betterleaks 1.7.0" in str(error)
 
 
@@ -250,10 +254,15 @@ def test_a_bare_target_keeps_a_newer_reviewed_version_as_an_exception(policies):
     older = policies["older"]
     error = refused(newer, older, {"betterleaks": None})
     assert error.code == "invalid_exception"
-    assert all(value in str(error) for value in ("betterleaks 1.9.0", "1.8.0"))
+    named = (f"betterleaks {BETTERLEAKS.pin}", "1.8.0")
+    assert all(value in str(error) for value in named)
     assert named_flags(error.next_step) == EXCEPTION_FLAGS
     assert changes(newer, older, {"betterleaks": None}, REASON, REVIEW_BY) == (
-        {"betterleaks": ExceptionRequest("betterleaks", "1.9.0", REASON, REVIEW_BY)},
+        {
+            "betterleaks": ExceptionRequest(
+                "betterleaks", BETTERLEAKS.pin, REASON, REVIEW_BY
+            )
+        },
         frozenset({"betterleaks"}),
     )
 
@@ -364,14 +373,14 @@ def test_a_policy_move_names_both_releases(policies):
     new = f"v1 at {commit} ({older.content_digest})"
     assert moved["policy"] == (old, new, "change", f"policy {old} to {new}: change.")
     assert moved["pre-commit-hooks"][:3] == ("6.0.0", "5.0.0", "rollback")
-    assert moved["betterleaks"][:3] == ("1.9.0", "1.8.0", "rollback")
+    assert moved["betterleaks"][:3] == (BETTERLEAKS.pin, "1.8.0", "rollback")
 
 
 def test_a_preserved_component_names_the_pin_it_is_newer_than(policies):
     before = lock_document(policies["bundled"])
-    after = lock_document(policies["older"], exception("betterleaks", "1.9.0"))
+    after = lock_document(policies["older"], exception("betterleaks", BETTERLEAKS.pin))
     moved = moves(before, after, frozenset({"betterleaks"}))["betterleaks"]
-    assert moved[:3] == ("1.9.0", "1.9.0", "preserved")
+    assert moved[:3] == (BETTERLEAKS.pin, BETTERLEAKS.pin, "preserved")
     assert "1.8.0" in moved[3]
     assert moves(before, after)["betterleaks"][2] == "unchanged"
 
@@ -420,7 +429,7 @@ def test_an_exception_entry_names_the_version_and_the_pin(policies):
         for e in upgrade.report(lock_document(bundled), after, frozenset())
         if e["category"] == "exception"
     ]
-    named = ("betterleaks 1.8.0", "pin 1.9.0", "added")
+    named = ("betterleaks 1.8.0", f"pin {BETTERLEAKS.pin}", "added")
     assert all(value in entry["message"] for value in named)
 
 

@@ -54,7 +54,7 @@ git commit -m 'Start team policy'
 
 ## Review a tool version
 
-Read the tool's release notes and choose an exact release. For example, to review a Betterleaks release newer than the bundled 1.9.0 in the bundled policy copy, run the commands below. Replace `<version>` with the release you chose.
+Read the tool's release notes and choose an exact release. For example, to review a Betterleaks release newer than the bundled 1.10.1 in the bundled policy copy, run the commands below. Replace `<version>` with the release you chose.
 
 ```sh
 gateseal policy add betterleaks <version> policy

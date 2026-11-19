@@ -13,7 +13,7 @@ import shutil
 from datetime import date
 
 import pytest
-from conftest import PIN, TRACKED, with_git_config
+from conftest import BUNDLED_TOOLS, PIN, TRACKED, with_git_config
 from gateseal import __version__, lock, upgrade
 from gateseal.diagnostics import NEXT_STEPS, GatesealError
 from gateseal.policy import load_bundled_policy
@@ -26,20 +26,22 @@ REVIEW_BY = date(2027, 1, 31)
 BUNDLED = lock.PolicyRequest()
 BUNDLED_MOVE = lock.PolicyRequest("bundled")
 POLICY = load_bundled_policy()
+BETTERLEAKS_PIN = BUNDLED_TOOLS["betterleaks"].pin
 
 
 def older_pins(data):
     toml = data / "policy.toml"
     text = toml.read_text().replace('pin = "6.0.0"', 'pin = "5.0.0"')
-    toml.write_text(text.replace('pin = "1.9.0"', 'pin = "1.8.0"'))
+    toml.write_text(text.replace(f'pin = "{BETTERLEAKS_PIN}"', 'pin = "1.8.0"'))
 
 
 def requiring_hooks_6(data):
     toml = data / "policy.toml"
     toml.write_text(
         toml.read_text().replace(
-            'pin = "1.9.0"\n',
-            'pin = "1.9.0"\nrequires."1.9.0" = { pre-commit-hooks = "6.0.0" }\n',
+            f'pin = "{BETTERLEAKS_PIN}"\n',
+            f'pin = "{BETTERLEAKS_PIN}"\n'
+            f'requires."{BETTERLEAKS_PIN}" = {{ pre-commit-hooks = "6.0.0" }}\n',
         )
     )
 
@@ -47,7 +49,7 @@ def requiring_hooks_6(data):
 def without_old_versions(data):
     toml = data / "policy.toml"
     text = toml.read_text().replace('["6.0.0", "5.0.0"]', '["6.0.0"]')
-    toml.write_text(text.replace('["1.9.0", "1.8.0"]', '["1.9.0"]'))
+    toml.write_text(text.replace(', "1.8.0"]', "]"))
     document = json.loads((data / "policy.lock").read_bytes())
     del document["components"]["pre-commit-hooks"]["versions"]["5.0.0"]
     del document["components"]["betterleaks"]["versions"]["1.8.0"]
@@ -67,7 +69,7 @@ def without_secrets(data):
 def team(tmp_path_factory):
     """Publish v1 with older pins, v2 as bundled, and v3 to v5 that refuse v2's.
 
-    v3's Betterleaks 1.9.0 needs pre-commit-hooks 6.0.0, v4 no longer reviews
+    v3's Betterleaks pin needs pre-commit-hooks 6.0.0, v4 no longer reviews
     pre-commit-hooks 5.0.0 or Betterleaks 1.8.0, and v5 offers no secrets.
     """
     origin = tmp_path_factory.mktemp("upgrade team ü") / "gateseal-policy"
@@ -262,7 +264,7 @@ def test_a_policy_move_fetches_writes_and_stores_the_new_release(
     assert "git diff" in review
     moved = moves(result)
     assert moved["pre-commit-hooks"] == ("5.0.0", "6.0.0", "upgrade")
-    assert moved["betterleaks"] == ("1.8.0", "1.9.0", "upgrade")
+    assert moved["betterleaks"] == ("1.8.0", BETTERLEAKS_PIN, "upgrade")
     policy = moved["policy"]
     assert policy[0].startswith(f"v1 at {team_commits['v1']} (sha256:")
     assert policy[1].startswith(f"v2 at {team_commits['v2']} (sha256:")
@@ -291,7 +293,7 @@ def test_policy_moves_that_break_the_exceptions_write_nothing(consumer, team_com
         worktree, request(lock.PolicyRequest(tag="v3"), {"betterleaks": None})
     )
     assert required.code == "incompatible_exception"
-    named = ("betterleaks 1.9.0", "pre-commit-hooks 6.0.0")
+    named = (f"betterleaks {BETTERLEAKS_PIN}", "pre-commit-hooks 6.0.0")
     assert all(value in str(required) for value in named)
     assert required.next_step == upgrade.RESOLVE
 

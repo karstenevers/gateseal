@@ -2,6 +2,22 @@
   "components": {
     "betterleaks": {
       "versions": {
+        "1.10.1": {
+          "platforms": {
+            "linux-x64": {
+              "executable": "betterleaks",
+              "executable_sha256": "506082605cad984abd6ecf979a5f00fd6d701bc3ab2104a6029b1d068b3e320c",
+              "sha256": "c174b42d7aa60caf58c0c3e555c0e4bed01fe6b0d99a412bce777b5af4ce913e",
+              "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.10.1/betterleaks_1.10.1_linux_x64.tar.gz"
+            },
+            "macos-arm64": {
+              "executable": "betterleaks",
+              "executable_sha256": "13ac5109fa85a590c7ba6e7f130311e0c60a2bf582c3aac073176c93b46621a8",
+              "sha256": "ca91eb3b006f15478411f235b5e2712fb15cea74f6701ebadc2364efe0af1403",
+              "url": "https://github.com/betterleaks/betterleaks/releases/download/v1.10.1/betterleaks_1.10.1_darwin_arm64.tar.gz"
+            }
+          }
+        },
         "1.8.0": {
           "platforms": {
             "linux-x64": {
@@ -50,6 +66,9 @@
       "versions": {
         "0.17.1": {
           "revision": "38bfb07c0c64c304f47eb52090f8288150c77730"
+        },
+        "0.17.5": {
+          "revision": "ef6cf06c079dd6b299dfc720b0f14400c9d168e1"
         }
       }
     }

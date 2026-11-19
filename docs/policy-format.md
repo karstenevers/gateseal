@@ -44,8 +44,8 @@ skip = []                    # repositories may list optional hooks to skip
 [capabilities.python.tools.ruff]
 hook_ids = ["ruff-check", "ruff-format"]
 configuration = "rules/ruff.toml"
-pin = "0.17.1"
-reviewed = ["0.17.1"]
+pin = "0.17.5"
+reviewed = ["0.17.5", "0.17.1"]
 
 [capabilities.python.choices]
 target_version = "py311"     # default that a repository may change
@@ -53,8 +53,8 @@ target_version = "py311"     # default that a repository may change
 # Capability "secrets": Betterleaks with the team's rules.
 [capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
-pin = "1.9.0"
-reviewed = ["1.9.0", "1.8.0"]
+pin = "1.10.1"
+reviewed = ["1.10.1", "1.9.0", "1.8.0"]
 ```
 
 A repository selects this policy in its Manifest. [Manifest and Lock](policy-contract.md#example) shows the matching Manifest.

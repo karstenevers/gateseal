@@ -143,8 +143,8 @@ def _parser() -> Parser:
         "policy",
         help="Start a team policy, review and pin tool versions, lock and check it",
         epilog="Examples: gateseal policy init team-policy/policy; "
-        "gateseal policy add betterleaks 1.10.0; gateseal policy pin betterleaks "
-        "1.10.0; gateseal policy lock; gateseal policy check --json",
+        "gateseal policy add betterleaks 1.11.0; gateseal policy pin betterleaks "
+        "1.11.0; gateseal policy lock; gateseal policy check --json",
     )
     _policy_actions(policy)
     return parser
@@ -157,7 +157,7 @@ def _policy_actions(policy: argparse.ArgumentParser) -> None:
         _options(child, repo=False)
         if action in REVIEW:
             child.add_argument("tool", help="Component, such as betterleaks")
-            child.add_argument("version", help="Exact version, such as 1.10.0")
+            child.add_argument("version", help="Exact version, such as 1.11.0")
         if action == "init":
             child.add_argument("directory", help="New or empty policy directory")
         else:

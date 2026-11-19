@@ -1,5 +1,6 @@
 import contextlib
 import dataclasses
+import json
 import os
 import re
 import stat
@@ -27,6 +28,22 @@ PIN = GatesealPin(REPOSITORY, __version__, "5ea1" + "0" * 36)
 """The gateseal release that the tests run in this process pin."""
 BUNDLED_MINIMUM = f'minimum_compiler = "{load_bundled_policy().minimum_compiler}"'
 """The bundled policy's minimum_compiler line, which tests edit into variants."""
+BUNDLED_TOOLS = load_bundled_policy().tools
+"""The bundled policy's tools by name, each with its pin and reviewed versions."""
+
+
+def reviewed_line(name):
+    """Return the bundled policy.toml's reviewed line of tool name."""
+    return f"reviewed = {json.dumps(list(BUNDLED_TOOLS[name].versions))}"
+
+
+def newer_release(name):
+    """Return a release of tool name above every version the bundled policy reviews."""
+    newest = max(
+        BUNDLED_TOOLS[name].versions, key=lambda v: tuple(map(int, v.split(".")))
+    )
+    major, minor, _ = newest.split(".")
+    return f"{major}.{int(minor) + 1}.0"
 
 
 def overwrite(path, data, info=None):

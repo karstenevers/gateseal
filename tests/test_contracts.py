@@ -1,15 +1,17 @@
 import hashlib
 import json
 import shutil
+import tomllib
 
 import pytest
-from conftest import BUNDLED_MINIMUM, PIN
+from conftest import BUNDLED_MINIMUM, BUNDLED_TOOLS, PIN, reviewed_line
 from gateseal.diagnostics import GatesealError, Result, redact
 from gateseal.hook_results import hook_results
 from gateseal.lock import compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import (
     Asset,
+    bundled_root,
     content_digest,
     content_stream,
     load_bundled_policy,
@@ -83,9 +85,12 @@ HYGIENE = "[capabilities.hygiene.tools.pre-commit-hooks]"
 PINNED_HOOKS = 'pin = "6.0.0"'
 RULES = 'configuration = "rules/betterleaks.toml"'
 TARGET = '[capabilities.python.choices]\ntarget_version = "py311"\n'
+RUFF_VERSION = BUNDLED_TOOLS["ruff"].pin
+RUFF_PIN = f'pin = "{RUFF_VERSION}"'
+RUFF_REVIEWED = reviewed_line("ruff")
 PYTHON = (
     '[capabilities.python.tools.ruff]\nhook_ids = ["ruff-check", "ruff-format"]\n'
-    'configuration = "rules/ruff.toml"\npin = "0.17.1"\nreviewed = ["0.17.1"]\n\n'
+    f'configuration = "rules/ruff.toml"\n{RUFF_PIN}\n{RUFF_REVIEWED}\n\n'
 )
 
 
@@ -110,7 +115,11 @@ PYTHON = (
         (RULES, 'rules = "rules/betterleaks.toml"', "invalid_field"),
         (RULES, RULES + "\nhook_ids = []", "unsupported_hook"),
         (PINNED_HOOKS, PINNED_HOOKS + '\nrevision = "3e8a87"', "invalid_field"),
-        ('pin = "1.9.0"', 'pin = "1.7.0"', "invalid_field"),
+        (
+            f'pin = "{BUNDLED_TOOLS["betterleaks"].pin}"',
+            'pin = "1.7.0"',
+            "invalid_field",
+        ),
         (
             PINNED_HOOKS,
             PINNED_HOOKS + '\nrequires."6.0.0" = { pre-commit = "3.2.0" }',
@@ -145,10 +154,11 @@ def test_policy_rejects_invalid_inputs(tmp_path, change, replacement, category):
 
 def test_policy_names_its_reviewed_versions():
     tools = load_bundled_policy().tools
-    assert {name: (t.pin, sorted(t.versions)) for name, t in tools.items()} == {
-        "betterleaks": ("1.9.0", ["1.8.0", "1.9.0"]),
-        "pre-commit-hooks": ("6.0.0", ["5.0.0", "6.0.0"]),
-        "ruff": ("0.17.1", ["0.17.1"]),
+    written = tomllib.loads((bundled_root() / "policy.toml").read_text())
+    assert {name: (t.pin, list(t.versions)) for name, t in tools.items()} == {
+        name: (table["pin"], table["reviewed"])
+        for capability in written["capabilities"].values()
+        for name, table in capability["tools"].items()
     }
     assert tools["pre-commit-hooks"].versions["5.0.0"].revision == (
         "cef0300fd0fc4d2a87a85fa2093c6b283ea36f4b"
@@ -310,7 +320,6 @@ def test_policy_without_python_offers_no_python(tmp_path):
     assert failure.value.code == "unsupported_capability"
 
 
-RUFF_PIN = 'reviewed = ["0.17.1"]'
 RUFF = 'configuration = "rules/ruff.toml"'
 
 
@@ -323,17 +332,24 @@ RUFF = 'configuration = "rules/ruff.toml"'
             "duplicate_identifier",
         ),
         (('"ruff-check", "ruff-format"', '"check-yaml"'), "unsupported_hook"),
-        (('pin = "0.17.1"', 'pin = "0.17"'), "invalid_field"),
-        (('pin = "0.17.1"\n', ""), "invalid_field"),
-        ((RUFF_PIN, 'reviewed = ["0.17"]'), "invalid_field"),
-        ((RUFF_PIN, 'reviewed = ["0.17.1", "0.17.1"]'), "invalid_field"),
-        ((RUFF_PIN, "reviewed = []"), "invalid_field"),
+        ((RUFF_PIN, 'pin = "0.17"'), "invalid_field"),
+        ((RUFF_PIN + "\n", ""), "invalid_field"),
+        ((RUFF_REVIEWED, 'reviewed = ["0.17"]'), "invalid_field"),
+        ((RUFF_REVIEWED, RUFF_REVIEWED.replace("[", '["0.17.1", ')), "invalid_field"),
+        ((RUFF_REVIEWED, "reviewed = []"), "invalid_field"),
         (
-            (RUFF_PIN, RUFF_PIN + '\nrequires."0.17.1" = { betterleaks = "9.0.0" }'),
+            (
+                RUFF_REVIEWED,
+                RUFF_REVIEWED
+                + f'\nrequires."{RUFF_VERSION}" = {{ betterleaks = "9.0.0" }}',
+            ),
             "incompatible_policy",
         ),
         (
-            (RUFF_PIN, RUFF_PIN + '\nrequires."0.17.1" = { ruff = "0.1.0" }'),
+            (
+                RUFF_REVIEWED,
+                RUFF_REVIEWED + f'\nrequires."{RUFF_VERSION}" = {{ ruff = "0.1.0" }}',
+            ),
             "invalid_field",
         ),
         (
@@ -415,8 +431,8 @@ def pin_ruff_0_4_0(tmp_path, default):
     path.write_text(
         path.read_text()
         .replace('target_version = "py311"', f'target_version = "{default}"')
-        .replace('pin = "0.17.1"', 'pin = "0.4.0"')
-        .replace(RUFF_PIN, 'reviewed = ["0.17.1", "0.4.0"]')
+        .replace(RUFF_PIN, 'pin = "0.4.0"')
+        .replace(RUFF_REVIEWED, RUFF_REVIEWED.replace("]", ', "0.4.0"]'))
     )
 
     def review(components):
