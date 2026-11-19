@@ -44,7 +44,7 @@ release = "team-2026.11"                      # release: label of this policy ve
 optional = ["check-yaml"]                     # skip: a repository may skip this
 
 [capabilities.python.tools.ruff]
-pin = "0.17.1"                                # pin: tool version to use
+pin = "0.17.5"                                # pin: tool version to use
 
 [capabilities.python.choices]
 target_version = "py311"                      # default: a repository may change it
@@ -80,7 +80,7 @@ target_version = "py312"                      # default: replaced by this value
     "python": { "target_version": "py312" }              // default, as replaced
   },
   "components": {
-    "ruff": { "version": "0.17.1", "revision": "38bfb07c…" }  // pin
+    "ruff": { "version": "0.17.5", "revision": "ef6cf06c…" }  // pin
   }
 }
 ```

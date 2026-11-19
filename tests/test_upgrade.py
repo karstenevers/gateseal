@@ -7,14 +7,20 @@ requirements, so its Policy Lock still holds every fact it needs offline.
 import json
 
 import pytest
-from conftest import TRACKED
+from conftest import BUNDLED_TOOLS, TRACKED
 from gateseal.validation import canonical
 from installation import clone
 from team_policy import URL, environment, git, publish
 
 pytestmark = pytest.mark.integration
 
-REASON = ["--reason", "Our fixtures need the 1.9.0 rules", "--review-by", "2027-01-31"]
+BETTERLEAKS_PIN = BUNDLED_TOOLS["betterleaks"].pin
+REASON = [
+    "--reason",
+    f"Our fixtures need the {BETTERLEAKS_PIN} rules",
+    "--review-by",
+    "2027-01-31",
+]
 
 
 def pinned(hooks, betterleaks):
@@ -22,7 +28,7 @@ def pinned(hooks, betterleaks):
         text = (data / "policy.toml").read_text()
         text = text.replace('pin = "6.0.0"', f'pin = "{hooks}"')
         (data / "policy.toml").write_text(
-            text.replace('pin = "1.9.0"', f'pin = "{betterleaks}"')
+            text.replace(f'pin = "{BETTERLEAKS_PIN}"', f'pin = "{betterleaks}"')
         )
 
     return change
@@ -30,7 +36,7 @@ def pinned(hooks, betterleaks):
 
 def without_betterleaks_1_8(data):
     toml = data / "policy.toml"
-    toml.write_text(toml.read_text().replace('["1.9.0", "1.8.0"]', '["1.9.0"]'))
+    toml.write_text(toml.read_text().replace(', "1.8.0"]', "]"))
     lock = json.loads((data / "policy.lock").read_bytes())
     del lock["components"]["betterleaks"]["versions"]["1.8.0"]
     (data / "policy.lock").write_bytes(canonical(lock))
@@ -40,8 +46,9 @@ def requiring_hooks_6(data):
     toml = data / "policy.toml"
     toml.write_text(
         toml.read_text().replace(
-            'pin = "1.9.0"\n',
-            'pin = "1.9.0"\nrequires."1.9.0" = { pre-commit-hooks = "6.0.0" }\n',
+            f'pin = "{BETTERLEAKS_PIN}"\n',
+            f'pin = "{BETTERLEAKS_PIN}"\n'
+            f'requires."{BETTERLEAKS_PIN}" = {{ pre-commit-hooks = "6.0.0" }}\n',
         )
     )
 
@@ -123,10 +130,10 @@ def test_policy_upgrade_and_rollback_keep_choices_and_exceptions(
         )
     )
     installed.cli(consumer, "configure", env=env)
-    newer = upgrade(installed, consumer, env, "betterleaks=1.9.0", *REASON)
+    newer = upgrade(installed, consumer, env, f"betterleaks={BETTERLEAKS_PIN}", *REASON)
     assert newer["code"] == "upgraded"
-    assert targets(newer)["betterleaks"] == ("1.8.0", "1.9.0", "upgrade")
-    assert exceptions(newer) == {"betterleaks": ("1.9.0", "added")}
+    assert targets(newer)["betterleaks"] == ("1.8.0", BETTERLEAKS_PIN, "upgrade")
+    assert exceptions(newer) == {"betterleaks": (BETTERLEAKS_PIN, "added")}
     before = tracked(consumer)
 
     moved = upgrade(installed, consumer, env, "--policy-tag", "v2")
@@ -141,8 +148,12 @@ def test_policy_upgrade_and_rollback_keep_choices_and_exceptions(
         == f"Tag v2 names commit {commits['v2']}, as adoption requires."
     )
     assert targets(moved)["pre-commit-hooks"] == ("5.0.0", "6.0.0", "upgrade")
-    assert targets(moved)["betterleaks"] == ("1.9.0", "1.9.0", "unchanged")
-    assert exceptions(moved) == {"betterleaks": ("1.9.0", "redundant")}
+    assert targets(moved)["betterleaks"] == (
+        BETTERLEAKS_PIN,
+        BETTERLEAKS_PIN,
+        "unchanged",
+    )
+    assert exceptions(moved) == {"betterleaks": (BETTERLEAKS_PIN, "redundant")}
     assert found["redundant_exception"]["severity"] == "warning"
     after = manifest.read_text()
     assert after == before["gateseal.toml"].decode().replace(
@@ -152,22 +163,26 @@ def test_policy_upgrade_and_rollback_keep_choices_and_exceptions(
 
     back = upgrade(installed, consumer, env, "--policy-tag", "v1")
     assert targets(back)["pre-commit-hooks"] == ("6.0.0", "5.0.0", "rollback")
-    assert exceptions(back) == {"betterleaks": ("1.9.0", "retained")}
+    assert exceptions(back) == {"betterleaks": (BETTERLEAKS_PIN, "retained")}
     assert tracked(consumer) == before
 
 
 def test_bare_component_follows_the_pin_forward_only(installed, team, tmp_path):
     consumer, env = consumer_at(installed, team, tmp_path, "v1", "secrets")
-    upgrade(installed, consumer, env, "betterleaks=1.9.0", *REASON)
+    upgrade(installed, consumer, env, f"betterleaks={BETTERLEAKS_PIN}", *REASON)
     before = tracked(consumer)
     kept = upgrade(installed, consumer, env, "betterleaks")
     assert kept["code"] == "unchanged" and kept["changed"] == []
-    assert targets(kept)["betterleaks"] == ("1.9.0", "1.9.0", "preserved")
+    assert targets(kept)["betterleaks"] == (
+        BETTERLEAKS_PIN,
+        BETTERLEAKS_PIN,
+        "preserved",
+    )
     assert tracked(consumer) == before
     renewed = upgrade(
         installed, consumer, env, "betterleaks", "--review-by", "2027-03-31"
     )
-    assert exceptions(renewed) == {"betterleaks": ("1.9.0", "retained")}
+    assert exceptions(renewed) == {"betterleaks": (BETTERLEAKS_PIN, "retained")}
     assert "review_by = 2027-03-31" in (consumer / "gateseal.toml").read_text()
     assert REASON[1] in (consumer / "gateseal.toml").read_text()
 
@@ -175,7 +190,7 @@ def test_bare_component_follows_the_pin_forward_only(installed, team, tmp_path):
         installed, consumer, env, "--policy-tag", "v2", "betterleaks=1.8.0", *REASON
     )
     forward = upgrade(installed, consumer, env, "betterleaks")
-    assert targets(forward)["betterleaks"] == ("1.8.0", "1.9.0", "upgrade")
+    assert targets(forward)["betterleaks"] == ("1.8.0", BETTERLEAKS_PIN, "upgrade")
     assert exceptions(forward) == {"betterleaks": ("1.8.0", "removed")}
     assert "[exceptions.betterleaks]" not in (consumer / "gateseal.toml").read_text()
 
@@ -202,14 +217,14 @@ def test_incompatible_exceptions_are_refused_before_any_write(
     assert "COMPONENT=VERSION" in refused["next_steps"][0]
     assert tracked(consumer) == before
     resolved = upgrade(installed, consumer, env, "--policy-tag", "v3", "betterleaks")
-    assert targets(resolved)["betterleaks"] == ("1.8.0", "1.9.0", "upgrade")
+    assert targets(resolved)["betterleaks"] == ("1.8.0", BETTERLEAKS_PIN, "upgrade")
 
     upgrade(installed, consumer, env, "pre-commit-hooks=5.0.0", *REASON)
     before = tracked(consumer)
     required = upgrade(installed, consumer, env, "--policy-tag", "v2", code=2)
     assert required["code"] == "incompatible_exception"
     assert (
-        "betterleaks 1.9.0 needs pre-commit-hooks 6.0.0 or newer"
+        f"betterleaks {BETTERLEAKS_PIN} needs pre-commit-hooks 6.0.0 or newer"
         in required["diagnostics"][0]["message"]
     )
     assert tracked(consumer) == before

@@ -11,7 +11,7 @@ import re
 import subprocess
 
 import pytest
-from conftest import on_machine
+from conftest import BUNDLED_TOOLS, on_machine
 from doc_examples import example
 from gateseal.validation import canonical
 from installation import clone, success
@@ -149,7 +149,8 @@ def test_status_and_doctor_label_gitleaks_team_defined(installed, guarded):
     for command in ("status", "doctor"):
         assert tool_notes(installed.cli(consumer, command, env=env)) == [
             "Tool pre-commit-hooks 6.0.0 for hygiene: built-in, pre-commit-repository.",
-            "Tool betterleaks 1.9.0 for secrets: built-in, release-binary.",
+            f"Tool betterleaks {BUNDLED_TOOLS['betterleaks'].pin} for secrets: "
+            "built-in, release-binary.",
             "Tool gitleaks 8.30.0 for secrets: team-defined, release-binary; it "
             "carries the tool-specific guarantees only as far as its "
             "definition's arguments declare them.",

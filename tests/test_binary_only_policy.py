@@ -3,20 +3,21 @@
 import json
 
 import pytest
+from conftest import BUNDLED_TOOLS, reviewed_line
 from installation import clone, process, success
 from team_policy import URL, environment, git, publish
 
 pytestmark = pytest.mark.integration
 
-POLICY = """\
+POLICY = f"""\
 schema = 5
 release = "binary-only"
 minimum_compiler = "0.1.0"
 
 [capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
-pin = "1.9.0"
-reviewed = ["1.9.0", "1.8.0"]
+pin = "{BUNDLED_TOOLS["betterleaks"].pin}"
+{reviewed_line("betterleaks")}
 """
 
 

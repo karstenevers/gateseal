@@ -16,7 +16,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from conftest import stderr_refusal
+from conftest import BUNDLED_TOOLS, stderr_refusal
 from gateseal import commit_check
 from gateseal.platforms import machine
 from gateseal.worktree import locate_worktree
@@ -25,7 +25,8 @@ from stand_ins import configure, executable
 from test_secrets import adopt, assert_blocked, stage_secret, without_mise
 
 LOCK = "gateseal.lock"
-SWAPPED = "#!/bin/sh\necho 1.9.0\n"
+PIN = BUNDLED_TOOLS["betterleaks"].pin
+SWAPPED = f"#!/bin/sh\necho {PIN}\n"
 """A Betterleaks that reports its version and finds nothing."""
 
 
@@ -60,11 +61,11 @@ def folder(tmp_path, monkeypatch):
     As mise does, it starts a program from the install's bin folder when the
     install has one.
     """
-    folder = tmp_path / "mise installs" / "betterleaks 1.9.0"
+    folder = tmp_path / "mise installs" / f"betterleaks {PIN}"
     mise = executable(
         tmp_path / "stand-in" / "mise",
         f"#!/bin/sh\nif [ ! -d '{folder}' ]; then\n"
-        "echo 'mise ERROR betterleaks@1.9.0 not installed' >&2; exit 1; fi\n"
+        f"echo 'mise ERROR betterleaks@{PIN} not installed' >&2; exit 1; fi\n"
         f"if [ \"$2\" = where ]; then echo '{folder}'; exit; fi\n"
         f'bin=\'{folder}\'; if [ -d "$bin/bin" ]; then bin="$bin/bin"; fi\n'
         'if [ -e "$bin/$3" ]; then echo "$bin/$3"; else\n'
@@ -112,7 +113,7 @@ def refusal(folder, message):
 def changed(folder, at="betterleaks"):
     path = folder / at
     return refusal(
-        folder, f"{path} is not the betterleaks 1.9.0 program that {LOCK} records."
+        folder, f"{path} is not the betterleaks {PIN} program that {LOCK} records."
     )
 
 
@@ -120,7 +121,7 @@ def starts_none(folder):
     return refusal(
         folder,
         f"mise starts no betterleaks from {folder}, where it installed betterleaks "
-        "1.9.0.",
+        f"{PIN}.",
     )
 
 
@@ -239,7 +240,7 @@ def test_a_commit_with_a_swapped_betterleaks_fails_and_names_it(
     shown = refused.stdout + refused.stderr
     assert refused.returncode == 1, shown
     assert re.search(r"Check files and tools against gateseal\.lock\.+Failed", shown)
-    assert f"gateseal: {swapped} is not the betterleaks 1.9.0 program" in shown, shown
+    assert f"gateseal: {swapped} is not the betterleaks {PIN} program" in shown, shown
     skipped = dict(env, SKIP="gateseal-check")
     success(["git", "commit", "-m", "Leak"], consumer, skipped)
     success(["git", "reset", "--soft", "HEAD~1"], consumer)

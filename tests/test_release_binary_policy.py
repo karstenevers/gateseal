@@ -14,7 +14,7 @@ from dataclasses import replace
 
 import pytest
 from archives import tar_gz
-from conftest import PIN
+from conftest import BUNDLED_TOOLS, PIN
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
@@ -60,12 +60,13 @@ GITLEAKS_URL = (
 GITLEAKS_SHA = "1" * 64
 BETTERLEAKS = "https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/"
 MISE = ["mise", "--no-config", "exec", "--deny-env"]
+BETTERLEAKS_PIN = BUNDLED_TOOLS["betterleaks"].pin
 
 
 def bundled_archives():
-    """Return the bundled policy.lock's Betterleaks 1.9.0 archives by platform."""
+    """Return the bundled policy.lock's archives of the Betterleaks pin by platform."""
     lock = json.loads((bundled_root() / "policy.lock").read_bytes())
-    return lock["components"]["betterleaks"]["versions"]["1.9.0"]["platforms"]
+    return lock["components"]["betterleaks"]["versions"][BETTERLEAKS_PIN]["platforms"]
 
 
 def copied(tmp_path):
@@ -162,7 +163,7 @@ def test_a_hook_starts_its_release_binary_through_mise_with_every_archive(tmp_pa
         f"platforms_linux_x64_checksum=sha256:{linux['sha256']},"
         f"platforms_macos_arm64_url={macos['url']},"
         f"platforms_macos_arm64_checksum=sha256:{macos['sha256']}",
-        "1.9.0",
+        BETTERLEAKS_PIN,
     )
     assert found["betterleaks"][:7] == [*MISE, betterleaks, "--", "betterleaks"]
     gitleaks = request(

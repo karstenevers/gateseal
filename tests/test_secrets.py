@@ -6,7 +6,7 @@ from pathlib import Path
 from string import ascii_letters, ascii_uppercase, digits
 
 import pytest
-from conftest import on_machine, preserved
+from conftest import BUNDLED_TOOLS, on_machine, preserved
 from installation import clone, process, success
 
 pytestmark = pytest.mark.integration
@@ -22,6 +22,7 @@ TRACKED = (
 )
 REMOVE = "Next: Remove each secret, stage the fix, and retry."
 ALNUM = ascii_letters + digits
+PIN = BUNDLED_TOOLS["betterleaks"].pin
 
 
 def configure(installed, root, *capabilities, code=0):
@@ -113,7 +114,7 @@ def test_staged_secret_stops_the_commit_and_a_clean_one_passes(installed, consum
     assert installed.cli(consumer, "check")["code"] == "consistent"
     lock = json.loads((consumer / "gateseal.lock").read_bytes())
     assert list(lock["outputs"]) == sorted(TRACKED[2:])
-    assert lock["native_artifacts"]["betterleaks"]["version"] == "1.9.0"
+    assert lock["native_artifacts"]["betterleaks"]["version"] == PIN
     success(["git", "add", *TRACKED], consumer)
     success(["git", "commit", "-m", "Adopt secret detection"], consumer)
     assert success(["git", "status", "--porcelain"], consumer).stdout == ""
@@ -315,13 +316,13 @@ def test_two_repositories_that_pin_different_versions_both_commit(
     versions = {}
     for root in (secured, guarded, secured):
         config = (root / ".pre-commit-config.yaml").read_text()
-        versions[root] = "1.8.0" if "]@1.8.0" in config else "1.9.0"
+        versions[root] = next(v for v in ("1.8.0", PIN) if f"]@{v}" in config)
         stage_secret(root)
         try:
             assert_blocked(process(["git", "commit", "-m", "Leak"], root))
         finally:
             unstage(root)
-    assert versions == {secured: "1.8.0", guarded: "1.9.0"}
+    assert versions == {secured: "1.8.0", guarded: PIN}
 
 
 HOSTILE = """

@@ -131,8 +131,8 @@ Replace the Python capability tables in `policy/policy.toml` with these tables:
 [capabilities.python.tools.ruff]
 hook_ids = ["ruff-check", "ruff-format"]
 configuration = "rules/ruff.toml"
-pin = "0.17.1"
-reviewed = ["0.17.1"]
+pin = "0.17.5"
+reviewed = ["0.17.5", "0.17.1"]
 
 [capabilities.python.tools.black]
 configuration = "rules/black.toml"

@@ -5,7 +5,7 @@ gateseal policy check does for a policy's files.
 """
 
 import pytest
-from conftest import BUNDLED_MINIMUM
+from conftest import BUNDLED_MINIMUM, BUNDLED_TOOLS, newer_release, reviewed_line
 from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import (
@@ -18,11 +18,13 @@ from gateseal.policy import (
 BUNDLED = {asset.path: asset.content for asset in load_bundled_policy().assets}
 HOOKS_PIN = 'pin = "6.0.0"\n'
 HOOKS = 'reviewed = ["6.0.0", "5.0.0"]\n'
-RUFF = 'reviewed = ["0.17.1"]\n'
+RUFF_PIN = BUNDLED_TOOLS["ruff"].pin
+RUFF = reviewed_line("ruff") + "\n"
+SECRETS_PIN = f'pin = "{BUNDLED_TOOLS["betterleaks"].pin}"\n'
 SECRETS = (
     "[capabilities.secrets.tools.betterleaks]\n"
-    'configuration = "rules/betterleaks.toml"\npin = "1.9.0"\n'
-    'reviewed = ["1.9.0", "1.8.0"]\n'
+    'configuration = "rules/betterleaks.toml"\n'
+    f"{SECRETS_PIN}{reviewed_line('betterleaks')}\n"
 )
 
 
@@ -86,7 +88,10 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
     text = text.replace(RUFF, RUFF + 'requires."0.17.1" = { betterleaks = "1.9.0" }\n')
     review = review_policy(reader(text))
     assert review.capabilities == ("hygiene", "python")
-    assert review.catalogs["ruff"].requires == {"0.17.1": {"betterleaks": "1.9.0"}}
+    unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
+    assert review.catalogs["ruff"].requires == unrequired | {
+        "0.17.1": {"betterleaks": "1.9.0"}
+    }
     unknown = text.replace('{ betterleaks = "1.9.0" }', '{ black = "1.0.0" }')
     message = refused(reader(unknown))
     assert "capabilities.python.tools.ruff.requires.0.17.1" in message.split()
@@ -106,13 +111,18 @@ def test_a_capability_needs_a_lowercase_name_and_a_tool(table, name):
 
 
 def test_a_pin_may_require_exactly_another_pin():
-    exact = assets(HOOKS_PIN, HOOKS_PIN + 'requires."6.0.0" = { ruff = "0.17.1" }\n')
+    exact = assets(
+        HOOKS_PIN, HOOKS_PIN + f'requires."6.0.0" = {{ ruff = "{RUFF_PIN}" }}\n'
+    )
     assert review_policy(exact).catalogs["pre-commit-hooks"].requires["6.0.0"] == {
-        "ruff": "0.17.1"
+        "ruff": RUFF_PIN
     }
-    newer = assets(HOOKS_PIN, HOOKS_PIN + 'requires."6.0.0" = { ruff = "0.17.2" }\n')
+    newer_ruff = newer_release("ruff")
+    newer = assets(
+        HOOKS_PIN, HOOKS_PIN + f'requires."6.0.0" = {{ ruff = "{newer_ruff}" }}\n'
+    )
     message = refused(newer, "incompatible_policy")
-    named = ("pre-commit-hooks 6.0.0", "ruff 0.17.2", "ruff 0.17.1")
+    named = ("pre-commit-hooks 6.0.0", f"ruff {newer_ruff}", f"ruff {RUFF_PIN}")
     assert all(value in message for value in named)
 
 
@@ -137,17 +147,19 @@ def test_two_capabilities_cannot_hold_one_tool():
 
 
 def test_a_pin_is_one_of_the_reviewed_versions():
-    edited = assets('pin = "1.9.0"', 'pin = "1.10.0"')
+    newer = newer_release("betterleaks")
+    edited = assets(SECRETS_PIN, f'pin = "{newer}"\n')
     assert refused(edited) == (
-        "capabilities.secrets.tools.betterleaks.pin 1.10.0 is not in "
+        f"capabilities.secrets.tools.betterleaks.pin {newer} is not in "
         "capabilities.secrets.tools.betterleaks.reviewed."
     )
 
 
 def test_a_requirement_belongs_to_a_reviewed_version():
-    edited = assets(RUFF, RUFF + 'requires."0.18.0" = { betterleaks = "1.9.0" }\n')
+    newer = newer_release("ruff")
+    edited = assets(RUFF, RUFF + f'requires."{newer}" = {{ betterleaks = "1.9.0" }}\n')
     assert refused(edited) == (
-        "capabilities.python.tools.ruff.requires.0.18.0 names 0.18.0, which "
+        f"capabilities.python.tools.ruff.requires.{newer} names {newer}, which "
         "capabilities.python.tools.ruff.reviewed does not list."
     )
 

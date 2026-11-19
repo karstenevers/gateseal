@@ -7,6 +7,14 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ## [Unreleased]
 
+### Changed
+
+- The bundled policy pins Ruff 0.17.5 and Betterleaks 1.10.1. It still reviews
+  Ruff 0.17.1 and Betterleaks 1.9.0 and 1.8.0, so a Version Exception can keep
+  one of them. The policy keeps its label `2026.11-team-tools`, so
+  `gateseal upgrade` to this release stops with `bundled_policy_moves` until
+  you add `--policy bundled`.
+
 ## [0.2.0] - 2026-11-18
 
 This release keeps no compatibility with 0.1.0. Every command refuses a Lock
