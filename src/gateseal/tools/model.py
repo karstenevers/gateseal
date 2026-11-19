@@ -16,7 +16,7 @@ import re
 import shlex
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum, StrEnum, auto
 from typing import ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
@@ -70,7 +70,32 @@ together. A hook outside the ci stage would not be part of the gate.
 
 
 class Scope(StrEnum):
+    """What a hook checks.
+
+    A FILES hook gets the names of the changed files that match it. A PROJECT
+    hook gets no file names and checks the whole project, because a change in
+    one file can break another that the commit does not change. It starts at
+    every run and takes no file types: a deleted file breaks its importers,
+    and pre-commit matches no hook against a deleted file.
+    """
+
     FILES = "files"
+    PROJECT = "project"
+
+
+class Starts(Enum):
+    """What the hooks of a Tool Kind start.
+
+    The hooks of an UPSTREAM_HOOKS kind come from the tool's own repository,
+    so its definition has no executable. The hooks of an EXECUTABLE kind
+    start the tool's own executable, as local_repository renders them. A
+    RECORDED_EXECUTABLE kind does the same and records what the commit check
+    compares an installed executable with.
+    """
+
+    UPSTREAM_HOOKS = auto()
+    EXECUTABLE = auto()
+    RECORDED_EXECUTABLE = auto()
 
 
 class OutputFormat(StrEnum):
@@ -194,17 +219,21 @@ class Hook:
     output: OutputFormat
 
     def base_entry(
-        self, exclude: str | None, stages: frozenset[Stage]
+        self, exclude: str | None, stages: frozenset[Stage], scope: Scope
     ) -> dict[str, object]:
         """Return the native configuration keys every rendering of the hook shares.
 
-        stages is the definition's, which STAGE_SETS holds.
+        stages is the definition's, which STAGE_SETS holds, and scope the
+        definition's too.
         """
         entry: dict[str, object] = {
             "id": self.id,
             "name": self.name,
             "stages": list(STAGE_SETS[stages]),
         }
+        if scope is Scope.PROJECT:
+            entry["always_run"] = True
+            entry["pass_filenames"] = False
         if self.types_or:
             entry["types_or"] = list(self.types_or)
         if exclude is not None:
@@ -278,13 +307,14 @@ class Upstream(Protocol):
 class Source(Protocol):
     """A definition's [source] table as its kind parsed it, and the kind's rules.
 
-    kind is the kind's value of the definition's kind field. local says that
-    the kind's hooks start the tool's own executable, as local_repository
-    renders them.
+    kind is the kind's value of the definition's kind field. starts says
+    what the kind's hooks start. remark is what status adds about a tool of
+    the kind after the kind's name, or nothing.
     """
 
     kind: ClassVar[str]
-    local: ClassVar[bool]
+    starts: ClassVar[Starts]
+    remark: ClassVar[str]
 
     def offer(
         self,
@@ -325,11 +355,11 @@ class ToolDefinition:
     to, .gateseal/<name>.<format>; files maps each fixed owned output,
     .gateseal/<name>-<key>.<extension>, to its bytes. Both are derived from
     the name, so a definition cannot name a path the compiler does not own.
-    stages is one of STAGE_SETS' sets, which every hook's stages render.
-    scope is a closed value that no rendering reads yet, because this
-    compiler implements one scope. history holds the arguments of the tool's
-    executable that scan a revision range, one of which holds RANGE, where
-    the CI gate puts the range; only a kind whose hooks are local has one.
+    stages is one of STAGE_SETS' sets, which every hook's stages render, and
+    scope says whether its hooks get file names. history holds the arguments
+    of the tool's executable that scan a revision range, one of which holds
+    RANGE, where the CI gate puts the range; only a kind whose hooks are local
+    has one.
     choices holds the Policy Choices the definition declares, by name; only a
     definition with a configuration declares any, since each renders into it.
     """
@@ -401,6 +431,36 @@ def _executable(value: object, field: str) -> Executable:
     )
 
 
+def _source_executable(value: object, tool: str, source: Source) -> Executable | None:
+    """Return the executable a definition names, as its kind allows one.
+
+    A kind whose hooks are local needs an executable, and only such a kind
+    has one. Only a kind that records the installed program checks it at
+    commit.
+    """
+    field = f"{tool}.executable"
+    upstream = source.starts is Starts.UPSTREAM_HOOKS
+    if value is None:
+        if not upstream:
+            raise GatesealError(
+                "invalid_field", f"A {source.kind} tool needs an executable."
+            )
+        return None
+    executable = _executable(value, field)
+    if upstream:
+        raise GatesealError(
+            "invalid_field",
+            f"{field} needs a tool whose hooks start its own executable.",
+        )
+    if executable.check_at_commit and source.starts is not Starts.RECORDED_EXECUTABLE:
+        raise GatesealError(
+            "invalid_field",
+            f"{field}.check_at_commit needs a release-binary tool: nothing "
+            f"records the program that a {source.kind} tool installs.",
+        )
+    return executable
+
+
 def _files(name: str, value: object, field: str) -> dict[str, tuple[str, bytes]]:
     """Return each fixed file by key, with its derived owned path and its bytes."""
     found: dict[str, tuple[str, bytes]] = {}
@@ -425,7 +485,12 @@ def _files(name: str, value: object, field: str) -> dict[str, tuple[str, bytes]]
 
 
 def _hook(
-    tool: str, origin: Origin, hook_id: str, value: object, owned: Mapping[str, str]
+    tool: str,
+    origin: Origin,
+    hook_id: str,
+    value: object,
+    owned: Mapping[str, str],
+    scope: Scope,
 ) -> Hook:
     field = f"tools.{tool}.hooks.{hook_id}"
     table = mapping(value, field)
@@ -435,6 +500,12 @@ def _hook(
     )
     if not NAME.fullmatch(hook_id):
         raise GatesealError("invalid_field", f"{field} needs a lowercase id.")
+    if scope is Scope.PROJECT and "types_or" in table:
+        raise GatesealError(
+            "invalid_field",
+            f"{field}.types_or has no effect: a hook of a tool with the project "
+            "scope starts at every run.",
+        )
     return Hook(
         tool,
         origin,
@@ -458,11 +529,11 @@ def _stages(value: object, field: str) -> frozenset[Stage]:
 
 
 def _hooks(
-    tool: str, origin: Origin, value: object, owned: Mapping[str, str]
+    tool: str, origin: Origin, value: object, owned: Mapping[str, str], scope: Scope
 ) -> dict[str, Hook]:
     field = f"tools.{tool}.hooks"
     hooks = {
-        hook_id: _hook(tool, origin, hook_id, item, owned)
+        hook_id: _hook(tool, origin, hook_id, item, owned, scope)
         for hook_id, item in mapping(value, field).items()
     }
     if not hooks or len({hook.name for hook in hooks.values()}) != len(hooks):
@@ -477,7 +548,8 @@ def _history(
 ) -> tuple[str, ...]:
     table = fields(value, {"args"}, field)
     history = _arguments(table["args"], f"{field}.args", owned, RANGE)
-    if not source.local or sum(arg.count(RANGE) for arg in history) != 1:
+    upstream = source.starts is Starts.UPSTREAM_HOOKS
+    if upstream or sum(arg.count(RANGE) for arg in history) != 1:
         raise GatesealError(
             "invalid_field",
             f"{field}.args must hold {RANGE} once, and only a tool "
@@ -532,21 +604,8 @@ def parse_definition(
     source = parse_source(document["source"], f"{field}.source")
     files = _files(name, document.get("files", {}), f"{field}.files")
     owned |= {key: path for key, (path, _) in files.items()}
-    executable = (
-        _executable(document["executable"], f"{field}.executable")
-        if "executable" in document
-        else None
-    )
-    hooks = _hooks(name, origin, document["hooks"], owned)
-    if source.local and executable is None:
-        raise GatesealError(
-            "invalid_field", f"A {source.kind} tool needs an executable."
-        )
-    if executable is not None and not source.local:
-        raise GatesealError(
-            "invalid_field",
-            f"{field}.executable needs a tool whose hooks start its own executable.",
-        )
+    executable = _source_executable(document.get("executable"), field, source)
+    hooks = _hooks(name, origin, document["hooks"], owned, scope)
     history = (
         _history(document["history"], f"{field}.history", owned, source)
         if "history" in document
@@ -682,19 +741,20 @@ def local_repository(
     hooks: Iterable[Hook],
     exclude: str | None,
     stages: frozenset[Stage],
+    scope: Scope,
 ) -> dict[str, object]:
     """Render hooks that start a tool's own executable with program.
 
     Each entry is program and the hook's args, joined so pre-commit's shlex
-    split returns them exactly; pre-commit appends file names and starts no
-    shell. Its hooks need LOCAL_MINIMUM_PRE_COMMIT. pre-commit starts one
-    process of a hook at a time, because two first starts of one program at
-    once can fail while the program is installed.
+    split returns them exactly; pre-commit appends the file names of a FILES
+    scope and starts no shell. Its hooks need LOCAL_MINIMUM_PRE_COMMIT.
+    pre-commit starts one process of a hook at a time, because two first
+    starts of one program at once can fail while the program is installed.
     """
     return {
         "repo": "local",
         "hooks": [
-            hook.base_entry(exclude, stages)
+            hook.base_entry(exclude, stages, scope)
             | {
                 "language": "unsupported",
                 "entry": shlex.join([*program, *hook.args]),

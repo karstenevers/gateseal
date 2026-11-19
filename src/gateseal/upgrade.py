@@ -31,6 +31,7 @@ from gateseal.manifest import (
 )
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.tools.model import NAME, Tool
+from gateseal.tools.uv_project import require_project
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -286,10 +287,15 @@ def _compiled(
     checks: tuple[Note, ...],
     preserved: frozenset[str] = frozenset(),
 ) -> Plan:
-    """Plan the Lock and outputs that manifest compiles to with policy and pin."""
+    """Plan the Lock and outputs that manifest compiles to with policy and pin.
+
+    The target policy can run a tool in the uv project that the current one
+    did not, so the plan needs the project before anything is written.
+    """
     parsed = parse_manifest(manifest)
     _require_reviewed(parsed, policy)
     selection = _selection(parsed, policy)
+    require_project(root, selection.tools)
     source = parsed.source
     outputs = lock.compile_outputs(selection, pin, source)
     document = canonical(lock.compile_lock(manifest, source, policy, pin, selection))

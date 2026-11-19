@@ -29,6 +29,7 @@ from gateseal.tools.model import (
     LockSection,
     MissingUpstream,
     Release,
+    Starts,
     ToolDefinition,
     ToolUse,
     Upstream,
@@ -46,7 +47,8 @@ class PreCommitRepository:
     """The [source] of a hook repository: its URL and its release tag pattern."""
 
     kind: ClassVar[str] = "pre-commit-repository"
-    local: ClassVar[bool] = False
+    starts: ClassVar[Starts] = Starts.UPSTREAM_HOOKS
+    remark: ClassVar[str] = ""
     repository: str
     tag: str
 
@@ -135,7 +137,9 @@ class RepositoryTool:
     def entry(self, exclude: str | None) -> dict[str, object]:
         hooks: list[object] = []
         for hook in self.use.hooks:
-            entry = hook.base_entry(exclude, self.definition.stages)
+            entry = hook.base_entry(
+                exclude, self.definition.stages, self.definition.scope
+            )
             if hook.args:
                 entry["args"] = list(hook.args)
             hooks.append(entry)

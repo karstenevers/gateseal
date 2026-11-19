@@ -44,6 +44,8 @@
 
 <a id="team-defined-tool"></a>A **Team-defined Tool** has a definition in a team's policy.
 
+<a id="project-tool"></a>A **Project Tool** runs in the repository's own uv project, so it reads the packages that the project installs.
+
 <a id="compiler-runtime"></a>The **Compiler Runtime** is the pre-commit version a gateseal release names and the Python that setup installs for it.
 
 <a id="setup"></a>**Setup** installs that pre-commit and configures new clones to use its launcher.

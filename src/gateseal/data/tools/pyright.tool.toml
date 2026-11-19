@@ -1,0 +1,18 @@
+kind = "uv-project"
+stages = ["commit", "run", "ci"]
+scope = "project"
+
+# The nodejs extra brings the Node.js that Pyright runs on.
+[source]
+package = "pyright[nodejs]"
+
+[executable]
+name = "pyright"
+
+[configuration]
+format = "toml"
+
+[hooks.pyright]
+name = "pyright"
+args = ["--project", "{configuration}"]
+output = "plain"

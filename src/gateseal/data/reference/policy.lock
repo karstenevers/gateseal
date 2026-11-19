@@ -62,6 +62,13 @@
         }
       }
     },
+    "pyright": {
+      "versions": {
+        "1.1.414": {
+          "package": "pyright[nodejs]"
+        }
+      }
+    },
     "ruff": {
       "versions": {
         "0.17.1": {

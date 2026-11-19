@@ -290,11 +290,12 @@ def test_policy_without_secrets_still_loads(tmp_path):
     (tmp_path / "rules" / "betterleaks.toml").unlink()
     relock(tmp_path, lambda components: components.pop("betterleaks"))
     policy = load_policy_tree(tmp_path)
-    assert policy.capabilities == ("hygiene", "python")
+    assert policy.capabilities == ("hygiene", "python", "python-types")
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
         "policy.toml",
         "rules/ruff.toml",
+        "rules/pyright.toml",
         "policy.lock",
     ]
     assert policy.content_digest != bundled.content_digest
@@ -309,7 +310,7 @@ def test_policy_without_python_offers_no_python(tmp_path):
     (tmp_path / "rules" / "ruff.toml").unlink()
     relock(tmp_path, lambda components: components.pop("ruff"))
     policy = load_policy_tree(tmp_path)
-    assert policy.capabilities == ("hygiene", "secrets")
+    assert policy.capabilities == ("hygiene", "python-types", "secrets")
     assert "ruff" not in policy.tools
     assert "rules/ruff.toml" not in {asset.path for asset in policy.assets}
     manifest = parse_manifest(
@@ -479,6 +480,27 @@ def test_ruff_configuration_cannot_extend_another_configuration(tmp_path):
         "Betterleaks or Gitleaks extend table may hold only useDefault and "
         "disabledRules."
     )
+
+
+@pytest.mark.parametrize("extends", ['"../pyrightconfig.json"', '""'])
+def test_pyright_configuration_cannot_extend_another_configuration(tmp_path, extends):
+    tree(tmp_path)
+    path = tmp_path / "rules" / "pyright.toml"
+    path.write_text(path.read_text() + f"extends = {extends}\n")
+    with pytest.raises(GatesealError) as refused:
+        load_policy_tree(tmp_path)
+    assert refused.value.code == "invalid_field"
+    assert str(refused.value) == (
+        "The pyright configuration must not extend another configuration: "
+        "remove tool.pyright.extends."
+    )
+
+
+def test_a_configuration_may_name_extends_outside_pyright_s_table(tmp_path):
+    tree(tmp_path)
+    path = tmp_path / "rules" / "pyright.toml"
+    path.write_text(path.read_text() + '\n[tool.other]\nextends = "x"\n')
+    load_policy_tree(tmp_path)
 
 
 def test_ruff_configuration_rejects_carriage_returns(tmp_path):

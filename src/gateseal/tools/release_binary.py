@@ -55,6 +55,7 @@ from gateseal.tools.model import (
     LockSection,
     MissingUpstream,
     Release,
+    Starts,
     ToolDefinition,
     ToolUse,
     Upstream,
@@ -111,7 +112,8 @@ class ReleaseBinary:
     """
 
     kind: ClassVar[str] = "release-binary"
-    local: ClassVar[bool] = True
+    starts: ClassVar[Starts] = Starts.RECORDED_EXECUTABLE
+    remark: ClassVar[str] = ""
     repository: str
     tag: str
     archive: str
@@ -425,8 +427,9 @@ class BinaryTool:
         return (*MISE_EXEC, *flags, self.mise_request, "--", self.executable.name)
 
     def entry(self, exclude: str | None) -> dict[str, object]:
+        definition = self.definition
         return local_repository(
-            self.program(), self.use.hooks, exclude, self.definition.stages
+            self.program(), self.use.hooks, exclude, definition.stages, definition.scope
         )
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:

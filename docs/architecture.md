@@ -13,20 +13,20 @@ After an edit, `gateseal configure` writes the Lock and the pre-commit configura
 ```mermaid
 flowchart LR
     accTitle: What gateseal keeps in Git and on your machine
-    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. Each commit runs the hooks that the generated files pin. pre-commit and mise install them once per machine.
+    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. Each commit runs the hooks that the generated files pin. pre-commit and mise install them once per machine, and uv installs a project tool's packages in each clone.
     policy["Policy<br/>bundled or from Git"]
     subgraph git["Committed to Git"]
         manifest["gateseal.toml<br/>your choices"]
         lock["gateseal.lock<br/>and generated files"]
     end
     subgraph machine["On your machine only"]
-        tools["Hook environments and release binaries<br/>shared by all clones"]
+        tools["Hook environments, release binaries<br/>and each clone's uv project environment"]
     end
     policy --> configure(["gateseal configure"])
     manifest --> configure
     configure --> lock
     lock --> commit(["git commit"])
-    commit -- "pre-commit and mise install and run" --> tools
+    commit -- "pre-commit, mise and uv install and run" --> tools
 ```
 
 ## How the policy, Manifest and Lock connect
@@ -97,17 +97,19 @@ target_version = "py312"                      # default: replaced by this value
 ```mermaid
 flowchart TD
     accTitle: How gateseal checks a commit
-    accDescr: git commit starts pre-commit. pre-commit runs gateseal-check first, which compares the staged generated files with the staged Lock. Then it runs each tool's hook. A Python hook runs in the environment that pre-commit built. A release binary starts through mise, which installs it at first use and checks its archive.
+    accDescr: git commit starts pre-commit. pre-commit runs gateseal-check first, which compares the staged generated files with the staged Lock. Then it runs each tool's hook. A Python hook runs in the environment that pre-commit built. A release binary starts through mise, which installs it at first use and checks its archive. A project tool starts through uv run, which installs the packages that the repository's uv.lock pins and the pinned tool.
     git["git commit"] -- "starts" --> precommit["pre-commit"]
     precommit -- "1. runs first" --> check["gateseal-check<br/>staged files against the staged Lock"]
     precommit -- "2. runs each Python hook" --> python["Python hooks, such as Ruff"]
     precommit -- "2. runs each binary hook" --> mise["mise exec"]
     mise -- "installs at first use,<br/>checks the archive, starts" --> binary["Release binaries,<br/>such as Betterleaks"]
+    precommit -- "2. runs each project hook" --> uv["uv run"]
+    uv -- "installs the locked packages<br/>and the pinned tool, starts" --> project["Project tools,<br/>such as Pyright"]
 ```
 
 The first commit hook compares staged generated files with the staged Lock. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI.
 
-A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, the host, and the policy's authors must be trusted.
+A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash, and so does Pyright's. Pyright runs in the repository's uv project, where the repository's `uv.lock` pins the packages that it reads. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, uv, the host, and the policy's authors must be trusted.
 
 A local user can bypass hooks with `git commit --no-verify`. A repository administrator can require the CI check before merging. See [the CI gate](ci-gate.md) for event scopes, and [GitHub CI](github-ci.md) or [Azure Pipelines](azure-pipelines.md) for the setup and private policy access.
 

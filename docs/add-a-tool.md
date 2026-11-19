@@ -1,6 +1,6 @@
 # Add a tool to your policy
 
-A team policy can add a release binary or a Python pre-commit repository. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
+A team policy can add a release binary, a Python pre-commit repository, or a tool that runs in the repository's uv project. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
 
 ## Add Gitleaks
 
@@ -155,3 +155,49 @@ formatter = "black"
 ```
 
 Run `gateseal configure` in that repository. Ruff remains the linter. The Black hook uses pre-commit's Python and installs the pinned Black version from PyPI without a wheel hash.
+
+## Add mypy, a tool that imports the project
+
+A type checker reads the packages that the project installs. A `uv-project` tool runs in the repository's own uv project, so it finds them. The bundled `python-types` capability runs Pyright this way. This example runs mypy in its place.
+
+Save this definition as `policy/tools/mypy.toml`:
+
+<!-- policy file: tools/mypy.toml -->
+```toml
+kind = "uv-project"
+stages = ["commit", "run", "ci"]
+scope = "project"
+
+[source]
+package = "mypy"
+
+[executable]
+name = "mypy"
+
+[hooks.mypy]
+name = "mypy"
+args = ["--strict", "--python-executable", ".venv/bin/python", "."]
+output = "plain"
+```
+
+Replace the `python-types` table in `policy/policy.toml` with this table:
+
+<!-- policy tables: mypy -->
+```toml
+[capabilities.python-types.tools.mypy]
+pin = "2.4.1"
+reviewed = ["2.4.1"]
+```
+
+Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command checks that PyPI has the release.
+
+A repository that adopts the release needs a `pyproject.toml` and a `uv.lock` at its root. Its generated hook is one command:
+
+```sh
+uv run --locked --all-packages --with mypy==2.4.1 -- mypy --strict --python-executable .venv/bin/python .
+```
+
+- uv installs the pinned mypy over the project's environment, `.venv`. The repository's `uv.lock` pins the packages in that environment.
+- `--python-executable` makes mypy read the packages of the project's environment. Without it, mypy reads the packages of the Python that starts it. That Python finds mypy's own dependencies before the project's, so a package that both install would have the wrong version.
+- The hook stops when `uv.lock` is missing or out of date.
+- With `scope = "project"`, the hook runs at every commit. mypy gets no file names and checks the whole project. So it also finds an error in a file that the commit does not change, and an error that a deleted file causes.

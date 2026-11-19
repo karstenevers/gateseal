@@ -15,6 +15,7 @@ BUNDLED = (
     "policy.toml",
     "policy.lock",
     "rules/betterleaks.toml",
+    "rules/pyright.toml",
     "rules/ruff.toml",
     "README.md",
 )

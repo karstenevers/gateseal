@@ -15,8 +15,11 @@ this README and every other file.
 - `tools/<name>.toml` defines a tool that gateseal does not ship, of a kind it
   implements. A tool named like one gateseal ships always runs gateseal's
   definition.
-- `rules/ruff.toml` and `rules/betterleaks.toml` are the Ruff configuration
-  and the Betterleaks rules that configure copies into each repository.
+- `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
+  the Ruff configuration, the Pyright configuration and the Betterleaks rules
+  that configure copies into each repository. Pyright reads the paths in its
+  file relative to `.gateseal/`, where configure writes it. Its `venvPath`
+  and `venv` name `.venv`, the environment of the repository's uv project.
   The Betterleaks rules start from the rules built into Betterleaks, and
   `disabledRules` turns some of them off.
 - `gateseal policy add <tool> <version>` reviews a new version, and

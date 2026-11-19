@@ -20,6 +20,13 @@ reviewed = ["0.17.5", "0.17.1"]
 [capabilities.python.choices]
 target_version = "py311"
 
+# python-types is for a uv project. Pyright runs in the repository's own
+# project, where uv.lock pins the packages that it resolves imports from.
+[capabilities.python-types.tools.pyright]
+configuration = "rules/pyright.toml"
+pin = "1.1.414"
+reviewed = ["1.1.414"]
+
 [capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
 pin = "1.10.1"
