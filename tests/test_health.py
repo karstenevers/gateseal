@@ -1,4 +1,4 @@
-"""gateseal status and gateseal doctor report the same four checks.
+"""gateseal status and gateseal doctor report the same five checks.
 
 The pre-commit that gateseal setup installs needs a download, so a stand-in
 answers for it. The clone, its launcher, the Lock and the mise on the PATH are
@@ -13,7 +13,7 @@ import shutil
 
 import pytest
 from conftest import git_path
-from gateseal import health, setup
+from gateseal import health, lock, setup
 from gateseal.cli import main
 from gateseal.worktree import locate_worktree
 from installation import success
@@ -128,7 +128,7 @@ def test_a_launcher_that_git_would_not_run_fails_its_check(hygiene, change, prob
     change(hook)
     code, result = gateseal(hygiene, "status")
     assert (code, result["code"]) == (0, "unhealthy")
-    assert result["diagnostics"][0]["message"] == "1 of 4 checks failed."
+    assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
     assert check(result, "launcher") == ("error", "failed", f"{hook} {problem}")
     assert result["next_steps"] == REFRESH
     assert gateseal(hygiene, "doctor")[0] == 3
@@ -238,3 +238,169 @@ def test_doctor_does_not_warn_without_a_release_binary(hygiene, monkeypatch):
     monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
     code, result = gateseal(hygiene, "doctor")
     assert (code, warnings(result)) == (0, [])
+
+
+# The launcher that setup wrote names its hook type in the tests below, as
+# pre-commit's does, so a commit launcher in the push launcher's place is found.
+COMMIT = "#!/bin/sh\nexec pre-commit hook-impl --hook-type=pre-commit\n"
+PUSH = "#!/bin/sh\nexec pre-commit hook-impl --hook-type=pre-push\n"
+SLOW = (
+    '\n[hooks.slow-tests]\nname = "Run the slow tests"\n'
+    'run = "slow-tests.sh"\nstages = ["push", "ci"]\n'
+)
+
+
+@pytest.fixture
+def pushing(machine, tmp_path):
+    """A clone with a push hook and both launchers; returns it and its push hook."""
+    executable(setup.Layout(setup.data_root()).launcher, COMMIT)
+    root = clone(tmp_path, "hygiene")
+    executable(root / "slow-tests.sh")
+    with (root / "gateseal.toml").open("a") as manifest:
+        manifest.write(SLOW)
+    worktree = locate_worktree(root)
+    lock.configure(
+        root, worktree.git, worktree.preparation, None, lock.PolicyRequest(), None
+    )
+    executable(git_path(root, "hooks/pre-commit"), COMMIT)
+    return root, executable(git_path(root, "hooks/pre-push"), PUSH)
+
+
+@pytest.mark.parametrize("command", ["status", "doctor"])
+def test_a_clone_with_a_push_hook_and_its_launcher_is_healthy(pushing, command):
+    root, hook = pushing
+    code, result = gateseal(root, command)
+    assert (code, result["code"]) == (0, "healthy")
+    assert check(result, "push-launcher") == (
+        "info",
+        "passed",
+        f"{hook} is the push launcher.",
+    )
+
+
+def take_the_commit_launcher(hook):
+    hook.write_text(COMMIT)
+
+
+@pytest.mark.parametrize(
+    ("change", "problem"),
+    [
+        (remove, "is missing, so git push runs no hook."),
+        (
+            take_the_commit_launcher,
+            "is not the push launcher that gateseal setup installs.",
+        ),
+        (lock_out, "is not executable, so git push skips it."),
+    ],
+)
+def test_a_push_launcher_that_git_would_not_run_fails_its_check(
+    pushing, change, problem
+):
+    root, hook = pushing
+    change(hook)
+    code, result = gateseal(root, "status")
+    assert (code, result["code"]) == (0, "unhealthy")
+    assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
+    assert check(result, "launcher")[1] == "passed"
+    assert check(result, "push-launcher") == ("error", "failed", f"{hook} {problem}")
+    assert result["next_steps"] == REFRESH
+    assert gateseal(root, "doctor")[0] == 3
+
+
+def test_a_push_launcher_is_unknown_before_setup_wrote_its_launcher(pushing):
+    root, hook = pushing
+    setup.Layout(setup.data_root()).launcher.unlink()
+    assert check(gateseal(root, "status")[1], "push-launcher")[2] == (
+        f"{hook} is not the push launcher that gateseal setup installs."
+    )
+
+
+def test_no_push_launcher_is_needed_without_a_push_hook(machine, tmp_path):
+    """Another tool's push hook, such as Git LFS's, is then no concern."""
+    root = clone(tmp_path, "hygiene")
+    executable(git_path(root, "hooks/pre-push"), "#!/bin/sh\ngit lfs pre-push\n")
+    for command in ("status", "doctor"):
+        code, result = gateseal(root, command)
+        assert (code, result["code"]) == (0, "healthy")
+        assert check(result, "push-launcher") == (
+            "info",
+            "skipped",
+            "No selected hook runs at a push.",
+        )
+
+
+def test_a_push_launcher_that_runs_no_check_is_reported(machine, tmp_path):
+    """It keeps Git LFS from writing its push hook, and no check guards the push."""
+    executable(setup.Layout(setup.data_root()).launcher, COMMIT)
+    root = clone(tmp_path, "hygiene")
+    executable(git_path(root, "hooks/pre-commit"), COMMIT)
+    hook = executable(git_path(root, "hooks/pre-push"), PUSH)
+    for command in ("status", "doctor"):
+        code, result = gateseal(root, command)
+        assert (code, result["code"]) == (0, "healthy")
+        assert check(result, "push-launcher") == (
+            "info",
+            "skipped",
+            f"No selected hook runs at a push, so the push launcher {hook} runs no "
+            "check. gateseal setup --refresh removes it, so that Git LFS can write "
+            "its push hook.",
+        )
+    identity = ["-c", "user.name=gateseal test", "-c", "user.email=t@x.invalid"]
+    commit = ["commit", "--quiet", "--no-verify", "-m", "Configure"]
+    success(["git", *identity, *commit], root)
+    success(["git", "worktree", "add", "--quiet", tmp_path / "linked"], root)
+    (tmp_path / "linked" / ".pre-commit-config.yaml").write_text(
+        '{"default_install_hook_types": ["pre-commit", "pre-push"], "repos": []}'
+    )
+    assert check(gateseal(root, "status")[1], "push-launcher")[2] == (
+        "No selected hook runs at a push."
+    )
+    (tmp_path / "linked" / ".pre-commit-config.yaml").unlink()
+    setup.Layout(setup.data_root()).launcher.unlink()
+    assert check(gateseal(root, "status")[1], "push-launcher")[2] == (
+        "No selected hook runs at a push."
+    )
+
+
+def test_the_push_launcher_is_not_checked_while_the_lock_does_not_load(pushing):
+    root, hook = pushing
+    hook.unlink()
+    (root / "gateseal.lock").unlink()
+    code, result = gateseal(root, "doctor")
+    assert (code, result["code"]) == (3, "unhealthy")
+    assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
+    assert check(result, "push-launcher") == (
+        "info",
+        "skipped",
+        "The Lock did not load, so its hooks are unknown.",
+    )
+
+
+def hooks_path_warning(root):
+    success(["git", "config", "core.hooksPath", "custom-hooks"], root)
+    [warning] = warnings(gateseal(root, "doctor")[1])
+    return warning["message"]
+
+
+def test_doctor_warns_that_a_hooks_path_skips_the_commit_launcher(hygiene):
+    assert hooks_path_warning(hygiene) == (
+        "Git's core.hooksPath names custom-hooks, so git commit skips the commit "
+        "launcher."
+    )
+
+
+def test_doctor_warns_that_a_hooks_path_skips_the_push_launcher_too(pushing):
+    root, _ = pushing
+    assert hooks_path_warning(root) == (
+        "Git's core.hooksPath names custom-hooks, so git commit and git push skip "
+        "their launchers."
+    )
+
+
+def test_doctor_warns_about_a_hooks_path_while_the_lock_does_not_load(pushing):
+    root, _ = pushing
+    (root / "gateseal.lock").unlink()
+    assert hooks_path_warning(root) == (
+        "Git's core.hooksPath names custom-hooks, so git commit skips the commit "
+        "launcher."
+    )

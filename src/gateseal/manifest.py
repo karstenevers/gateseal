@@ -20,7 +20,7 @@ from gateseal.policy import (
 )
 from gateseal.policy_tools import CAPABILITY, SKIP
 from gateseal.repository_hooks import RepositoryHook, parse_hooks, require_own_ids
-from gateseal.tools.model import Hook, Origin, Starts, Tool, require_local_hooks
+from gateseal.tools.model import Hook, Origin, Stage, Starts, Tool, require_local_hooks
 from gateseal.validation import (
     fields,
     mapping,
@@ -353,6 +353,17 @@ class Selection:
         return (
             *(hook for tool in self.tools for hook in tool.use.hooks),
             *(hook.hook for hook in self.repository_hooks),
+        )
+
+    @property
+    def pushes(self) -> bool:
+        """Tell whether the selection runs a hook at a push."""
+        return any(
+            Stage.PUSH in stages
+            for stages in (
+                *(tool.definition.stages for tool in self.tools),
+                *(hook.stages for hook in self.repository_hooks),
+            )
         )
 
 

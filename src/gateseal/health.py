@@ -1,10 +1,10 @@
 """What gateseal status and gateseal doctor check in a clone.
 
-Both commands report the same four checks: the Lock, the pre-commit that
-gateseal setup installs, the clone's commit launcher, and mise. status only
-observes, so it uses no network and always exits 0. doctor fetches a Policy
-that the clone has not stored, fails when a check fails, and warns about
-settings that keep a hook from running as the Lock says.
+Both commands report the same five checks: the Lock, the pre-commit that
+gateseal setup installs, the clone's commit launcher, its push launcher, and
+mise. status only observes, so it uses no network and always exits 0. doctor
+fetches a Policy that the clone has not stored, fails when a check fails, and
+warns about settings that keep a hook from running as the Lock says.
 """
 
 import os
@@ -16,6 +16,7 @@ from gateseal import lock, setup
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment
 from gateseal.managed_files import MANIFEST
+from gateseal.tools.model import LAUNCHERS
 from gateseal.tools.release_binary import (
     MINIMUM_MISE,
     BinaryTool,
@@ -39,6 +40,7 @@ LABELS = {
     "lock": "Lock",
     "pre-commit": "pre-commit",
     "launcher": "Launcher",
+    "push-launcher": "Push launcher",
     "mise": "mise",
 }
 
@@ -107,18 +109,51 @@ def _content(path: Path) -> bytes | None:
         return None
 
 
-def _launcher(worktree: Worktree) -> Check:
-    hook = worktree.hook
+def _launcher(name: str, hook: Path, expected: bytes | None, event: str) -> Check:
+    """Check that hook is the launcher expected, which Git starts at event."""
     found = _content(hook)
     if found is None:
-        problem = f"{hook} is missing, so git commit runs no hook."
-    elif found != _content(setup.Layout(setup.data_root()).launcher):
-        problem = f"{hook} is not the commit launcher that gateseal setup installs."
+        problem = f"{hook} is missing, so git {event} runs no hook."
+    elif found != expected:
+        problem = f"{hook} is not the {event} launcher that gateseal setup installs."
     elif not os.access(hook, os.X_OK):
-        problem = f"{hook} is not executable, so git commit skips it."
+        problem = f"{hook} is not executable, so git {event} skips it."
     else:
-        return Check("launcher", "passed", f"{hook} is the commit launcher.")
-    return Check("launcher", "failed", problem, REFRESH)
+        return Check(name, "passed", f"{hook} is the {event} launcher.")
+    return Check(name, "failed", problem, REFRESH)
+
+
+def _unneeded_push_launcher(
+    worktree: Worktree, hook: Path, launcher: bytes | None
+) -> bool:
+    """Tell whether hook is the push launcher while no worktree asks for it."""
+    found = _content(hook)
+    return (
+        found is not None
+        and found == launcher
+        and not setup.asks_for_push_launcher(worktree)
+    )
+
+
+def _launchers(worktree: Worktree, locked: lock.Locked | None) -> tuple[Check, Check]:
+    """Check the commit launcher, and the push launcher a selected hook needs."""
+    commit_hook, push_hook = (worktree.hooks / name for name in LAUNCHERS)
+    expected = _content(setup.Layout(setup.data_root()).launcher)
+    commit = _launcher("launcher", commit_hook, expected, "commit")
+    pushed = None if expected is None else setup.push_launcher(expected)
+    if locked is None:
+        why = "The Lock did not load, so its hooks are unknown."
+    elif locked.selection.pushes:
+        return commit, _launcher("push-launcher", push_hook, pushed, "push")
+    elif _unneeded_push_launcher(worktree, push_hook, pushed):
+        why = (
+            f"No selected hook runs at a push, so the push launcher {push_hook} runs "
+            "no check. gateseal setup --refresh removes it, so that Git LFS can "
+            "write its push hook."
+        )
+    else:
+        why = "No selected hook runs at a push."
+    return commit, Check("push-launcher", "skipped", why)
 
 
 def _mise(locked: lock.Locked | None) -> Check:
@@ -148,7 +183,8 @@ def _checks(
     worktree: Worktree, fetch: bool
 ) -> tuple[tuple[Check, ...], lock.Locked | None]:
     found, locked = _lock(worktree, fetch)
-    return (found, _pre_commit(), _launcher(worktree), _mise(locked)), locked
+    launchers = _launchers(worktree, locked)
+    return (found, _pre_commit(), *launchers, _mise(locked)), locked
 
 
 def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note, str]]:
@@ -156,11 +192,13 @@ def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note
     warnings: list[tuple[Note, str]] = []
     folder = setup.git_setting(worktree.git, worktree.root, "core.hooksPath")
     if folder is not None:
+        skipped = "git commit skips the commit launcher"
+        if locked is not None and locked.selection.pushes:
+            skipped = "git commit and git push skip their launchers"
         warning = Note(
             "warning",
             "custom_hooks_path",
-            f"Git's core.hooksPath names {folder}, so git commit skips the commit "
-            "launcher.",
+            f"Git's core.hooksPath names {folder}, so {skipped}.",
         )
         warnings.append((warning, "Remove the core.hooksPath setting."))
     off = [

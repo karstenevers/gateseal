@@ -31,6 +31,48 @@ If you installed gateseal and ran [setup](install.md#set-up-pre-commit-on-this-m
 
 If a hook changes a file, review the change. Stage it. Retry the commit. If Betterleaks reports a real credential, remove it. Rotate it. See [Troubleshoot gateseal](troubleshooting.md) for other errors.
 
+## Checks at a push
+
+A repository can run its slow checks at `git push` instead of at commit. Its `.pre-commit-config.yaml` then lists `pre-push` under `default_install_hook_types`. From the clone's root, install the commit hook and the push hook:
+
+```sh
+pre-commit install
+```
+
+Run the command again in a clone that has only the commit hook. If you ran setup, `gateseal setup --refresh` does the same.
+
+A push then checks the files that it changes. A failed check stops the push before the remote changes. The CI gate runs the same checks, so a clone without the push hook is still checked there. A check can read the pushed range from `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF`. Both are empty when pre-commit checks all files, such as at the first push of a repository.
+
+pre-commit sets two limits at a push, which the CI gate does not have:
+
+- It checks each file as the clone holds it, not as the pushed commit holds it. Check out the branch that you push, and commit your changes first.
+- When one push updates more than one branch, it checks only one of them.
+
+If the repository later drops its checks at a push, remove the push hook, because it keeps Git LFS from installing its own. `gateseal setup --refresh` removes the push hook that it wrote, once no worktree of the clone has checks at a push. `status` names such a hook. After `pre-commit install`, run `pre-commit uninstall --hook-type pre-push`.
+
+### Git LFS
+
+Git LFS uploads files from its own push hook. pre-commit keeps that hook as `pre-push.legacy` and runs it first. Uploads continue when Git LFS was set up before `pre-commit install`.
+
+If you set up Git LFS later, `git lfs install` cannot write its hook. A push then stops with this message:
+
+```text
+gateseal: This repository tracks files with Git LFS, but no push hook of this clone starts Git LFS, so a push uploads no LFS object.
+```
+
+To repair the clone, run these commands from its root. Then push again:
+
+```sh
+git lfs update --force
+pre-commit install
+```
+
+Those commands replace a push hook that pre-commit kept as `pre-push.legacy`. In a clone with that file, the message names another repair: add the line `git lfs pre-push "$@"` to the file, and make the file executable.
+
+The check also stops a push when the clone tracks no file with Git LFS now, but a commit that the remote lacks holds a Git LFS pointer. It accepts a push hook of Git's configuration that runs `git lfs pre-push`.
+
+The check runs only where the checked-out configuration has checks at a push, but the push hook serves every branch and worktree of the clone. On a branch or in a worktree without such checks, nothing stops the push. If you set up Git LFS after the push hook, run the two commands above there too.
+
 ## Add your own hooks
 
 Personal hooks run during an ordinary Git commit. They do not run in `gateseal run`, the CI gate, `status`, or `doctor`. For a shared check, ask the repository maintainer to add a [repository hook](adjust-a-setup.md#add-a-repository-hook).

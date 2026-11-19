@@ -6,3 +6,11 @@
   pass_filenames: false
   always_run: true
   stages: [pre-commit]
+- id: gateseal-lfs-check
+  name: Check that a push uploads to Git LFS
+  description: Stop a push from a clone that commits Git LFS pointers and has no push hook that uploads them.
+  entry: gateseal-lfs-check
+  language: python
+  pass_filenames: false
+  always_run: true
+  stages: [pre-push]

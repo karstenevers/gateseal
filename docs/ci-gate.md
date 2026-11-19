@@ -14,6 +14,8 @@ Each run uses a new `ubuntu-24.04` machine and does these steps:
 
 `gateseal.lock` is the Lock. It records the selection and the generated files.
 
+Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here.
+
 ## What the gate checks
 
 For a pull request on GitHub, the gate finds the merge base of the pull request and its target branch. Azure Pipelines builds the merge of the pull request into its target branch, so the gate there compares that merge commit with the target branch. The gate gives the range to pre-commit as `--from-ref` and `--to-ref`, so the hooks check only the changed files. A hook with the `project` scope, such as Pyright, gets no filenames. It checks the whole project whenever the gate checks files.

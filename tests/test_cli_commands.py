@@ -142,11 +142,12 @@ def test_status_and_doctor_report_the_same_checks_before_setup(
         command,
         "unhealthy",
     )
-    assert message(result) == "2 of 4 checks failed."
+    assert message(result) == "2 of 5 checks failed."
     assert checks(result) == {
         "lock": "passed",
         "pre-commit": "failed",
         "launcher": "failed",
+        "push-launcher": "skipped",
         "mise": "skipped",
     }
     assert result["next_steps"] == ["gateseal setup", "gateseal setup --refresh"]

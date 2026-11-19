@@ -115,7 +115,12 @@ def _parser() -> Parser:
             child.add_argument(
                 "--refresh",
                 action="store_true",
-                help="Also install the launcher in the existing clone at --repo",
+                help=(
+                    "Also install the commit launcher in the existing clone at "
+                    "--repo, and the push launcher if a selected hook runs at a "
+                    "push. Remove a push launcher that setup wrote when no "
+                    "worktree needs it"
+                ),
             )
         elif command == "gate":
             for flag, about in GATE_SCOPES.items():

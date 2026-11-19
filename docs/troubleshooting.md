@@ -8,15 +8,23 @@ From the affected worktree, run:
 gateseal doctor --verbose
 ```
 
-The report checks the selected configuration, setup's pre-commit, the commit launcher, and mise. Follow the reported next step. See [Commands and results](commands-and-results.md#status-and-doctor).
+The report checks the selected configuration, setup's pre-commit, the commit and push launchers, and mise. Follow the reported next step. See [Commands and results](commands-and-results.md#status-and-doctor).
 
 ## A commit runs no checks
 
 Run `pre-commit install` from the clone root. If setup installed pre-commit, `gateseal setup --refresh` also installs its launcher in the clone. pre-commit preserves an existing hook as `pre-commit.legacy` and runs it first.
 
+## A push runs no checks or stops for Git LFS
+
+Run `pre-commit install` from the clone root. It installs the push hook if the repository has checks at a push. If a push reports that no push hook starts Git LFS, see [Git LFS](work-in-a-configured-repository.md#git-lfs).
+
+In a repository with SHA-256 object names, pre-commit 4.7.0 stops the deletion of a remote branch. Add `--no-verify` to that `git push`.
+
 ## Git uses a different hooks directory
 
 A `core.hooksPath` setting makes Git use that directory instead of the clone's hooks. Remove the setting and run `pre-commit install` in each clone. Alternatively, install the launcher in that directory. Preserve any existing `pre-commit` there as `pre-commit.legacy` first. To create a launcher, run `pre-commit init-templatedir -t pre-commit` with a temporary directory. Copy its `hooks/pre-commit` into the configured directory.
+
+If the repository has checks at a push, install the push hook the same way. Preserve any existing `pre-push` there as `pre-push.legacy` first. It is often the push hook of Git LFS. Run `pre-commit init-templatedir -t pre-commit -t pre-push` instead, and copy `hooks/pre-push` too.
 
 ## A command reports needs_setup
 

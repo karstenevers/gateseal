@@ -21,6 +21,24 @@ change the manifest, policy or lock format, and its entry says how to move.
 - The bundled policy's `python-types` capability, which runs Pyright in strict
   mode as a built-in `uv-project` tool. A repository that selects `python`
   alone gets no new check.
+- The push stage. A tool definition or a repository hook with
+  `stages = ["push", "ci"]` runs at `git push` and in the CI gate, and not at
+  commit or in `gateseal run`. A repository hook takes the new `stages` field.
+  The generated `.pre-commit-config.yaml` of such a selection lists `pre-push`
+  in `default_install_hook_types`, so `pre-commit install` and
+  `gateseal setup --refresh` write a push launcher beside the commit launcher.
+  `status` and `doctor` report it as the `push-launcher` check. A selection
+  without a push hook compiles to the same files as before, and its clones
+  get no push launcher. `gateseal setup --refresh` removes a push launcher
+  that it wrote when no worktree of the clone has a push hook any more.
+- The `gateseal-lfs-check` hook, which runs at each push of a selection with
+  a push hook. pre-commit's push launcher takes the place of the push hook of
+  Git LFS, and runs that hook only if it was there first. The check stops a
+  push from a clone that has no push hook that starts Git LFS, when a file of
+  its index or a commit that the remote lacks is of Git LFS. It names the
+  repair: `git lfs update --force`, then `pre-commit install`, or a line to
+  add to a push hook that pre-commit kept. It accepts a push hook of Git's
+  configuration that runs `git lfs pre-push`.
 
 ### Changed
 

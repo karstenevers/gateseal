@@ -561,3 +561,27 @@ def test_a_team_choice_cannot_make_its_configuration_load_another(tmp_path, upst
     assert failure.value.code == "invalid_field"
     assert "a key other than extend" in str(failure.value)
     assert not (root / "policy.lock").exists()
+
+
+def test_a_team_tool_of_the_push_stage_asks_for_the_push_launcher(tmp_path, upstream):
+    """Only a selection with the tool gets the launcher and the Git LFS check."""
+    listed = 'stages = ["commit", "run", "ci"]'
+    definition = hook_tool(YAMLLINT, "yamllint")
+    assert listed in definition
+    slow = definition.replace(listed, 'stages = ["push", "ci"]')
+    root = team(tmp_path, files={"tools/yamllint.toml": slow})
+    authoring.lock(root)
+    policy = load_policy_tree(root)
+    locked, _ = consumer(policy, ("hygiene",))
+    assert locked.selection.pushes
+    config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
+    assert config["default_install_hook_types"] == ["pre-commit", "pre-push"]
+    own, hooks, yamllint = config["repos"]
+    assert own["hooks"] == [{"id": "gateseal-check"}, {"id": "gateseal-lfs-check"}]
+    assert [hook["stages"] for hook in hooks["hooks"]] == [["pre-commit", "manual"]]
+    assert [hook["stages"] for hook in yamllint["hooks"]] == [["pre-push", "manual"]]
+    locked, _ = consumer(policy, ("secrets",))
+    assert not locked.selection.pushes
+    config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
+    assert "default_install_hook_types" not in config
+    assert config["repos"][0]["hooks"] == [{"id": "gateseal-check"}]

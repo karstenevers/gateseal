@@ -166,6 +166,7 @@ def test_a_plain_commit_runs_the_hooks_and_every_check_passes(installed, prepare
             "lock": "passed",
             "pre-commit": "passed",
             "launcher": "passed",
+            "push-launcher": "skipped",
             "mise": "skipped",
         }
         assert result["next_steps"] == []
