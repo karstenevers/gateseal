@@ -8,7 +8,7 @@ from datetime import date
 from typing import TypeGuard, cast
 
 from gateseal import __version__
-from gateseal.ci_providers import PROVIDERS
+from gateseal.ci_providers.settings import CI, parse_ci
 from gateseal.compiler_release import PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import MANIFEST, relative_name
@@ -41,7 +41,8 @@ SCP = re.compile(
     r"([A-Za-z0-9_][A-Za-z0-9._-]*@)?([A-Za-z0-9][A-Za-z0-9.-]*):(?!//)(.+)"
 )
 REASON_LIMIT = 500
-BRANCH = re.compile(r"[A-Za-z0-9._/-]+")
+DEFAULT_BRANCH = "main"
+"""The default_branch that configure --ci writes into a new [ci] table."""
 
 
 @dataclass(frozen=True)
@@ -125,43 +126,6 @@ class ExceptionRequest:
     version: str
     reason: str
     review_by: date
-
-
-@dataclass(frozen=True)
-class CI:
-    """The CI provider whose file configure writes, and the branch it guards.
-
-    default_branch is the branch whose pushes the provider's file checks.
-    """
-
-    provider: str
-    default_branch: str
-
-
-def _ci(value: object) -> CI:
-    table = fields(value, {"provider", "default_branch"}, "manifest.ci")
-    provider = string(table["provider"], "ci.provider")
-    if provider not in PROVIDERS:
-        raise GatesealError(
-            "unsupported_ci_provider",
-            f"ci.provider is {provider!r}, which gateseal {__version__} does not "
-            "implement.",
-            next_step="Use a gateseal compiler that implements this CI provider.",
-        )
-    branch = string(table["default_branch"], "ci.default_branch")
-    if (
-        not BRANCH.fullmatch(branch)
-        or ".." in branch
-        or "//" in branch
-        or branch.startswith(("/", "."))
-        or branch.endswith(("/", ".", ".lock"))
-    ):
-        raise GatesealError(
-            "invalid_field",
-            f"ci.default_branch {branch!r} is not a branch name of letters, digits, "
-            "., _, - and /.",
-        )
-    return CI(provider, branch)
 
 
 @dataclass(frozen=True)
@@ -268,7 +232,7 @@ def parse_manifest(data: bytes) -> Manifest:
             _exception(name, value)
             for name, value in mapping(doc["exceptions"], "exceptions").items()
         ),
-        _ci(doc["ci"]) if "ci" in doc else None,
+        parse_ci(doc["ci"]) if "ci" in doc else None,
         parse_hooks(doc.get("hooks", {})),
     )
 
@@ -295,20 +259,26 @@ def policy_lines(source: Source) -> list[str]:
     ]
 
 
-def render(selected: tuple[str, ...], source: Source, ci: CI | None = None) -> bytes:
-    """Return a new Manifest that selects source with no choices or exceptions."""
+def render(
+    selected: tuple[str, ...], source: Source, provider: str | None = None
+) -> bytes:
+    """Return a new Manifest that selects source with no choices or exceptions.
+
+    A provider adds a [ci] table for a pipeline of its own that checks pushes
+    to DEFAULT_BRANCH, with every other key at its default.
+    """
     lines = [
         "schema = 1",
         f"capabilities = {json.dumps(list(selected))}",
         "",
         *policy_lines(source),
     ]
-    if ci is not None:
+    if provider is not None:
         lines += [
             "",
             "[ci]",
-            f"provider = {json.dumps(ci.provider)}",
-            f"default_branch = {json.dumps(ci.default_branch)}",
+            f"provider = {json.dumps(provider)}",
+            f"default_branch = {json.dumps(DEFAULT_BRANCH)}",
         ]
     return ("\n".join([*lines, "", "[choices]", "", "[exceptions]"]) + "\n").encode()
 

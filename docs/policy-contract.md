@@ -139,7 +139,20 @@ See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push) for 
 
 ### CI
 
-`[ci]` accepts `provider`, which is `"github"` or `"azure"`, and `default_branch`. See [GitHub CI](github-ci.md) and [Azure Pipelines](azure-pipelines.md). An unsupported provider gives `unsupported_ci_provider`.
+`[ci]` turns on the generated CI file. The keys need gateseal 0.3.0 or later, except `provider` and `default_branch`. See [GitHub CI](github-ci.md) and [Azure Pipelines](azure-pipelines.md).
+
+| Key | Value | Default |
+| --- | --- | --- |
+| `provider` | `"github"` or `"azure"`. Required. | |
+| `default_branch` | The branch whose pushes the gate checks. Required unless `standalone = false`. | |
+| `branches` | More branches whose pushes the gate checks. An entry is a branch name, or a name that ends in `/*` for every branch below it, such as `"release/*"`. | `[]` |
+| `schedule` | `true` adds a weekly run of `default_branch` on Monday at 04:37 UTC. GitHub runs it on the repository's default branch. | `false` |
+| `timeout_minutes` | The job's time limit, a whole number from 1 to 360. | `30` |
+| `pool` | Azure Pipelines only. The agent pool of your own agents. | The hosted `ubuntu-24.04` image |
+| `runs_on` | GitHub only. The runner labels, such as `["self-hosted", "linux", "x64"]`. | The hosted `ubuntu-24.04` image |
+| `standalone` | `false` writes only the job, for your own pipeline to include. Then leave out `default_branch`, `branches` and `schedule`. | `true` |
+
+An invalid value gives `invalid_field` and names the key. An unsupported provider gives `unsupported_ci_provider`.
 
 ## Lock
 

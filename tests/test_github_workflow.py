@@ -7,9 +7,10 @@ from conftest import PIN
 from gate_files import BRANCH, SERVED, gate_file
 from gateseal.ci_providers import PROVIDERS
 from gateseal.ci_providers.github import CHECKOUT
+from gateseal.ci_providers.model import Triggers
+from gateseal.ci_providers.settings import CI
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_outputs
-from gateseal.manifest import CI as Table
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy
 from gateseal.tools import load_definition
@@ -35,19 +36,9 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     document = gate_file("github").document
     job = document["jobs"]["gateseal"]
     events = document[True]
-    assert set(events) == {
-        "push",
-        "pull_request",
-        "merge_group",
-        "workflow_dispatch",
-        "schedule",
-    }
+    assert set(events) == {"push", "pull_request", "merge_group", "workflow_dispatch"}
     assert events["push"] == {"branches": [BRANCH]}
-    assert all(
-        value is None
-        for name, value in events.items()
-        if name not in ("push", "schedule")
-    )
+    assert all(value is None for name, value in events.items() if name != "push")
     assert "paths" not in str(events)
     assert document["permissions"] == {"contents": "read"}
     assert set(document["jobs"]) == {"gateseal"}
@@ -59,13 +50,13 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
     assert gate["env"]["GATESEAL_HEAD"] == "${{ github.sha }}"
     assert prepare["run"].splitlines()[-2:] == [
-        '"$command/bin/gateseal" setup',
+        '  "$command/bin/gateseal" setup',
         '"$command/bin/gateseal" check',
     ]
     assert (
         gate["run"]
         .rstrip()
-        .endswith('"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "${scope[@]}"')
+        .endswith('"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "$@"')
     )
     assert "TOKEN" not in str(gate["env"])
 
@@ -178,9 +169,9 @@ def test_ci_names_a_known_provider_and_a_branch(table, code):
 
 
 def test_render_writes_the_ci_table_configure_creates():
-    text = render(("hygiene",), BundledSource(POLICY.release), Table("github", "main"))
+    text = render(("hygiene",), BundledSource(POLICY.release), "github")
     assert '\n[ci]\nprovider = "github"\ndefault_branch = "main"\n' in text.decode()
-    assert parse_manifest(text).ci == Table("github", "main")
+    assert parse_manifest(text).ci == CI("github", Triggers("main", (), False), 30, ())
 
 
 def test_each_stage_runs_in_a_pre_commit_stage():

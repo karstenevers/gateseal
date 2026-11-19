@@ -7,21 +7,25 @@ workflow, the Lock, and the files it checks come from one commit. Its jobs
 never change with the selection: the gate runs the ci stage of the native
 configuration, so a tool that runs only in CI needs no workflow branch. A new
 push to a pull request cancels its older run, while every other run gets a
-concurrency group of its own, so it never cancels or waits for another.
+concurrency group of its own, so it never cancels or waits for another. A
+workflow that another workflow calls has neither triggers nor concurrency of
+its own: the caller's workflow owns both.
 """
-
-import json
 
 from gateseal.ci_providers.model import (
     GENERATED,
     IMAGE,
     SCHEDULE,
-    TIMEOUT_MINUTES,
     GateJob,
+    Triggers,
+    flow,
+    job_home,
     prepare,
     scoped_helper,
     script,
 )
+from gateseal.diagnostics import GatesealError
+from gateseal.validation import sequence, string
 
 WORKFLOW = ".github/workflows/gateseal.yml"
 
@@ -30,20 +34,24 @@ CHECKOUT = "actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5"
 
 PREPARE = prepare("$RUNNER_TEMP", 'echo "$tools" >> "$GITHUB_PATH"')
 
-GATE = """\
-set -euo pipefail
+GATE = (
+    "set -euo pipefail\n"
+    + job_home("$RUNNER_TEMP")
+    + """\
 case "$GATESEAL_EVENT" in
-  pull_request) scope=(--base "$GATESEAL_PR_BASE" --head "$GATESEAL_HEAD") ;;
-  merge_group) scope=(--base "$GATESEAL_GROUP_BASE" --head "$GATESEAL_HEAD") ;;
-  push) scope=(--before "$GATESEAL_PUSH_BEFORE" --after "$GATESEAL_PUSH_AFTER") ;;
-  schedule|workflow_dispatch) scope=() ;;
+  pull_request) set -- --base "$GATESEAL_PR_BASE" --head "$GATESEAL_HEAD" ;;
+  merge_group) set -- --base "$GATESEAL_GROUP_BASE" --head "$GATESEAL_HEAD" ;;
+  push) set -- --before "$GATESEAL_PUSH_BEFORE" --after "$GATESEAL_PUSH_AFTER" ;;
+  schedule|workflow_dispatch) set -- ;;
   *)
     echo "gateseal: this workflow does not handle $GATESEAL_EVENT events." >&2
     exit 2
     ;;
 esac
-"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "${scope[@]}"
+"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "$@"
 """
+)
+"""The gate step. It uses no array, so that a Bash older than 4.4 runs it too."""
 
 GATE_ENV = {
     "GATESEAL_EVENT": "${{ github.event_name }}",
@@ -55,6 +63,38 @@ GATE_ENV = {
 }
 
 RUNNING = ("GITHUB_ACTIONS", "true")
+
+RUNNER_KEY = "runs_on"
+
+CONCURRENCY = [
+    "concurrency:",
+    "  group: gateseal-${{ github.event_name }}-"
+    "${{ github.event.pull_request.number || github.run_id }}",
+    "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+]
+
+CALLED = [
+    "  workflow_call:",
+    "    secrets:",
+    "      GATESEAL_POLICY_TOKEN:",
+    "        required: false",
+]
+"""The trigger of a workflow that another workflow calls.
+
+A called workflow sees only the secrets its caller passes, so it declares the
+policy token, which a caller may leave out.
+"""
+
+
+def runner(value: object) -> tuple[str, ...]:
+    """Return the runner labels that the Manifest lists, at least one."""
+    field = f"ci.{RUNNER_KEY}"
+    labels = tuple(string(label, field) for label in sequence(value, field))
+    if not labels:
+        raise GatesealError(
+            "invalid_field", f"{field} must list at least one runner label."
+        )
+    return labels
 
 
 def warning(message: str) -> str:
@@ -87,24 +127,15 @@ def workflow(job: GateJob) -> bytes:
         GENERATED,
         "name: gateseal",
         "on:",
-        "  push:",
-        f"    branches: [{json.dumps(job.default_branch)}]",
-        "  pull_request:",
-        "  merge_group:",
-        "  workflow_dispatch:",
-        "  schedule:",
-        f'    - cron: "{SCHEDULE}"',
+        *_events(job.triggers),
         "permissions:",
         "  contents: read",
-        "concurrency:",
-        "  group: gateseal-${{ github.event_name }}-"
-        "${{ github.event.pull_request.number || github.run_id }}",
-        "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+        *(CONCURRENCY if job.triggers is not None else []),
         "jobs:",
         "  gateseal:",
         "    name: ${{ github.event_name == 'push' && 'gateseal-push' || 'gateseal' }}",
-        f"    runs-on: {IMAGE}",
-        f"    timeout-minutes: {TIMEOUT_MINUTES}",
+        f"    runs-on: {flow(job.runner) if job.runner else IMAGE}",
+        f"    timeout-minutes: {job.timeout_minutes}",
         "    steps:",
         "      - name: Check out the repository with its full history",
         f"        uses: {CHECKOUT}",
@@ -115,6 +146,29 @@ def workflow(job: GateJob) -> bytes:
         *_step("Run the gateseal gate", GATE_ENV, GATE),
     ]
     return ("\n".join(lines) + "\n").encode()
+
+
+def _events(triggers: Triggers | None) -> list[str]:
+    """Return the events that start the workflow.
+
+    GitHub's * stops at a /, so a branch entry's final /* becomes /**, which
+    matches every branch below it.
+    """
+    if triggers is None:
+        return CALLED
+    branches = (
+        branch + "*" if branch.endswith("/*") else branch
+        for branch in triggers.branches
+    )
+    schedule = ["  schedule:", f'    - cron: "{SCHEDULE}"']
+    return [
+        "  push:",
+        f"    branches: {flow((triggers.default_branch, *branches))}",
+        "  pull_request:",
+        "  merge_group:",
+        "  workflow_dispatch:",
+        *(schedule if triggers.schedule else []),
+    ]
 
 
 def _step(name: str, env: dict[str, str], lines: str) -> list[str]:

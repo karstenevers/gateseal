@@ -7,6 +7,7 @@ from typing import cast
 from gateseal import __version__, sources
 from gateseal.ci_providers import PROVIDERS
 from gateseal.ci_providers.model import GateJob
+from gateseal.ci_providers.settings import CI
 from gateseal.compiler_release import PRE_COMMIT, REPOSITORY, GatesealPin
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import (
@@ -22,7 +23,6 @@ from gateseal.managed_files import (
     write_atomic,
 )
 from gateseal.manifest import (
-    CI,
     BundledSource,
     GitSource,
     Manifest,
@@ -129,7 +129,15 @@ def compile_outputs(
 
 def _gate_job(ci: CI, pin: GatesealPin, source: Source) -> GateJob:
     policy = source.repository if isinstance(source, GitSource) else None
-    return GateJob(ci.default_branch, PYTHON, pin.repository, pin.commit, policy)
+    return GateJob(
+        ci.triggers,
+        ci.timeout_minutes,
+        ci.runner,
+        PYTHON,
+        pin.repository,
+        pin.commit,
+        policy,
+    )
 
 
 def policy_record(source: Source, policy: Policy) -> dict[str, object]:
@@ -805,7 +813,7 @@ def _new_manifest(
     return render(
         capabilities(list(set(capability))),
         request.build(git, preparation),
-        None if ci is None else CI(ci, "main"),
+        ci,
     )
 
 

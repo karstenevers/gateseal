@@ -44,10 +44,10 @@ GOLDEN = {
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "cd0cf192fa94474a99a138f888b92efab2c26cf3479a1576b3d8ede814f85f3f"
+            "c0ab2c721a75d7b79633702ef1cff06e4b7ebeac7ab9e8a6a27e14d267fc3688"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
-        WORKFLOW: "13f46910c665a9eaa54097751434dbda827bf1caba0047f2a2d81c132707571c",
+        WORKFLOW: "156512c551e4e4d129b88c53f027ab8425f83f263a56f604924d84f15df5b794",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (

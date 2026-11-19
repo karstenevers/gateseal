@@ -62,7 +62,7 @@ def test_preparation_checks_each_download_before_it_runs_one(provider):
         assert script.index(f'"$GATESEAL_{tool}_URL"') < script.index(checked)
         assert script.index(checked) < script.index("chmod 0755")
     assert script.splitlines()[-2:] == [
-        '"$command/bin/gateseal" setup',
+        '  "$command/bin/gateseal" setup',
         '"$command/bin/gateseal" check',
     ]
     assert '"gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"' in script

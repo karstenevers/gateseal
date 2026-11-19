@@ -4,10 +4,10 @@ The generated CI file checks each proposed merge with the selected tool versions
 
 ## What each run does
 
-Each run uses a new `ubuntu-24.04` machine and does these steps:
+Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machine-requirements), and does these steps:
 
 1. Check out the repository with its full history.
-2. Download uv and mise, and check their SHA-256.
+2. Check the machine. Download uv and mise, and check their SHA-256.
 3. Install the gateseal release that the Lock pins, and check the generated files against the Lock.
 4. Run the selected CI-stage hooks and repository hooks on the files that the event changed. A hook with the `project` scope, such as Pyright, checks the whole project.
 5. Scan the event's commits with each tool that can scan history, such as Betterleaks.
@@ -22,7 +22,7 @@ For a pull request on GitHub, the gate finds the merge base of the pull request 
 
 | Event | Files checked | History scanned |
 | --- | --- | --- |
-| Manual or weekly | All tracked files | None |
+| Manual, or weekly with `schedule = true` | All tracked files | None |
 | Pull request or merge group on GitHub | Changes from the merge base to the head | Commits after the merge base through the head |
 | Pull request on Azure Pipelines | Changes from the target branch to the merge commit | Commits that the target branch lacks, through the merge commit |
 | Fast-forward push on GitHub | Changes between the old and new heads | Commits after the old head through the new head |
@@ -33,6 +33,28 @@ For a pull request on GitHub, the gate finds the merge base of the pull request 
 Azure Pipelines does not tell a build which commit a push replaced. A push build there checks everything, so it cannot miss a commit.
 
 If the base and head have no common ancestor, the gate checks all tracked files. It scans all commits reachable from the head. A selected history-capable tool such as Betterleaks can report a secret removed in a later commit. Rotate a real credential. Remove it from the branch history before merging.
+
+## Machine requirements
+
+A hosted machine meets them. A runner or agent of your own needs:
+
+- Linux on x86-64 with glibc.
+- bash, curl, tar, sha256sum, and Git 2.54.0 or later.
+- Network access to GitHub for uv, mise, gateseal and the hook repositories.
+
+On another system or architecture, the first step stops and names this requirement.
+
+The checks of a job run as the user of the runner or agent. Use a machine that keeps state between jobs only for code that you trust. Run pull requests from outside contributors on hosted machines, or on machines that start fresh for each job.
+
+The job keeps its home folder and everything that it installs in the job's temporary folder. So it leaves the home folder and the global Git configuration of the agent's user as they were. Each job installs its tools again, as a run on a hosted machine does.
+
+Git still reads that configuration, such as a proxy setting. Because the job has its own home folder:
+
+- Give each path in that configuration in full, not with `~`.
+- The `store` credential helper needs `--file`, and Git can change that file. The `cache` credential helper needs `--socket`.
+- OpenSSH still uses `~/.ssh` of the agent's user, and an SSH fetch can add host keys there.
+
+The job ignores the agent's mise settings, the storage folders that the agent sets for pre-commit, uv and mise, and a `SKIP` that would make pre-commit skip hooks.
 
 ## Results
 

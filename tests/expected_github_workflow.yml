@@ -6,8 +6,6 @@ on:
   pull_request:
   merge_group:
   workflow_dispatch:
-  schedule:
-    - cron: "37 4 * * 1"
 permissions:
   contents: read
 concurrency:
@@ -44,7 +42,37 @@ jobs:
           GATESEAL_COMMIT: "5ea1000000000000000000000000000000000000"
         run: |
           set -euo pipefail
+          read -r system architecture < <(uname -s -m)
+          machine="$system on $architecture"
+          if [ "$machine" = "Linux on x86_64" ] && ! getconf GNU_LIBC_VERSION >/dev/null 2>&1
+          then
+            machine="$machine without glibc"
+          fi
+          if [ "$machine" != "Linux on x86_64" ]; then
+            echo "gateseal: the gate job needs Linux on x86-64 with glibc," \
+              "and this machine is $machine." >&2
+            exit 1
+          fi
           umask 077
+          agent_home=$HOME
+          agent_config=${XDG_CONFIG_HOME:-$HOME/.config}
+          agent_global=${GIT_CONFIG_GLOBAL:-}
+          export HOME="$RUNNER_TEMP/gateseal-home"
+          unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME
+          unset GIT_CONFIG_GLOBAL GIT_TEMPLATE_DIR PRE_COMMIT_HOME SKIP
+          unset UV_CACHE_DIR UV_PYTHON_CACHE_DIR UV_PYTHON_INSTALL_DIR UV_CONFIG_FILE
+          unset UV_PROJECT_ENVIRONMENT PIP_CACHE_DIR VIRTUALENV_OVERRIDE_APP_DATA
+          for name in ${!MISE_@}; do
+            unset "$name"
+          done
+          export MISE_SYSTEM_DATA_DIR="$HOME/mise-system"
+          mkdir -p "$HOME"
+          if [ -n "$agent_global" ]; then
+            git config --file "$HOME/.gitconfig" --add include.path "$agent_global"
+          else
+            git config --file "$HOME/.gitconfig" --add include.path "$agent_config/git/config"
+            git config --file "$HOME/.gitconfig" --add include.path "$agent_home/.gitconfig"
+          fi
           tools="$RUNNER_TEMP/gateseal-tools"
           mkdir -p "$tools"
           curl --fail --location --silent --show-error "$GATESEAL_UV_URL" \
@@ -61,7 +89,9 @@ jobs:
           uv venv --no-config --managed-python --python "$GATESEAL_PYTHON" "$command"
           uv pip install --no-config --python "$command/bin/python" \
             "gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"
-          "$command/bin/gateseal" setup
+          GIT_CONFIG_GLOBAL="$HOME/.gitconfig-setup" GIT_CONFIG_NOSYSTEM=1 \
+            GIT_CONFIG_COUNT=0 GIT_CONFIG_PARAMETERS= \
+            "$command/bin/gateseal" setup
           "$command/bin/gateseal" check
       - name: Run the gateseal gate
         shell: bash
@@ -74,14 +104,23 @@ jobs:
           GATESEAL_PUSH_AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
+          export HOME="$RUNNER_TEMP/gateseal-home"
+          unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME
+          unset GIT_CONFIG_GLOBAL GIT_TEMPLATE_DIR PRE_COMMIT_HOME SKIP
+          unset UV_CACHE_DIR UV_PYTHON_CACHE_DIR UV_PYTHON_INSTALL_DIR UV_CONFIG_FILE
+          unset UV_PROJECT_ENVIRONMENT PIP_CACHE_DIR VIRTUALENV_OVERRIDE_APP_DATA
+          for name in ${!MISE_@}; do
+            unset "$name"
+          done
+          export MISE_SYSTEM_DATA_DIR="$HOME/mise-system"
           case "$GATESEAL_EVENT" in
-            pull_request) scope=(--base "$GATESEAL_PR_BASE" --head "$GATESEAL_HEAD") ;;
-            merge_group) scope=(--base "$GATESEAL_GROUP_BASE" --head "$GATESEAL_HEAD") ;;
-            push) scope=(--before "$GATESEAL_PUSH_BEFORE" --after "$GATESEAL_PUSH_AFTER") ;;
-            schedule|workflow_dispatch) scope=() ;;
+            pull_request) set -- --base "$GATESEAL_PR_BASE" --head "$GATESEAL_HEAD" ;;
+            merge_group) set -- --base "$GATESEAL_GROUP_BASE" --head "$GATESEAL_HEAD" ;;
+            push) set -- --before "$GATESEAL_PUSH_BEFORE" --after "$GATESEAL_PUSH_AFTER" ;;
+            schedule|workflow_dispatch) set -- ;;
             *)
               echo "gateseal: this workflow does not handle $GATESEAL_EVENT events." >&2
               exit 2
               ;;
           esac
-          "$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "${scope[@]}"
+          "$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "$@"

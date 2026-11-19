@@ -38,8 +38,10 @@ class GateFile:
     gate: Step
 
 
-def manifest(provider, branch=BRANCH):
-    table = f'\n[ci]\nprovider = "{provider}"\ndefault_branch = "{branch}"\n'
+def manifest(provider, branch=BRANCH, keys=""):
+    """Return a Manifest whose [ci] names provider, branch unless None, and keys."""
+    default = "" if branch is None else f'default_branch = "{branch}"\n'
+    table = f'\n[ci]\nprovider = "{provider}"\n{default}{keys}'
     return render(("hygiene", "secrets"), BundledSource(POLICY.release)) + (
         table.encode()
     )
@@ -49,10 +51,13 @@ def policy(repository):
     return git_source(repository, ".", "c" * 40, "v1.0.0")
 
 
-def gate_file(provider, repository=None, branch=BRANCH, pin=PIN):
-    """Return provider's file for a bundled policy, or a Git policy at repository."""
+def gate_file(provider, repository=None, branch=BRANCH, pin=PIN, keys=""):
+    """Return provider's file for a bundled policy, or a Git policy at repository.
+
+    keys holds further lines of the [ci] table.
+    """
     source = policy(repository) if repository else BundledSource(POLICY.release)
-    parsed = parse_manifest(manifest(provider, branch))
+    parsed = parse_manifest(manifest(provider, branch, keys))
     data = compile_outputs(resolve(parsed, POLICY), pin, source)[
         PROVIDERS[provider].path
     ]
@@ -71,6 +76,34 @@ def gate_file(provider, repository=None, branch=BRANCH, pin=PIN):
         Step(prepare[script], prepare["env"]),
         Step(gate[script], gate["env"]),
     )
+
+
+def job(provider, document):
+    return document["jobs"]["gateseal" if provider == "github" else 0]
+
+
+def pushes(provider, document):
+    """Return the branches whose pushes start the file's pipeline."""
+    if provider == "github":
+        return document[True]["push"]["branches"]
+    return document["trigger"]["branches"]["include"]
+
+
+def weekly(provider, document):
+    """Return the file's schedules, or None when it has none."""
+    if provider == "github":
+        return document[True].get("schedule")
+    return document.get("schedules")
+
+
+def timeout(provider, document):
+    return job(provider, document)[
+        "timeout-minutes" if provider == "github" else "timeoutInMinutes"
+    ]
+
+
+def machine(provider, document):
+    return job(provider, document)["runs-on" if provider == "github" else "pool"]
 
 
 def credential(step, url, tokens, cwd):

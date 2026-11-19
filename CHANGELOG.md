@@ -9,6 +9,14 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Added
 
+- New keys in `[ci]` adjust the generated CI file. `branches` adds branches
+  whose pushes the gate checks, such as `"release/*"`. `schedule = true` adds
+  the weekly run. `timeout_minutes` sets the job's time limit. `pool` (Azure
+  Pipelines) and `runs_on` (GitHub) run the job on your own agents or
+  runners. `standalone = false` writes only the job, so that your own
+  pipeline or workflow includes it and decides when it runs.
+- The first step of the CI job stops with a clear message on a machine that
+  is not Linux on x86-64 with glibc.
 - The `uv-project` tool kind. A tool of this kind runs in the repository's own
   uv project, so a type checker reads the packages that the project installs.
   Its hook starts the program with `uv run --locked --all-packages --with
@@ -42,6 +50,12 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- The weekly run of the generated CI file is now off by default. The next
+  `gateseal configure` or `gateseal upgrade` writes the file without it. Add
+  `schedule = true` to `[ci]` to keep it.
+- The CI job keeps its home folder and everything it installs in the job's
+  temporary folder. It no longer changes the global Git configuration or the
+  home folder of the agent's user.
 - The bundled policy offers a hook with the ID and name `pyright`. A Manifest
   with a repository hook of that ID or name stops with `duplicate_identifier`,
   also when it does not select `python-types`. Rename the repository hook.
