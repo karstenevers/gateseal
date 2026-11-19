@@ -1,0 +1,27 @@
+kind = "npm-package"
+stages = ["commit", "run", "ci"]
+scope = "files"
+
+[source]
+package = "prettier"
+
+[executable]
+name = "prettier"
+
+[configuration]
+format = "toml"
+
+# --config names the policy's options. --no-editorconfig and the empty ignore
+# path keep a repository's .editorconfig, .prettierignore and .gitignore from
+# changing what Prettier formats and how. --ignore-unknown skips a file that
+# Prettier has no parser for. The final -- ends the options, so a file named
+# like an option is formatted as a file.
+[hooks.prettier]
+name = "prettier"
+args = [
+  "--config", "{configuration}",
+  "--no-editorconfig", "--ignore-path", "/dev/null",
+  "--write", "--ignore-unknown", "--",
+]
+types_or = ["ts", "tsx"]
+output = "plain"

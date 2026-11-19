@@ -16,13 +16,9 @@ from gateseal import lock, setup
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment
 from gateseal.managed_files import MANIFEST
+from gateseal.tools.mise import MINIMUM_MISE, mise_problem, require_mise
 from gateseal.tools.model import LAUNCHERS
-from gateseal.tools.release_binary import (
-    MINIMUM_MISE,
-    BinaryTool,
-    mise_problem,
-    require_mise,
-)
+from gateseal.validation import decode_json
 from gateseal.worktree import Worktree, operation_lock, preparation_directory
 
 NOT_STORED = frozenset({"policy_unavailable", "policy_content_mismatch"})
@@ -161,22 +157,27 @@ def _mise(locked: lock.Locked | None) -> Check:
         return Check(
             "mise", "skipped", "The Lock did not load, so its tools are unknown."
         )
-    if not _selects_release_binary(locked):
-        return Check("mise", "skipped", "No selected tool is a release binary.")
+    if not _starts_through_mise(locked):
+        return Check("mise", "skipped", "No selected tool starts through mise.")
     try:
         mise = require_mise(tool_environment())
     except GatesealError as exc:
         return Check(
             "mise",
             "failed",
-            mise_problem("A release binary starts through", exc),
+            mise_problem("A release binary or the policy's Node starts through", exc),
             f"Install mise {MINIMUM_MISE} or later.",
         )
     return Check("mise", "passed", f"{mise} is mise {MINIMUM_MISE} or later.")
 
 
-def _selects_release_binary(locked: lock.Locked) -> bool:
-    return any(isinstance(tool, BinaryTool) for tool in locked.selection.tools)
+def _starts_through_mise(locked: lock.Locked) -> bool:
+    """Return whether the Lock records an archive that mise installs.
+
+    native_artifacts holds every such archive: each release binary's and the
+    policy's Node.
+    """
+    return bool(decode_json(locked.snapshot.lock).get("native_artifacts"))
 
 
 def _checks(
@@ -204,7 +205,7 @@ def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note
     off = [
         name for name in AUTO_INSTALL if os.environ.get(name, "").strip().lower() in OFF
     ]
-    if off and locked is not None and _selects_release_binary(locked):
+    if off and locked is not None and _starts_through_mise(locked):
         warning = Note(
             "warning",
             "mise_auto_install_off",

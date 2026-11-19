@@ -30,7 +30,7 @@ gateseal keeps one reviewed set of commit checks in every repository, on develop
 gateseal configure --capability hygiene --capability secrets --ci github
 ```
 
-In a Python repository, add `--capability python` for Ruff.
+In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for ESLint and Prettier, as [Check TypeScript](typescript.md) shows.
 
 - [Try the checks](demo.md) in a scratch repository.
 - [Work in a configured repository](work-in-a-configured-repository.md) or [troubleshoot](troubleshooting.md).

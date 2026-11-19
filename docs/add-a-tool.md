@@ -1,6 +1,6 @@
 # Add a tool to your policy
 
-A team policy can add a release binary, a Python pre-commit repository, or a tool that runs in the repository's uv project. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
+A team policy can add a release binary, a Python pre-commit repository, or a tool from npm. It can also add a tool that runs in the repository's uv project. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
 
 ## Add Gitleaks
 
@@ -201,3 +201,73 @@ uv run --locked --all-packages --with mypy==2.4.1 -- mypy --strict --python-exec
 - `--python-executable` makes mypy read the packages of the project's environment. Without it, mypy reads the packages of the Python that starts it. That Python finds mypy's own dependencies before the project's, so a package that both install would have the wrong version.
 - The hook stops when `uv.lock` is missing or out of date.
 - With `scope = "project"`, the hook runs at every commit. mypy gets no file names and checks the whole project. So it also finds an error in a file that the commit does not change, and an error that a deleted file causes.
+
+## Format Markdown with Prettier from npm
+
+An `npm-package` tool installs a package from the npm registry and runs it on the Node that the policy pins. The bundled `typescript` capability runs Prettier this way on TypeScript files. This example adds a second Prettier for Markdown files, with options of its own. The built-in name `prettier` is taken, so the team tool needs another name.
+
+Save this definition as `policy/tools/prettier-markdown.toml`:
+
+<!-- policy file: tools/prettier-markdown.toml -->
+```toml
+kind = "npm-package"
+stages = ["commit", "run", "ci"]
+scope = "files"
+
+[source]
+package = "prettier"
+
+[executable]
+name = "prettier"
+
+[configuration]
+format = "toml"
+
+[hooks.prettier-markdown]
+name = "Format Markdown with Prettier"
+args = [
+  "--config", "{configuration}",
+  "--no-editorconfig", "--ignore-path", "/dev/null",
+  "--write", "--",
+]
+types_or = ["markdown"]
+output = "plain"
+```
+
+Save these options as `policy/rules/prettier-markdown.toml`:
+
+<!-- policy file: rules/prettier-markdown.toml -->
+```toml
+printWidth = 80
+proseWrap = "always"
+```
+
+Add these tables at the end of `policy/policy.toml`:
+
+<!-- policy tables: prettier-markdown -->
+```toml
+[capabilities.docs.tools.prettier-markdown]
+configuration = "rules/prettier-markdown.toml"
+pin = "3.10.1"
+reviewed = ["3.10.1"]
+
+[capabilities.docs.choices]
+exclude = []
+```
+
+Every tool from npm runs on the Node that `node` pins at the top of `policy/policy.toml`. The bundled policy copy has this line already. Add it to a policy without it:
+
+<!-- policy tables: node -->
+```toml
+node = "24.22.3"
+```
+
+Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command records the SHA-256 of each Node archive from nodejs.org. It also checks that the npm registry has Prettier 3.10.1.
+
+A repository that adopts the release selects the tool with `--capability docs`. Each commit then formats the staged Markdown files:
+
+- mise installs the pinned Node at the first commit and checks its archive. npm installs Prettier into its own cache, outside the repository.
+- `--no-editorconfig` and `--ignore-path /dev/null` keep the repository's `.editorconfig`, `.prettierignore` and `.gitignore` from changing the result.
+- `--` ends the options, so Prettier formats a file named like an option as a file.
+
+The hook skips every file that gateseal generates. See [the `npm-package` kind](tool-definitions.md#tools-from-npm) for what the kind guarantees.

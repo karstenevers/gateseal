@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.model import (
@@ -39,6 +39,9 @@ from gateseal.tools.model import (
 )
 from gateseal.validation import fields, string
 
+if TYPE_CHECKING:
+    from gateseal.tools.node import Node
+
 COMMIT = re.compile("[0-9a-f]{40}")
 
 
@@ -49,6 +52,7 @@ class PreCommitRepository:
     kind: ClassVar[str] = "pre-commit-repository"
     starts: ClassVar[Starts] = Starts.UPSTREAM_HOOKS
     remark: ClassVar[str] = ""
+    on_node: ClassVar[bool] = False
     repository: str
     tag: str
 
@@ -58,6 +62,7 @@ class PreCommitRepository:
         use: ToolUse,
         catalog: Catalog,
         records: Mapping[str, object],
+        node: Node | None,
     ) -> RepositoryTool:
         """Read each version's revision, a full lowercase commit, from its record."""
         versions: dict[str, RevisionRelease] = {}
@@ -75,6 +80,7 @@ class PreCommitRepository:
     def lock(
         self,
         definition: ToolDefinition,
+        catalog: Catalog,
         version: str,
         recorded: object,
         upstream: Upstream,
@@ -124,6 +130,10 @@ class RepositoryTool:
     @property
     def release(self) -> RevisionRelease:
         return self.versions[self.version]
+
+    @property
+    def node(self) -> None:
+        return None
 
     def select(self, version: str) -> RepositoryTool:
         return replace(self, version=version)

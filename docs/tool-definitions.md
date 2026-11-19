@@ -10,19 +10,19 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, and `betterleaks`. A team definition cannot reuse those names or the reserved names `pre-commit` and `python`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `betterleaks`, `prettier` and `eslint`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python` and `node`.
 
 ## Shared fields
 
 | Field | Value |
 | --- | --- |
-| `kind` | `pre-commit-repository`, `release-binary` or `uv-project`. |
+| `kind` | `pre-commit-repository`, `release-binary`, `uv-project` or `npm-package`. |
 | `stages` | `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. |
 | `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook runs at every commit, or at every push in the push stage. It gets no filenames and checks the whole project. |
-| `configuration.format` | Optional `toml`. The generated file is `.gateseal/<name>.toml`. |
+| `configuration.format` | Optional `toml` or `eslint`. The generated file is `.gateseal/<name>.toml` or, for `eslint`, `.gateseal/<name>.json`. |
 | `files.<key>` | Optional fixed file with lowercase `extension` and text `content` using LF line endings. |
 | `hooks.<id>` | At least one hook. |
-| `history.args` | Optional arguments of the tool's executable for a CI history scan, for a `release-binary` or `uv-project` tool. Include `{range}` exactly once. |
+| `history.args` | Optional arguments of the tool's executable for a CI history scan, for a `release-binary`, `uv-project` or `npm-package` tool. Include `{range}` exactly once. |
 | `choices.<name>` | Optional choice in the tool configuration. It needs `configuration`. |
 
 An unsupported kind or value gives `unsupported_tool_definition`. Unknown fields are invalid.
@@ -62,7 +62,111 @@ The repository needs `pyproject.toml` and `uv.lock` at its root, and `pyproject.
 
 A hook with the `project` scope runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. The CI gate checks a new clone.
 
-Release binaries run through `mise --no-config exec --deny-env`. A hook from a `pre-commit-repository` or `uv-project` source receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
+Release binaries run through `mise --no-config exec --deny-env`. A hook from a `pre-commit-repository`, `uv-project` or `npm-package` source receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
+
+## Tools from npm
+
+An `npm-package` source has a `package`: the tool's name on the npm registry, without a version. Examples are `prettier` and `@biomejs/biome`. Set `executable.name` to the program that the package installs. `check_at_commit` is invalid for this kind.
+
+The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). Each hook runs one command, in this form:
+
+```text
+mise --no-config exec <Node request> -- /bin/sh -c '<script>' <program> <args>
+```
+
+The script is one line. It does this:
+
+```sh
+node=$(mise --no-config where <Node install> 2>/dev/null) &&
+  node=$node/bin && [ -x "$node/node" ] || {
+  echo "mise has no install of Node <Node version>, the pinned Node. Turn the auto-install of mise on." >&2
+  exit 1
+}
+PATH=$node:$PATH
+case ${XDG_CACHE_HOME-} in
+  /*) cache=$XDG_CACHE_HOME ;;
+  *) cache=$HOME/.cache ;;
+esac
+dir=$cache/gateseal/npm/$(uname -s)-$(uname -m)/node-<Node version>/<digest>
+has() {
+  case $(readlink "$1/node_modules/.bin/$0" 2>/dev/null) in
+    ../<package>/*) [ -x "$1/node_modules/.bin/$0" ] ;;
+    *) false ;;
+  esac
+}
+[ -e "$dir" ] || {
+  mkdir -p "${dir%/*}" && new=$(mktemp -d "$dir.XXXXXX") || exit
+  "$node"/npm install --no-save --no-package-lock --ignore-scripts \
+    --bin-links --install-strategy=hoisted --no-dry-run \
+    --no-package-lock-only --no-global --location=project \
+    --include=optional --include=peer --no-audit --no-fund \
+    --no-update-notifier --no-usage --no-timing --logs-max=0 \
+    --prefix "$new" --cache "$new/.npm" --logs-dir "$new/.npm/_logs" \
+    <package>@<version> <name>@<version> ... >/dev/null ||
+    { status=$?; rm -rf "$new"; exit "$status"; }
+  rm -rf "$new/.npm"
+  has "$new" || {
+    rm -rf "$new"
+    echo "npm installed no program $0 of <package>." >&2
+    exit 127
+  }
+  "$node/node" -e "fs.renameSync(process.argv[1], process.argv[2])" "$new" "$dir" \
+    2>/dev/null || [ -e "$dir" ] ||
+    { rm -rf "$new"; echo "cannot write $dir" >&2; exit 1; }
+  rm -rf "$new"
+}
+has "$dir" || {
+  echo "No program $0 of <package> in $dir. Delete the folder to install again." >&2
+  exit 127
+}
+bin=$dir/node_modules/.bin
+PATH="$node:$bin:$PATH" exec "$bin/$0" "$@"
+```
+
+| Part | What it does |
+| --- | --- |
+| `mise --no-config exec <Node request> --` | Installs the Node archive that the request names by URL and SHA-256 at first use, and puts Node first on `PATH`. A wrong checksum stops the hook. No mise file of the repository or the user applies. |
+| `node=$(mise --no-config where ...)` | Asks mise for the folder of the Node that it installed from the archive of the request, and puts that folder first on `PATH`. `<Node install>` is the tool name and version of the request, without its options. The script starts `node` and `npm` by their paths in that folder, so no other npm installs the packages. If mise has no such install, the hook stops with status 1, at each use. So no other `node` on `PATH` installs or runs a program, also not one of the same version. |
+| `dir=...` | Names the folder of the install. It is in your cache folder: `XDG_CACHE_HOME` when that is an absolute path, and `~/.cache` otherwise. The name holds the operating system, the processor, the Node version and a digest of the install command. So each machine type, each Node and each set of pins has its own folder. Two hooks with the same Node and the same packages share one folder. |
+| `[ -e "$dir" ] \|\| { ... }` | Installs only when the folder is not there. So a later use calls no npm and asks the registry nothing. |
+| `npm install ... --prefix "$new"` | Installs into a new, empty folder beside the final one, which `mktemp` makes under a name of its own. So no Node project's `package.json`, `.npmrc` and `node_modules` choose or replace a package: not the repository's, and not one in a folder above it. npm still reads your own npm settings and each `npm_config_` variable of the caller, and an npm script gets those from its project's `.npmrc`. If npm fails, the hook stops with npm's message and status. |
+| `--no-save --no-package-lock --ignore-scripts` | Writes only `node_modules`, and runs no install script of a package. |
+| `--bin-links --install-strategy=hoisted` | Links each package's programs into `node_modules/.bin` and puts each listed package into `node_modules`, whatever your npm settings say. |
+| `--no-dry-run --no-package-lock-only --no-global --location=project --include=optional --include=peer --no-usage` | Keeps your npm settings from an install that npm reports as done and that is empty, in another place, or without a package. An option on the command line wins over `.npmrc` and over each `npm_config_` variable. |
+| `--no-audit --no-fund --no-update-notifier` | Skips npm's audit request, its funding note and its update check. |
+| `--cache "$new/.npm" --logs-dir "$new/.npm/_logs" --no-timing --logs-max=0` | Keeps npm's downloads in the new folder, and writes no log file and no timing file. The script deletes the downloads after the install. So an install writes nothing outside `gateseal/npm` in your cache folder, whatever cache your npm settings name. |
+| `<name>@<version>` | The tool's package at its selected version, then each package of `packages` at its pinned version, in the policy's order. |
+| `node -e "fs.renameSync(...)"` | Gives a complete install its final name in one step. So an install that stopped halfway is never used. If two first uses run at the same time, the first one to finish keeps its install, and the other one uses it. |
+| `has "$new"` and `has "$dir"` | Accept only the program that the tool's own package links into `node_modules/.bin`. If a new install does not have it, the hook fails with status 127 and the message `npm installed no program`, and the script deletes that install. So the next use installs again. If a folder with its final name does not have it, or another package links a program of the same name there, the hook fails with status 127 and the message `No program`. The script does not repair that folder, because another hook can run from it at the same time. Delete the folder, and the next use installs again. |
+| `PATH=... exec "$bin/$0" "$@"` | Starts the program that `executable.name` names, with the hook's `args`, in the repository. Its `PATH` is the folder of the pinned Node, the folder of the program, and then the `PATH` of the hook. npm does not start the program, so no `node_modules/.bin` folder of the repository is on that `PATH`. So a `node` in the repository's `node_modules/.bin` does not run the program, and a program that the tool starts by name, such as `git`, is the one of your `PATH`. |
+
+The kind guarantees these things, whatever a definition says:
+
+- The hook runs the pinned Node, whatever Node is on `PATH` or in the repository's `node_modules`. If mise's auto-install is off and the pinned Node is missing, the hook stops. Two repositories with different pins each run their own Node on one machine.
+- npm installs exactly the listed versions. `gateseal policy lock` checks that the npm registry has each one.
+- Each machine type, each Node version and each set of pins has its own install. A repository with another Node pin never runs your packages on its Node.
+- The program is the one of the tool's own package, never a program of the same name from another package.
+- No install script of a package runs.
+- The hook never gets a file that gateseal writes. Its `exclude` pattern covers `.gateseal/`, `.pre-commit-config.yaml`, `gateseal.toml`, `gateseal.lock` and the file of each CI provider. A capability's `exclude` choice adds its paths. A tool with the `project` scope gets no file names and reads the working tree itself, so its own arguments must keep it away from these files.
+
+The first use of a hook downloads Node and the packages, which needs network access. So does the first use after a change of a pin. Later uses call no npm and ask the registry nothing. gateseal does not remove an old install. To free the space, delete `gateseal/npm` in your cache folder. The next use of each hook installs again. A hook trusts an install that it finds in the cache folder, as pre-commit trusts its own folder there. So keep the cache folder outside each repository whose files you do not trust. The kind does not pin what the listed packages depend on, and passes the caller's environment to npm. See [the limits](typescript.md#limits).
+
+A gateseal release without the `npm-package` kind or the `eslint` format below gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has them.
+
+## ESLint configuration format
+
+A definition with `configuration.format = "eslint"` takes ESLint's data from a TOML rule file. `gateseal configure` checks the file and writes it as JSON to `.gateseal/<name>.json`. The rule file holds exactly these keys:
+
+| Key | Value |
+| --- | --- |
+| `files` | Required. One or more patterns of the files that ESLint checks, from the repository root, such as `"**/*.ts"`. |
+| `parser` | Optional. An npm package that the tool's `packages` pin, such as `@typescript-eslint/parser`. |
+| `plugins` | Optional table. Maps each rule prefix, such as `@typescript-eslint`, to an npm package that the tool's `packages` pin. |
+| `rules` | Required table. Maps each rule to `off`, `warn` or `error`, or to an array of the severity and then the rule's options. A rule named `<prefix>/<rule>` needs its prefix in `plugins`. |
+
+Any other key gives `invalid_field`, such as `extends`, `languageOptions` or `settings`. So no key loads another file, names a preset, or gives type information. A value that JSON cannot hold, such as a TOML date or an infinite number, gives `invalid_field` too. A definition of this format takes no choices.
+
+The JSON file is data, not an ESLint configuration. The built-in `eslint` definition adds a loader as the fixed file `files.loader`, written as `.gateseal/eslint-loader.mjs`. Its hook passes the loader with `--config {loader}`, so ESLint runs no configuration file of the repository. The loader reads the JSON file beside it. It loads the parser and the plugins from the root of the hook's install, where each pinned package is, never from a copy that ESLint itself depends on and never from the repository's `node_modules`. If the install lost a package and Node finds one in another place, such as a folder above the install or `NODE_PATH`, the loader stops. It finds each package as `require` does, so a package that offers its entry only to `import` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. A team definition of this format needs the same loader under the key `loader`, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml).
 
 ## Choices
 

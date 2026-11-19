@@ -18,7 +18,7 @@ from gateseal.diagnostics import Note, Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import execute, pre_commit_command
-from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, ToolDefinition
+from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, Tool, ToolDefinition
 from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
@@ -51,7 +51,8 @@ def run(locked: lock.Locked) -> Result:
         allow_failure=True,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    entries = tuple(hook_results(details, locked.selection.hooks, "run"))
+    results = hook_results(details, locked.selection.hooks, "run")
+    entries = tuple(_on_node(results, locked))
     if process.returncode == 0:
         return Result(
             "run", "checks_passed", "Checks passed.", details=details, entries=entries
@@ -114,9 +115,9 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         allow_failure=True,
     )
     revisions = scope.history
-    scans: list[tuple[ToolDefinition, subprocess.CompletedProcess[bytes]]] = []
+    scans: list[tuple[Tool, subprocess.CompletedProcess[bytes]]] = []
     for tool in locked.selection.tools:
-        definition, history = tool.definition, tool.definition.history
+        history = tool.definition.history
         program = tool.program(OFFLINE)
         if revisions is not None and history is not None and program is not None:
             scanned = execute(
@@ -125,21 +126,42 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
                 env,
                 allow_failure=True,
             )
-            scans.append((definition, scanned))
+            scans.append((tool, scanned))
     duration, over = _duration(monotonic() - started, locked.policy.time_budget_seconds)
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    entries = [duration, *hook_results(details, locked.selection.hooks, "ci")]
+    results = hook_results(details, locked.selection.hooks, "ci")
+    entries = [duration, *_on_node(results, locked)]
     outcomes: set[str] = set()
-    for definition, scanned in scans:
+    for tool, scanned in scans:
+        definition = tool.definition
         output = scanned.stdout.decode("utf-8", errors="replace")
         details += output + scanned.stderr.decode("utf-8", errors="replace")
         findings = _history_findings(definition, output)
+        if tool.node:
+            findings = [{**finding, "node": tool.node.version} for finding in findings]
         outcome = _scan_outcome(scanned.returncode, findings)
         outcomes.add(outcome)
         entries.append(_scan_entry(definition, revisions, outcome))
         entries += findings
     result = _gate_result(scope.reason, process.returncode, outcomes, details, entries)
     return replace(result, notes=over)
+
+
+def _on_node(
+    entries: list[dict[str, object]], locked: lock.Locked
+) -> list[dict[str, object]]:
+    """Name the Node of each result and finding of a hook that runs on one."""
+    nodes = {
+        hook.id: tool.node.version
+        for tool in locked.selection.tools
+        if tool.node
+        for hook in tool.use.hooks
+    }
+    for entry in entries:
+        node = nodes.get(str(entry.get("hook")))
+        if node is not None:
+            entry["node"] = node
+    return entries
 
 
 def _duration(

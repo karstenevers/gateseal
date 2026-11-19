@@ -129,7 +129,7 @@ To make Git use a different token, add a secret pipeline variable named `GATESEA
 
 Policies on other hosts and SSH URLs get no token from the pipeline. See [Adopt a team policy](adopt-a-team-policy.md#private-policy-access).
 
-The agent also needs unauthenticated read access to gateseal's repository and to each selected hook repository.
+The agent also needs unauthenticated read access to gateseal's repository and to each selected hook repository. A selected tool from npm, such as ESLint, also needs nodejs.org and the npm registry.
 
 ## Limits
 

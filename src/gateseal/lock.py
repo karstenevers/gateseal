@@ -39,7 +39,8 @@ from gateseal.manifest import (
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.setup import PYTHON
-from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, owned_outputs
+from gateseal.tools.configurations import owned_outputs
+from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, exclusion
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.tools.uv_project import require_project
 from gateseal.validation import (
@@ -71,16 +72,6 @@ class Locked:
     snapshot: Snapshot
     source: Source
     selection: Selection
-
-
-def exclusion(paths: tuple[str, ...]) -> str:
-    """Return pre-commit's exclude pattern for paths and everything under them.
-
-    A path choice holds only letters, digits, ., _, - and /, of which only .
-    has a meaning in a pattern.
-    """
-    escaped = (path.replace(".", "\\.") for path in paths)
-    return "^(?:" + "|".join(path + "(?:/|$)" for path in escaped) + ")"
 
 
 def _exclude(selection: Selection, tool: Tool) -> str | None:
@@ -175,8 +166,9 @@ def compile_lock(
         "components": {},
         "native_artifacts": {},
     }
-    for tool in selection.tools:
-        section, key, record = tool.lock_entry()
+    entries = [tool.lock_entry() for tool in selection.tools]
+    entries += [tool.node.lock_entry() for tool in selection.tools if tool.node]
+    for section, key, record in entries:
         records[section][key] = record
     inputs: dict[str, object] = {
         "schema": LOCK_FORMAT,

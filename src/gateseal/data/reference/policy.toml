@@ -2,6 +2,9 @@ schema = 5
 release = "2026.11-team-tools"
 minimum_compiler = "0.2.0"
 
+# The Node that every npm tool of this policy runs on, such as ESLint.
+node = "24.22.3"
+
 # pre-commit-hooks is the project pre-commit/pre-commit-hooks.
 [capabilities.hygiene.tools.pre-commit-hooks]
 hook_ids = ["trailing-whitespace", "end-of-file-fixer", "check-yaml"]
@@ -31,3 +34,26 @@ reviewed = ["1.1.414"]
 configuration = "rules/betterleaks.toml"
 pin = "1.10.1"
 reviewed = ["1.10.1", "1.9.0", "1.8.0"]
+
+# typescript checks staged TypeScript files with ESLint, then formats them with
+# Prettier, so Prettier formats what ESLint's fixes leave. Both run from npm on
+# the policy's Node, outside the repository's own Node project.
+[capabilities.typescript.tools.eslint]
+configuration = "rules/eslint.toml"
+pin = "10.15.0"
+reviewed = ["10.15.0"]
+
+# The npm packages that every reviewed ESLint installs beside itself.
+# typescript-eslint 8.73.0 accepts typescript below 6.1.0.
+[capabilities.typescript.tools.eslint.packages]
+"@typescript-eslint/eslint-plugin" = "8.73.0"
+"@typescript-eslint/parser" = "8.73.0"
+typescript = "6.0.3"
+
+[capabilities.typescript.tools.prettier]
+configuration = "rules/prettier.toml"
+pin = "3.10.1"
+reviewed = ["3.10.1"]
+
+[capabilities.typescript.choices]
+exclude = []

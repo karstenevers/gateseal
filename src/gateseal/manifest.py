@@ -540,11 +540,12 @@ def _chosen(
 def tool_note(tool: Tool) -> Note:
     """Label a selected tool built-in or team-defined, with its version and kind.
 
-    A team definition carries its kind's guarantees, and the tool-specific
-    ones, such as turning off a scanner's ignore file, only as its arguments
-    declare them.
+    A tool on Node names the Node it runs on after its kind. A team definition
+    carries its kind's guarantees, and the tool-specific ones, such as turning
+    off a scanner's ignore file, only as its arguments declare them.
     """
-    definition = tool.definition
+    definition, node = tool.definition, tool.node
+    on_node = "" if node is None else f" on Node {node.version}"
     caveat = (
         "; it carries the tool-specific guarantees only as far as its "
         "definition's arguments declare them"
@@ -555,7 +556,7 @@ def tool_note(tool: Tool) -> Note:
         "info",
         "tool",
         f"Tool {definition.name} {tool.version} for {tool.use.capability}: "
-        f"{definition.origin}, {definition.source.kind}"
+        f"{definition.origin}, {definition.source.kind}{on_node}"
         f"{definition.source.remark}{caveat}.",
     )
 

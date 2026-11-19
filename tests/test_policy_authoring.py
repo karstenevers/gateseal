@@ -20,6 +20,7 @@ from archives import tar_gz
 from conftest import BUNDLED_TOOLS, newer_release, reviewed_line, with_git_config
 from gateseal.policy import bundled_root
 from installation import clone, process, success
+from node_policy import node_files, released
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
@@ -38,7 +39,12 @@ from pathlib import Path
 from gateseal.cli import main
 
 root = Path(sys.argv[1])
-SERVED = ("https://github.com/", "https://pypi.org/")
+SERVED = (
+    "https://github.com/",
+    "https://pypi.org/",
+    "https://nodejs.org/",
+    "https://registry.npmjs.org/",
+)
 edited = os.environ.get("EDIT_DURING_DOWNLOAD")
 unreachable = os.environ.get("UNREACHABLE")
 
@@ -91,6 +97,21 @@ def release(root, version, platforms=("linux_x64", "darwin_arm64")):
     return directory
 
 
+def serve_npm_tools(root):
+    """Publish a fake release of the bundled Node and of each npm package it runs."""
+    locked = json.loads((bundled_root() / "policy.lock").read_bytes())
+    files = node_files(locked["node"]["version"])
+    for component in locked["components"].values():
+        for version, record in component["versions"].items():
+            if "packages" in record:
+                packages = {record["package"]: version} | record["packages"]
+                files |= {released(*package): b"{}" for package in packages.items()}
+    for url, data in files.items():
+        path = root / url.removeprefix("https://")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+
+
 @dataclass
 class Upstream:
     root: Path
@@ -126,6 +147,7 @@ def upstream(installed, tmp_path):
         page = root / f"pypi.org/pypi/pyright/{version}/json"
         page.parent.mkdir(parents=True)
         page.write_bytes(b"{}")
+    serve_npm_tools(root)
     environment = {
         key: value
         for key, value in installed.environment.items()
@@ -157,6 +179,8 @@ def started(installed, tmp_path):
         "policy.lock",
         "policy.toml",
         "rules/betterleaks.toml",
+        "rules/eslint.toml",
+        "rules/prettier.toml",
         "rules/pyright.toml",
         "rules/ruff.toml",
     ]

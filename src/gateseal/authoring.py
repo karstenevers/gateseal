@@ -32,6 +32,8 @@ from gateseal.policy import (
 )
 from gateseal.processes import find_tool
 from gateseal.tools.model import Catalog, MissingUpstream, Release
+from gateseal.tools.node import NAME as NODE
+from gateseal.tools.node import lock_node
 from gateseal.validation import canonical, decode_json, mapping
 from gateseal.validation import version as stable_version
 
@@ -186,23 +188,25 @@ def init(root: Path) -> Result:
     )
 
 
-def _recorded(data: bytes | None) -> dict[str, dict[str, object]]:
+def _recorded(data: bytes | None) -> tuple[dict[str, dict[str, object]], object]:
     """Return each version's record in an existing lock, by tool and version.
 
-    Only the structure that holds the records must be intact; each kind
-    compares a record with upstream itself.
+    The lock's node record, or None, comes second. Only the structure that
+    holds the records must be intact; each kind and lock_node compare a
+    record with upstream themselves.
     """
     if data is None:
-        return {}
+        return {}, None
     try:
-        components = mapping(decode_json(data).get("components"), "components")
+        document = decode_json(data)
+        components = mapping(document.get("components"), "components")
         return {
             name: mapping(
                 mapping(value, f"components.{name}").get("versions"),
                 f"components.{name}.versions",
             )
             for name, value in components.items()
-        }
+        }, document.get(NODE)
     except GatesealError as exc:
         raise GatesealError(
             "policy_lock_edited",
@@ -222,7 +226,7 @@ def _resolve(
     the check every load runs.
     """
     review = review_policy(reader)
-    recorded = _recorded(existing)
+    recorded, node = _recorded(existing)
     with tempfile.TemporaryDirectory(prefix="gateseal-") as scratch:
         upstream = Releases(find_tool("git"), Path(scratch), rerun)
         components: dict[str, object] = {}
@@ -231,12 +235,15 @@ def _resolve(
             components[name] = {
                 "versions": {
                     version: definition.source.lock(
-                        definition, version, kept.get(version), upstream
+                        definition, catalog, version, kept.get(version), upstream
                     )
                     for version in sorted(catalog.requires)
                 }
             }
-    data = canonical({"components": components, "generated_by": LOCK_COMMAND})
+        document = {"components": components, "generated_by": LOCK_COMMAND}
+        if review.node is not None:
+            document[NODE] = lock_node(review.node, node, upstream)
+    data = canonical(document)
     return data, load_policy(lambda name: data if name == LOCK else reader(name))
 
 
@@ -311,7 +318,7 @@ def add(root: Path, tool: str, requested: str) -> Result:
         raise GatesealError(
             exc.code,
             str(exc),
-            next_step=f"Check that {tool} {exact} is released, then run "
+            next_step=f"Check that {exc.release} is released, then run "
             f"{command} again.",
         ) from None
     return Result(

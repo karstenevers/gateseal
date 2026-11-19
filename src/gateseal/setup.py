@@ -30,8 +30,8 @@ from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment, uv_environment
 from gateseal.managed_files import CONFIG, read_optional, write_atomic
 from gateseal.processes import MINIMUM_GIT, execute, find_git, find_tool
+from gateseal.tools.mise import mise_problem, require_mise
 from gateseal.tools.model import LAUNCHERS
-from gateseal.tools.release_binary import mise_problem, require_mise
 from gateseal.validation import version_key
 from gateseal.worktree import Worktree, locate_worktree
 
@@ -173,7 +173,10 @@ def _mise_notes() -> tuple[Note, ...]:
     try:
         require_mise(tool_environment())
     except GatesealError as exc:
-        need = "A Policy with a release binary, such as Betterleaks, needs"
+        need = (
+            "A Policy with a release binary or an npm tool, such as Betterleaks or "
+            "Prettier, needs"
+        )
         return (Note("warning", exc.code, mise_problem(need, exc)),)
     return ()
 

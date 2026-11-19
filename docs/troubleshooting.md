@@ -32,7 +32,7 @@ Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit 
 
 ## The first commit fails
 
-The first commit downloads hook environments and selected binaries. Check network access. Then retry. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
+The first commit downloads hook environments and selected binaries. Check network access. Then retry. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`, and so does a tool from npm such as ESLint. Such a tool downloads Node from nodejs.org and its packages from the npm registry, through your proxy settings. If its hook says `No program` and names a folder, delete that folder. The next commit installs the packages again. If its hook says `npm installed no program`, the policy's package does not install the program that the tool definition names, or one of your npm settings stops the install. If its hook says that mise has no install of the pinned Node, turn mise's auto-install on. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
 
 ## A type checker does not read the project's packages
 

@@ -17,12 +17,16 @@ import shlex
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum, StrEnum, auto
-from typing import ClassVar, Literal, Protocol, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.choices import Choice, parse_choices
+from gateseal.tools.configurations import FORMATS, Configuration, ConfigurationFormat
 from gateseal.validation import fields, mapping, sequence, string, version_key
+
+if TYPE_CHECKING:
+    from gateseal.tools.node import Node
 
 OWNED = ".gateseal"
 """The directory of every owned output except the native configuration."""
@@ -118,10 +122,6 @@ class OutputFormat(StrEnum):
     PLAIN = "plain"
 
 
-class ConfigurationFormat(StrEnum):
-    TOML = "toml"
-
-
 class Origin(StrEnum):
     """Who wrote a hook.
 
@@ -164,14 +164,18 @@ class MissingUpstream(GatesealError):
     """The refusal of a reviewed version whose upstream lacks a fact.
 
     name and version say which version, so gateseal policy add can tell its
-    new version's refusal from a reviewed one's.
+    new version's refusal from a reviewed one's, and release what upstream
+    lacks, by default the version.
     """
 
-    def __init__(self, code: str, message: str, name: str, version: str) -> None:
+    def __init__(
+        self, code: str, message: str, name: str, version: str, release: str = ""
+    ) -> None:
+        self.release = release or f"{name} {version}"
         super().__init__(
             code,
             message,
-            next_step=f"Check that {name} {version} is released, or remove it "
+            next_step=f"Check that {self.release} is released, or remove it "
             "from policy.toml. Then run gateseal policy lock.",
         )
         self.name = name
@@ -276,14 +280,17 @@ class Release:
 
 @dataclass(frozen=True)
 class Catalog:
-    """A component as policy.toml lists it: its pin and its reviewed versions.
+    """A component as policy.toml lists it: its pin, reviewed versions and packages.
 
     requires holds what each reviewed version requires, by version; pin is
-    one of them.
+    one of them. packages maps each npm package that every reviewed version
+    installs beside a tool on Node to its exact version, by name; it is empty
+    for any other tool.
     """
 
     pin: str
     requires: Mapping[str, Mapping[str, str]]
+    packages: Mapping[str, str]
 
 
 @dataclass(frozen=True)
@@ -318,12 +325,14 @@ class Source(Protocol):
 
     kind is the kind's value of the definition's kind field. starts says
     what the kind's hooks start. remark is what status adds about a tool of
-    the kind after the kind's name, or nothing.
+    the kind after the kind's name, or nothing. on_node says that the kind's
+    hooks run on the policy's Node, which policy.toml then pins.
     """
 
     kind: ClassVar[str]
     starts: ClassVar[Starts]
     remark: ClassVar[str]
+    on_node: ClassVar[bool]
 
     def offer(
         self,
@@ -331,26 +340,31 @@ class Source(Protocol):
         use: ToolUse,
         catalog: Catalog,
         records: Mapping[str, object],
+        node: Node | None,
     ) -> Tool:
         """Return the tool at its pin, each reviewed version with its facts.
 
         records holds each reviewed version's Policy Lock record, by version.
-        A field it finds invalid fails with invalid_field.
+        A field it finds invalid fails with invalid_field. node is the
+        policy's Node, or None when policy.toml pins none; a kind that does
+        not run on Node ignores it.
         """
         ...
 
     def lock(
         self,
         definition: ToolDefinition,
+        catalog: Catalog,
         version: str,
         recorded: object,
         upstream: Upstream,
     ) -> dict[str, object]:
         """Return a reviewed version's Policy Lock record, resolved from upstream.
 
-        recorded is the record the lock holds for the version, or None. Each
-        fact it records must equal upstream's, or the version fails with
-        upstream_changed. Only a fact it lacks is resolved anew and checked.
+        catalog is the tool as policy.toml lists it. recorded is the record
+        the lock holds for the version, or None. Each fact it records must
+        equal upstream's, or the version fails with upstream_changed. Only a
+        fact it lacks is resolved anew and checked.
         """
         ...
 
@@ -360,24 +374,25 @@ class ToolDefinition:
     """One tool as data: the fields every kind shares, and its kind's source.
 
     name comes from the file name, and origin from where the file lives.
-    configuration is the owned output that the policy's configuration goes
-    to, .gateseal/<name>.<format>; files maps each fixed owned output,
-    .gateseal/<name>-<key>.<extension>, to its bytes. Both are derived from
-    the name, so a definition cannot name a path the compiler does not own.
+    configuration names the policy's configuration's format and owned output;
+    files maps each fixed owned output, .gateseal/<name>-<key>.<extension>, to
+    its bytes. Both are derived from the name, so a definition cannot name a
+    path the compiler does not own.
     stages is one of STAGE_SETS' sets, which every hook's stages render, and
     scope says whether its hooks get file names. history holds the arguments
     of the tool's executable that scan a revision range, one of which holds
     RANGE, where the CI gate puts the range; only a kind whose hooks are local
     has one.
     choices holds the Policy Choices the definition declares, by name; only a
-    definition with a configuration declares any, since each renders into it.
+    definition with a toml configuration declares any, since each renders into
+    it.
     """
 
     name: str
     origin: Origin
     stages: frozenset[Stage]
     scope: Scope
-    configuration: str | None
+    configuration: Configuration | None
     files: Mapping[str, bytes]
     executable: Executable | None
     hooks: Mapping[str, Hook]
@@ -388,8 +403,8 @@ class ToolDefinition:
     @property
     def owned(self) -> tuple[str, ...]:
         """Return every owned output the definition claims."""
-        configuration = () if self.configuration is None else (self.configuration,)
-        return (*configuration, *self.files)
+        configuration = self.configuration
+        return (*(() if configuration is None else (configuration.path,)), *self.files)
 
 
 def _arguments(
@@ -574,12 +589,24 @@ def _history(
     return history
 
 
-def _choices(value: object, field: str, owned: Mapping[str, str]) -> dict[str, Choice]:
+def _configuration(name: str, value: object, field: str) -> Configuration:
+    """Read [configuration]: exactly format, whose output names the owned path."""
+    table = fields(value, {"format"}, field)
+    chosen = closed(table["format"], ConfigurationFormat, f"{field}.format")
+    return Configuration(chosen, f"{OWNED}/{name}.{FORMATS[chosen].output}")
+
+
+def _choices(
+    value: object, field: str, configuration: Configuration | None
+) -> dict[str, Choice]:
+    """Return the choices, which render into a toml configuration."""
     choices = parse_choices(value, field)
-    if choices and "configuration" not in owned:
+    if choices and (
+        configuration is None or not FORMATS[configuration.format].takes_choices
+    ):
         raise GatesealError(
             "invalid_field",
-            f"{field} needs a configuration for its choices to render into.",
+            f"{field} needs a toml configuration for its choices to render into.",
         )
     return choices
 
@@ -600,13 +627,12 @@ def parse_definition(
     field = f"tools.{name}"
     stages = _stages(document.get("stages"), f"{field}.stages")
     scope = closed(document.get("scope"), Scope, f"{field}.scope")
-    owned: dict[str, str] = {}
-    if "configuration" in document:
-        table = fields(document["configuration"], {"format"}, f"{field}.configuration")
-        chosen = closed(
-            table["format"], ConfigurationFormat, f"{field}.configuration.format"
-        )
-        owned["configuration"] = f"{OWNED}/{name}.{chosen}"
+    configuration = (
+        _configuration(name, document["configuration"], f"{field}.configuration")
+        if "configuration" in document
+        else None
+    )
+    owned = {} if configuration is None else {"configuration": configuration.path}
     shared = {"kind", "stages", "scope", "source", "hooks"}
     document = fields(
         document,
@@ -627,13 +653,13 @@ def parse_definition(
         if "history" in document
         else None
     )
-    choices = _choices(document.get("choices", {}), f"{field}.choices", owned)
+    choices = _choices(document.get("choices", {}), f"{field}.choices", configuration)
     return ToolDefinition(
         name=name,
         origin=origin,
         stages=stages,
         scope=scope,
-        configuration=owned.get("configuration"),
+        configuration=configuration,
         files={path: content for path, content in files.values()},
         executable=executable,
         hooks=hooks,
@@ -702,6 +728,10 @@ class Tool(Protocol):
 
     @property
     def release(self) -> Release: ...
+    @property
+    def node(self) -> Node | None:
+        """The policy's Node that the tool's hooks run on, or None."""
+        ...
 
     def select(self, version: str) -> Tool:
         """Return this tool at another of its reviewed versions."""
@@ -729,27 +759,14 @@ class Tool(Protocol):
         ...
 
 
-def owned_outputs(tool: Tool, chosen: Mapping[str, object]) -> dict[str, bytes]:
-    """Return the owned outputs a tool's definition declares, by path.
+def exclusion(paths: tuple[str, ...]) -> str:
+    """Return pre-commit's exclude pattern for paths and everything under them.
 
-    They are the policy's configuration at the definition's configuration
-    path and each fixed file. chosen holds the selection's choices of the
-    tool's capability. Each of the definition's choices that chosen holds
-    renders as one line, key = "value", before the policy's configuration and
-    in definition order, so it stays a top-level key whatever tables the policy
-    declares. Without one, the configuration is the policy's bytes.
+    A path choice holds only letters, digits, ., _, - and /, of which only .
+    has a meaning in a pattern.
     """
-    outputs = dict(tool.definition.files)
-    # pytestmut: off[bool.and_or] -- a use has one when its definition does
-    if tool.definition.configuration and tool.use.configuration is not None:
-        # pytestmut: on
-        keys = "".join(
-            f'{choice.key} = "{chosen[name]}"\n'
-            for name, choice in tool.definition.choices.items()
-            if name in chosen
-        )
-        outputs[tool.definition.configuration] = keys.encode() + tool.use.configuration
-    return outputs
+    escaped = (path.replace(".", "\\.") for path in paths)
+    return "^(?:" + "|".join(path + "(?:/|$)" for path in escaped) + ")"
 
 
 def local_repository(

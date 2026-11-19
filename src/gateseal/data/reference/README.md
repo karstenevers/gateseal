@@ -15,6 +15,10 @@ this README and every other file.
 - `tools/<name>.toml` defines a tool that gateseal does not ship, of a kind it
   implements. A tool named like one gateseal ships always runs gateseal's
   definition.
+- `node` at the top of `policy.toml` pins the Node that every tool from npm
+  runs on. The `typescript` capability runs ESLint and then Prettier on it.
+  Each tool's `packages` table pins the npm packages that it installs beside
+  itself, such as the parser that the ESLint rules name.
 - `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
   the Ruff configuration, the Pyright configuration and the Betterleaks rules
   that configure copies into each repository. Pyright reads the paths in its
@@ -22,6 +26,12 @@ this README and every other file.
   and `venv` name `.venv`, the environment of the repository's uv project.
   The Betterleaks rules start from the rules built into Betterleaks, and
   `disabledRules` turns some of them off.
+- `rules/eslint.toml` holds the ESLint rules: the files to check, the parser
+  and plugins by package, and each rule's severity. It holds only `files`,
+  `parser`, `plugins` and `rules`, and names only packages that the `packages`
+  of `eslint` pin. Configure writes it as `.gateseal/eslint.json`.
+- `rules/prettier.toml` holds the Prettier options that configure copies
+  into each repository.
 - `gateseal policy add <tool> <version>` reviews a new version, and
   `gateseal policy pin <tool> <version>` makes a reviewed version the pin.
   Both edit only their own lines of `policy.toml` and keep its comments.
@@ -30,7 +40,8 @@ this README and every other file.
 
 - `gateseal policy lock` writes `policy.lock`. It reads each reviewed
   version's commit from its release tag and each archive's SHA-256 from the
-  release's checksum file, and downloads each new archive to check it.
+  release's checksum file, and downloads each new archive to check it. It
+  asks the npm registry whether each npm package's release exists.
   `gateseal policy add` writes it the same way. Run lock after you add or
   remove a reviewed version by hand, and never edit `policy.lock` by hand.
 - `gateseal policy check` proves offline that `policy.lock` agrees with

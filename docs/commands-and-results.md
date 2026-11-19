@@ -30,13 +30,15 @@ Repository commands reject an alternate `GIT_INDEX_FILE` with `alternate_index`.
 
 ## Status and doctor
 
-Both commands report checks named `lock`, `pre-commit`, `launcher`, `push-launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `push-launcher` is `skipped` unless a selected hook runs at a push. Its message then names a push launcher of setup that runs no check. `status` exits 0 even when a check fails, so read its result code and diagnostics. `doctor` exits 3 if a check fails. `doctor` can also warn about `core.hooksPath` or disabled mise auto-install. Neither command requires setup to execute. Both can report that it is missing.
+Both commands report checks named `lock`, `pre-commit`, `launcher`, `push-launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `mise` is `skipped` unless a selected tool is a release binary or runs on the policy's Node. `push-launcher` is `skipped` unless a selected hook runs at a push. Its message then names a push launcher of setup that runs no check. `status` exits 0 even when a check fails, so read its result code and diagnostics. `doctor` exits 3 if a check fails. `doctor` can also warn about `core.hooksPath` or disabled mise auto-install. Neither command requires setup to execute. Both can report that it is missing.
+
+`status`, `doctor` and `check` describe each selected tool in a `tool` diagnostic. It names the version, capability, origin and kind, and the Node of a tool from npm, such as `Tool eslint 10.15.0 for typescript: built-in, npm-package on Node 24.22.3.`
 
 ## JSON results
 
 The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. A `failed` result always has at least one next step: a command to run or a plain fix. Diagnostics can identify policies, tools, choices, repository hooks, version exceptions, hooks, findings, or history scans.
 
-A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
+A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. For a tool from npm, the diagnostic and its findings also give the `node` version that the hook runs on. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
 
 A `duration` diagnostic gives the `gate`'s time in `seconds`, to one decimal, before its other entries. It also gives `budget_seconds` when the policy sets a [time budget](ci-gate.md#time-budget). A gate over the budget also gives an `over_time_budget` warning. A `nothing_to_check` result has no time.
 

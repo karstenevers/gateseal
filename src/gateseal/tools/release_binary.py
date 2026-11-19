@@ -38,16 +38,22 @@ import os
 import re
 import shutil
 import tarfile
-import tempfile
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar, TypeGuard
+from typing import TYPE_CHECKING, ClassVar, TypeGuard
 
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import LOCK
 from gateseal.platforms import TARGETS
-from gateseal.processes import execute, find_tool
+from gateseal.processes import execute
+from gateseal.tools.mise import (
+    MINIMUM_MISE,
+    MISE,
+    check_archive,
+    mise_request,
+    read_checksums,
+)
 from gateseal.tools.model import (
     Catalog,
     Executable,
@@ -66,21 +72,13 @@ from gateseal.tools.model import (
     pattern,
     unsupported,
 )
-from gateseal.validation import (
-    digest,
-    fields,
-    mapping,
-    sha,
-    string,
-    version_key,
-)
+from gateseal.validation import digest, fields, mapping, sha, string
 
-MISE_EXEC = ("mise", "--no-config", "exec", "--deny-env")
-"""Start an executable from a tool that the command names, and from no mise file."""
+if TYPE_CHECKING:
+    from gateseal.tools.node import Node
 
-MINIMUM_MISE = "2026.10.19"
-"""The oldest mise that installs an archive as a hook's entry asks it to."""
-
+MISE_EXEC = (*MISE, "--deny-env")
+"""Start an executable with only the variables that mise keeps and the caller names."""
 
 PROGRAM = "executable_sha256"
 """The record field of the executable's SHA-256 in an archive, for a check at commit."""
@@ -114,6 +112,7 @@ class ReleaseBinary:
     kind: ClassVar[str] = "release-binary"
     starts: ClassVar[Starts] = Starts.RECORDED_EXECUTABLE
     remark: ClassVar[str] = ""
+    on_node: ClassVar[bool] = False
     repository: str
     tag: str
     archive: str
@@ -137,6 +136,7 @@ class ReleaseBinary:
         use: ToolUse,
         catalog: Catalog,
         records: Mapping[str, object],
+        node: Node | None,
     ) -> BinaryTool:
         """Read each version's archives, one for every platform, from its record."""
         executable = definition.executable
@@ -159,6 +159,7 @@ class ReleaseBinary:
     def lock(
         self,
         definition: ToolDefinition,
+        catalog: Catalog,
         version: str,
         recorded: object,
         upstream: Upstream,
@@ -211,7 +212,7 @@ class ReleaseBinary:
                 name,
                 version,
             )
-        listed = _checksums(listing)
+        listed = read_checksums(listing)
         platforms: dict[str, dict[str, str]] = {}
         for platform in sorted(self.platforms):
             url = self.url(version, platform)
@@ -267,29 +268,6 @@ class ReleaseBinary:
         return archives
 
 
-def _check_archive(
-    upstream: Upstream, archive: Mapping[str, str], name: str, version: str, source: str
-) -> bytes:
-    """Download an archive and return it, once it has the SHA-256 that source lists."""
-    data = upstream.download(archive["url"])
-    if data is None:
-        raise MissingUpstream(
-            "upstream_asset_missing",
-            f"The {name} {version} release has no {archive['url']}.",
-            name,
-            version,
-        )
-    if hashlib.sha256(data).hexdigest() != archive["sha256"]:
-        raise GatesealError(
-            "upstream_checksum_mismatch",
-            f"{archive['url']} does not have the SHA-256 {archive['sha256']} "
-            f"that {source} lists.",
-            next_step=f"Do not review {name} {version} until its "
-            "maintainers publish an archive that matches its checksum file.",
-        )
-    return data
-
-
 def _lock_archive(
     upstream: Upstream,
     listed: tuple[str, dict[str, str]],
@@ -314,7 +292,9 @@ def _lock_archive(
     if known and _is_digest(program):
         archive[PROGRAM] = program
         return
-    data = _check_archive(upstream, archive, name, version, source)
+    data = check_archive(
+        upstream, archive["url"], archive["sha256"], name, version, source
+    )
     if checked:
         archive[PROGRAM] = _program_sha256(data, archive, name, version)
 
@@ -352,17 +332,6 @@ def _program_sha256(
         next_step=f"Check that {name} {version} publishes {executable} at the top "
         "of a tar.gz archive, or stop checking it at commit.",
     )
-
-
-def _checksums(listing: bytes) -> dict[str, str]:
-    """Return each file's SHA-256 in a checksum file as sha256sum writes it."""
-    listed: dict[str, str] = {}
-    for line in listing.decode("utf-8", "replace").splitlines():
-        checksum, _, name = line.partition(" ")
-        name = name.lstrip(" *")
-        if re.fullmatch("[0-9a-f]{64}", checksum) and name:
-            listed[name] = checksum
-    return listed
 
 
 def _platforms(record: object) -> dict[str, dict[str, object]]:
@@ -411,6 +380,10 @@ class BinaryTool:
     def release(self) -> ArchiveRelease:
         return self.versions[self.version]
 
+    @property
+    def node(self) -> None:
+        return None
+
     def select(self, version: str) -> BinaryTool:
         return replace(self, version=version)
 
@@ -455,27 +428,6 @@ class BinaryTool:
                 },
             },
         )
-
-
-def mise_request(name: str, version: str, platforms: Mapping[str, Archive]) -> str:
-    """Return mise's request for a tool, with every platform's archive.
-
-    mise reads the option platforms_<os>_<arch>_<name> as the nested
-    platforms.<os>-<arch>.<name> of a mise file. A URL, a checksum and a
-    version hold no comma or bracket, which would end an option. mise
-    installs a request once under its tool name and version and never
-    reads its options again, so the tool name ends in a digest of them.
-    """
-    options = ",".join(
-        f"platforms_{platform.replace('-', '_')}_{option}={value}"
-        for platform, archive in sorted(platforms.items())
-        for option, value in (
-            ("url", archive.url),
-            ("checksum", "sha256:" + archive.sha256),
-        )
-    )
-    digest = hashlib.sha256(options.encode()).hexdigest()[:12]
-    return f"http:{name}-{digest}[{options}]@{version}"
 
 
 @dataclass(frozen=True)
@@ -578,63 +530,3 @@ def check_installs(programs: Iterable[InstalledProgram], root: Path) -> None:
             f"commit again, so that the {program.tool} hook installs it again "
             "from its checked archive.",
         )
-
-
-def require_mise(env: dict[str, str]) -> str:
-    """Return the mise on PATH once it reports MINIMUM_MISE or later."""
-    mise = find_tool("mise")
-    # mise writes its own cache and state even to report its version, so they
-    # go to a scratch directory rather than the user's home.
-    with tempfile.TemporaryDirectory() as scratch:
-        reported = execute(
-            [mise, "--no-config", "version"],
-            Path(scratch),
-            dict(_mise_environment(Path(scratch), env), MISE_OFFLINE="1"),
-        )
-    try:
-        supported = version_key(reported.stdout.decode().split()[0]) >= version_key(
-            MINIMUM_MISE
-        )
-    except (IndexError, GatesealError):
-        supported = False
-    if not supported:
-        raise GatesealError(
-            "mise_version_mismatch",
-            f"gateseal requires mise {MINIMUM_MISE} or later.",
-            4,
-        )
-    return mise
-
-
-_FOUND = {"missing_prerequisite": "none is", "mise_version_mismatch": "an older one is"}
-"""What the PATH holds for each way require_mise finds no usable mise."""
-
-
-def mise_problem(need: str, error: GatesealError) -> str:
-    """Complete need with what require_mise found, or report mise's own failure."""
-    found = _FOUND.get(error.code)
-    if found is None:
-        return f"The mise on PATH did not report its version: {str(error).strip()}"
-    return f"{need} mise {MINIMUM_MISE} or later, and {found} on PATH."
-
-
-def _mise_environment(directory: Path, env: dict[str, str]) -> dict[str, str]:
-    """Return an environment in which mise reads no caller settings or installs.
-
-    mise --no-config reads no configuration file, and env holds no MISE_
-    variable, so only the shared download cache is the caller's. mise checks
-    each archive against the Lock's checksum, so a cached archive is safe to
-    reuse. Without MISE_SYSTEM_DATA_DIR, mise treats a system install as
-    installed.
-    """
-    env = dict(env)
-    if "MISE_CACHE_DIR" in os.environ:
-        env["MISE_CACHE_DIR"] = os.environ["MISE_CACHE_DIR"]
-    env.update(
-        {
-            "MISE_DATA_DIR": str(directory / "data"),
-            "MISE_STATE_DIR": str(directory / "state"),
-            "MISE_SYSTEM_DATA_DIR": str(directory / "system"),
-        }
-    )
-    return env

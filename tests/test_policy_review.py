@@ -87,7 +87,7 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
     text = BUNDLED["policy.toml"].decode().replace("\n" + SECRETS, "")
     text = text.replace(RUFF, RUFF + 'requires."0.17.1" = { betterleaks = "1.9.0" }\n')
     review = review_policy(reader(text))
-    assert review.capabilities == ("hygiene", "python", "python-types")
+    assert review.capabilities == ("hygiene", "python", "python-types", "typescript")
     unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
     assert review.catalogs["ruff"].requires == unrequired | {
         "0.17.1": {"betterleaks": "1.9.0"}
@@ -134,7 +134,7 @@ def test_a_top_level_table_of_another_layout_is_named(table):
     assert refused(edited) == (
         f"policy.toml has {table} at its top level, which holds only schema, "
         "release, minimum_compiler, capabilities and the optional "
-        "time_budget_seconds."
+        "time_budget_seconds and node."
     )
 
 
@@ -182,6 +182,7 @@ def test_a_capability_without_a_history_scan_may_expose_exclude():
     assert review_policy(edited).choices == {
         ("hygiene", "exclude"): (),
         ("python", "exclude"): ("vendor",),
+        ("typescript", "exclude"): (),
     }
 
 

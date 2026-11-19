@@ -98,7 +98,7 @@ def test_a_set_up_clone_is_healthy(hygiene, command):
     assert check(result, "mise") == (
         "info",
         "skipped",
-        "No selected tool is a release binary.",
+        "No selected tool starts through mise.",
     )
     assert result["next_steps"] == []
 
@@ -154,7 +154,9 @@ def test_mise_passes_for_a_release_binary(secrets, machine):
         )
 
 
-NEED = "A release binary starts through mise 2026.10.19 or later, and"
+NEED = (
+    "A release binary or the policy's Node starts through mise 2026.10.19 or later, and"
+)
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,9 @@ import pytest
 from archives import tar_gz
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import built_in_tools
+from gateseal.tools.model import Catalog
+
+CATALOG = Catalog("1.9.0", {"1.9.0": {}}, {})
 
 RELEASE = "https://github.com/betterleaks/betterleaks/releases/download/v1.9.0/"
 LINUX = RELEASE + "betterleaks_1.9.0_linux_x64.tar.gz"
@@ -62,7 +65,8 @@ def lock(files, recorded=None, checked=True):
         executable = replace(tool.executable, check_at_commit=False)
         tool = replace(tool, executable=executable)
     upstream = Releases(files)
-    return tool.source.lock(tool, "1.9.0", recorded, upstream), upstream.downloaded
+    record = tool.source.lock(tool, CATALOG, "1.9.0", recorded, upstream)
+    return record, upstream.downloaded
 
 
 def refused(files):
