@@ -42,12 +42,12 @@ def test_a_clone_and_its_linked_worktree_prepare_in_their_own_git_directory(
 ):
     clone = locate_worktree(root)
     assert clone.preparation == root / ".git" / PREPARATION
-    assert clone.hook == root / ".git" / "hooks" / "pre-commit"
+    assert clone.hooks == root / ".git" / "hooks"
     success(["git", "worktree", "add", "--quiet", tmp_path / "linked"], root)
     linked = locate_worktree(tmp_path / "linked")
     assert linked.git_dir == root / ".git" / "worktrees" / "linked"
     assert linked.preparation == linked.git_dir / PREPARATION
-    assert linked.hook == clone.hook
+    assert linked.hooks == clone.hooks
 
 
 def test_an_index_path_with_a_line_break_is_unsupported(root, tmp_path, monkeypatch):

@@ -46,26 +46,35 @@ RANGE = "{range}"
 class Stage(StrEnum):
     COMMIT = "commit"
     RUN = "run"
+    PUSH = "push"
     CI = "ci"
 
 
 HOOK_STAGES: Mapping[Stage, str] = {
     Stage.COMMIT: "pre-commit",
     Stage.RUN: "pre-commit",
+    Stage.PUSH: "pre-push",
     Stage.CI: "manual",
 }
 """The pre-commit stage that runs each Stage's hooks, as --hook-stage names it."""
+
+LAUNCHERS = (HOOK_STAGES[Stage.COMMIT], HOOK_STAGES[Stage.PUSH])
+"""The Git hooks that start pre-commit in a clone: its commit and push launchers."""
+
+AT_COMMIT = frozenset({Stage.COMMIT, Stage.RUN, Stage.CI})
+"""The stages of a hook that runs at a commit, in gateseal run and in the gate."""
 
 STAGE_SETS: Mapping[frozenset[Stage], tuple[str, ...]] = {
     stages: tuple(
         dict.fromkeys(HOOK_STAGES[stage] for stage in Stage if stage in stages)
     )
-    for stages in (frozenset(Stage), frozenset({Stage.CI}))
+    for stages in (AT_COMMIT, frozenset({Stage.PUSH, Stage.CI}), frozenset({Stage.CI}))
 }
-"""The stages a definition may list, and the stages its hooks name for them.
+"""The stages a hook may list, and the stages pre-commit runs it in for them.
 
 pre-commit cannot tell a commit from gateseal run, so commit and run go
-together. A hook outside the ci stage would not be part of the gate.
+together. A hook outside the ci stage would not be part of the gate, so a
+hook too slow for a commit runs at a push and in the gate.
 """
 
 
@@ -520,10 +529,17 @@ def _hook(
     )
 
 
+def stage_set(names: Sequence[str]) -> frozenset[Stage] | None:
+    """Return STAGE_SETS' set that names lists, each stage once in any order."""
+    return next(
+        (stages for stages in STAGE_SETS if sorted(stages) == sorted(names)), None
+    )
+
+
 def _stages(value: object, field: str) -> frozenset[Stage]:
-    listed = [closed(item, Stage, field) for item in sequence(value, field)]
-    stages = frozenset(listed)
-    if stages not in STAGE_SETS or len(stages) != len(listed):
+    listed = [string(item, field) for item in sequence(value, field)]
+    stages = stage_set(listed)
+    if stages is None:
         raise unsupported(field, ", ".join(listed))
     return stages
 

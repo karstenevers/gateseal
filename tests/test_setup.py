@@ -709,8 +709,8 @@ def test_refresh_keeps_another_tools_hook_and_runs_both(machine, tmp_path):
     assert result["diagnostics"][1] == {
         "severity": "info",
         "category": "legacy_hook",
-        "message": f"The commit launcher in {clone} runs the earlier hook, which "
-        f"pre-commit keeps as {legacy}.",
+        "message": f"The launcher {hook} runs the earlier hook, which pre-commit "
+        f"keeps as {legacy}.",
     }
     (clone / ".pre-commit-config.yaml").write_text(
         "repos:\n- repo: local\n  hooks:\n  - id: mine\n    name: mine\n"
@@ -722,6 +722,217 @@ def test_refresh_keeps_another_tools_hook_and_runs_both(machine, tmp_path):
     assert committed.returncode == 0, committed.stdout + committed.stderr
     assert (tmp_path / "other tool ran").read_text() == "ran\n"
     assert (tmp_path / "pre-commit ran").read_text() == "ran\n"
+
+
+def configuration(log, *launchers):
+    """Return a configuration as gateseal generates it, with a hook at a push.
+
+    It is JSON, which pre-commit reads as YAML. launchers are the hook types
+    that it asks pre-commit install for.
+    """
+    hook = {"id": "slow", "name": "slow", "language": "unsupported"}
+    hook |= {"pass_filenames": False, "stages": ["pre-push"]}
+    hook["entry"] = f"sh -c 'echo pre-commit >> \"{log}\"'"
+    config: dict[str, object] = {"repos": [{"repo": "local", "hooks": [hook]}]}
+    if launchers:
+        config["default_install_hook_types"] = list(launchers)
+    return json.dumps(config)
+
+
+def test_refresh_installs_the_push_launcher_only_where_the_configuration_asks(
+    machine, tmp_path
+):
+    """Setup's template holds no push launcher, so Git LFS can write its hook."""
+    gateseal("setup")
+    assert [p.name for p in machine.launcher.parent.iterdir()] == ["pre-commit"]
+    clone = repository(tmp_path / "clone")
+    hooks = clone / ".git" / "hooks"
+    config = clone / ".pre-commit-config.yaml"
+    config.write_text(configuration(tmp_path / "log"))
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+    assert [p.name for p in hooks.iterdir()] == ["pre-commit"]
+    config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"]) == (0, "set_up")
+    assert result["changed"] == [str(hooks / "pre-push")]
+    assert notes(result) == []
+    assert sorted(p.name for p in hooks.iterdir()) == ["pre-commit", "pre-push"]
+    launcher = machine.launcher.read_bytes()
+    assert (hooks / "pre-commit").read_bytes() == launcher
+    pushed = (hooks / "pre-push").read_bytes()
+    assert pushed == setup.push_launcher(launcher) != launcher
+    assert (hooks / "pre-push").stat().st_mode & 0o777 == 0o755
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+
+
+@pytest.mark.parametrize(
+    ("config", "written"),
+    [
+        (configuration("log", "pre-push"), ["pre-commit", "pre-push"]),
+        (configuration("log", "commit-msg", "pre-push"), ["pre-commit", "pre-push"]),
+        (configuration("log", "commit-msg"), ["pre-commit"]),
+        ("default_install_hook_types: [pre-push]\nrepos: []\n", ["pre-commit"]),
+        ('{"default_install_hook_types": "pre-push", "repos": []}', ["pre-commit"]),
+        ('["pre-push"]', ["pre-commit"]),
+        (None, ["pre-commit"]),
+    ],
+    ids=["push alone", "push and another", "another", "yaml", "text", "list", "none"],
+)
+def test_refresh_writes_the_commit_launcher_and_no_launcher_of_another_type(
+    machine, tmp_path, config, written
+):
+    """Only the configuration that gateseal generates, as JSON, gets a push launcher."""
+    clone = repository(tmp_path / "clone", "--template=")
+    if config is not None:
+        (clone / ".pre-commit-config.yaml").write_text(config)
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    hooks = clone / ".git" / "hooks"
+    assert code == 0
+    assert result["changed"][-len(written) :] == [str(hooks / name) for name in written]
+    assert sorted(p.name for p in hooks.iterdir()) == written
+
+
+def test_refresh_removes_a_push_launcher_that_the_configuration_no_longer_asks_for(
+    machine, tmp_path
+):
+    """That launcher runs no check and keeps Git LFS from writing its push hook."""
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    hooks = clone / ".git" / "hooks"
+    kept = "#!/bin/sh\necho other tool\n"
+    (hooks / "pre-push").write_text(kept)
+    (hooks / "pre-push").chmod(0o755)
+    config = clone / ".pre-commit-config.yaml"
+    config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
+    gateseal("--repo", clone, "setup", "--refresh")
+    assert (hooks / "pre-push.legacy").read_text() == kept
+    config.write_text(configuration(tmp_path / "log"))
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"]) == (0, "set_up")
+    assert result["changed"] == [str(hooks / "pre-push")]
+    assert notes(result) == []
+    assert sorted(p.name for p in hooks.iterdir()) == ["pre-commit", "pre-push"]
+    assert (hooks / "pre-push").read_text() == kept
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+    assert (hooks / "pre-push").read_text() == kept
+
+
+def test_refresh_removes_a_push_launcher_without_a_kept_hook(machine, tmp_path):
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    hooks = clone / ".git" / "hooks"
+    config = clone / ".pre-commit-config.yaml"
+    config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
+    gateseal("--repo", clone, "setup", "--refresh")
+    config.unlink()
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["changed"]) == (0, [str(hooks / "pre-push")])
+    assert [p.name for p in hooks.iterdir()] == ["pre-commit"]
+
+
+def test_refresh_keeps_a_push_launcher_that_it_did_not_write(machine, tmp_path):
+    """Another pre-commit's launcher names another Python, and may run its hooks."""
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    hook = clone / ".git" / "hooks" / "pre-push"
+    other = setup.push_launcher(machine.launcher.read_bytes()) + b"# another\n"
+    hook.write_bytes(other)
+    hook.chmod(0o755)
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+    assert hook.read_bytes() == other
+
+
+def test_refresh_leaves_current_launchers_as_they_are(machine, tmp_path):
+    """pre-commit install would write each again, and cannot write a read-only one."""
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    (clone / ".pre-commit-config.yaml").write_text(
+        configuration(tmp_path / "log", "pre-commit", "pre-push")
+    )
+    gateseal("--repo", clone, "setup", "--refresh")
+    hooks = [clone / ".git" / "hooks" / name for name in ("pre-commit", "pre-push")]
+    for hook in hooks:
+        hook.chmod(0o555)
+        os.utime(hook, ns=(1, 1))
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+    assert [hook.stat().st_mtime_ns for hook in hooks] == [1, 1]
+
+
+def linked_worktree(clone, path):
+    success(["git", "commit", "--quiet", "--allow-empty", "-m", "Start"], clone)
+    success(["git", "worktree", "add", "--quiet", "--detach", path], clone)
+    return path
+
+
+def test_refresh_writes_the_push_launcher_that_another_worktree_asks_for(
+    machine, tmp_path
+):
+    """The worktrees of a clone share its launchers."""
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    linked = linked_worktree(clone, tmp_path / "linked ü")
+    hook = clone / ".git" / "hooks" / "pre-push"
+    config = linked / ".pre-commit-config.yaml"
+    config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["changed"]) == (0, [str(hook)])
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
+    config.unlink()
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["changed"]) == (0, [str(hook)])
+    assert not hook.exists()
+
+
+def test_refresh_restores_a_push_launcher_without_execute_permission(machine, tmp_path):
+    gateseal("setup")
+    clone = repository(tmp_path / "clone")
+    (clone / ".pre-commit-config.yaml").write_text(
+        configuration(tmp_path / "log", "pre-commit", "pre-push")
+    )
+    gateseal("--repo", clone, "setup", "--refresh")
+    hook = clone / ".git" / "hooks" / "pre-push"
+    hook.chmod(0o644)
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["changed"]) == (0, [str(hook)])
+    assert hook.stat().st_mode & 0o777 == 0o755
+
+
+def test_refresh_keeps_another_tools_push_hook_and_a_push_runs_both(machine, tmp_path):
+    """pre-commit runs the kept hook first, as Git LFS needs for its upload."""
+    gateseal("setup")
+    remote = tmp_path / "remote.git"
+    success(["git", "init", "--quiet", "--bare", "--template=", remote], tmp_path)
+    clone = repository(tmp_path / "clone")
+    log = tmp_path / "log"
+    hook = clone / ".git" / "hooks" / "pre-push"
+    hook.write_text(f'#!/bin/sh\necho "other tool $1" >> "{log}"\n')
+    hook.chmod(0o755)
+    (clone / ".pre-commit-config.yaml").write_text(
+        configuration(log, "pre-commit", "pre-push")
+    )
+    code, result = gateseal("--repo", clone, "setup", "--refresh")
+    assert (code, result["changed"]) == (0, [str(hook)])
+    legacy = hook.with_name("pre-push.legacy")
+    assert result["diagnostics"][1:] == [
+        {
+            "severity": "info",
+            "category": "legacy_hook",
+            "message": f"The launcher {hook} runs the earlier hook, which "
+            f"pre-commit keeps as {legacy}.",
+        }
+    ]
+    success(["git", "add", ".pre-commit-config.yaml"], clone)
+    committed = commit(clone)
+    assert committed.returncode == 0, committed.stdout + committed.stderr
+    assert not log.exists()
+    success(["git", "push", "--quiet", remote, "main"], clone)
+    assert log.read_text() == f"other tool {remote}\npre-commit\n"
 
 
 def test_refresh_outside_a_repository_changes_nothing(machine, tmp_path):

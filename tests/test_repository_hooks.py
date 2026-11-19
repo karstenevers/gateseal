@@ -127,9 +127,9 @@ def test_a_changed_hooks_table_needs_configure(tmp_path):
             "root, such as scripts/check.sh.",
         ),
         (
-            MIGRATIONS + 'stages = ["pre-push"]\n',
-            "hooks.check-migrations has stages, which a repository hook does not "
-            "take. It takes name, run, args and files.",
+            MIGRATIONS + 'entry = "check"\n',
+            "hooks.check-migrations has entry, which a repository hook does not "
+            "take. It takes name, run, args, files and stages.",
         ),
         (
             MIGRATIONS.replace('"^migrations/"', '"(migrations"'),
@@ -156,7 +156,7 @@ def test_a_changed_hooks_table_needs_configure(tmp_path):
     ids=[
         "absolute",
         "outside",
-        "stages",
+        "unknown field",
         "pattern",
         "id",
         "no name",

@@ -39,7 +39,7 @@ from gateseal.manifest import (
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.setup import PYTHON
-from gateseal.tools.model import OWNED, LockSection, Tool, owned_outputs
+from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, owned_outputs
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.tools.uv_project import require_project
 from gateseal.validation import (
@@ -100,17 +100,24 @@ def compile_outputs(
     choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it, so a file is kept from a tool only by a
     policy that exposes exclude in that tool's capability. The Manifest's
-    Repository Hooks come last. A Manifest's [ci] adds the provider's file,
-    which names the gateseal commit CI installs and the policy repository its
-    credential helper serves.
+    Repository Hooks come last. A selection with a hook at a push also asks
+    pre-commit install for the push launcher, and only such a selection, so
+    no other clone gets a push hook file, which Git LFS also wants. A
+    Manifest's [ci] adds the provider's file, which names the gateseal commit
+    CI installs and the policy repository its credential helper serves.
     """
     repositories = [
-        pin.hook_repository(),
+        pin.hook_repository(selection.pushes),
         *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
     ]
     if selection.repository_hooks:
         repositories.append(repository_entry(selection.repository_hooks))
-    config = {"minimum_pre_commit_version": PRE_COMMIT, "repos": repositories}
+    config: dict[str, object] = {
+        "minimum_pre_commit_version": PRE_COMMIT,
+        "repos": repositories,
+    }
+    if selection.pushes:
+        config["default_install_hook_types"] = list(LAUNCHERS)
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))

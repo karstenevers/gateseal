@@ -16,7 +16,7 @@ The Manifest is `gateseal.toml`, which selects the policy and checks. The Lock i
 
 | Command | Purpose |
 | --- | --- |
-| `setup` | Install pre-commit and the launcher. `--refresh` adds the launcher to an existing clone. |
+| `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. It removes a push launcher that it wrote when no worktree of the clone has a selected hook at a push. |
 | `configure` | Generate the Lock and files from the Manifest. |
 | `check` | Validate the selected policy and generated files. |
 | `status` | Report readiness without network access. This is the default command. |
@@ -30,7 +30,7 @@ Repository commands reject an alternate `GIT_INDEX_FILE` with `alternate_index`.
 
 ## Status and doctor
 
-Both commands report checks named `lock`, `pre-commit`, `launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `status` exits 0 even when a check fails, so read its result code and diagnostics. `doctor` exits 3 if a check fails. `doctor` can also warn about `core.hooksPath` or disabled mise auto-install. Neither command requires setup to execute. Both can report that it is missing.
+Both commands report checks named `lock`, `pre-commit`, `launcher`, `push-launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `push-launcher` is `skipped` unless a selected hook runs at a push. Its message then names a push launcher of setup that runs no check. `status` exits 0 even when a check fails, so read its result code and diagnostics. `doctor` exits 3 if a check fails. `doctor` can also warn about `core.hooksPath` or disabled mise auto-install. Neither command requires setup to execute. Both can report that it is missing.
 
 ## JSON results
 

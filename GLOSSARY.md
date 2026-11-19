@@ -30,7 +30,7 @@
 
 <a id="repository-maintainer"></a>A **Repository Maintainer** manages the selection in one repository.
 
-<a id="repository-hook"></a>A **Repository Hook** runs a repository script after policy hooks at commit, in `gateseal run`, and in CI.
+<a id="repository-hook"></a>A **Repository Hook** runs a repository script after policy hooks at commit, in `gateseal run`, and in CI. Its `stages` can move it from commit to `git push`, or to CI alone.
 
 <a id="personal-hook"></a>A **Personal Hook** runs for one developer during an ordinary Git commit.
 
@@ -48,9 +48,9 @@
 
 <a id="compiler-runtime"></a>The **Compiler Runtime** is the pre-commit version a gateseal release names and the Python that setup installs for it.
 
-<a id="setup"></a>**Setup** installs that pre-commit and configures new clones to use its launcher.
+<a id="setup"></a>**Setup** installs that pre-commit and configures new clones to use its commit launcher.
 
-<a id="launcher"></a>The **Launcher** is pre-commit's executable commit hook in a clone.
+<a id="launcher"></a>A **Launcher** is an executable hook of pre-commit in a clone. The commit launcher runs at `git commit`. The push launcher runs at `git push`, in a clone whose selection has a hook at a push.
 
 <a id="ci-gate"></a>The **CI Gate** runs selected CI-stage checks and any history scans for an event.
 

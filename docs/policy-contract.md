@@ -117,8 +117,21 @@ files = "^migrations/"
 | `run` | Path to a repository file. Segments use letters, digits, `.`, `_`, and `-`; `.` and `..` are invalid segments. |
 | `args` | Optional arguments before the file paths. |
 | `files` | Optional Python regular expression for matching paths. The default matches all staged files. |
+| `stages` | Optional. `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. The default is `["commit", "run", "ci"]`. |
 
-Commit the script with a `#!` line and executable permission. gateseal does not install its dependencies. Repository hooks run at commit, in `gateseal run`, and in the CI gate. Duplicate IDs or names give `duplicate_identifier`. Missing required fields, invalid paths or expressions, and unknown fields give `invalid_field`.
+Commit the script with a `#!` line and executable permission. gateseal does not install its dependencies. By default, a repository hook runs at commit, in `gateseal run`, and in the CI gate. Duplicate IDs or names give `duplicate_identifier`. Missing required fields, invalid paths, expressions or stages, and unknown fields give `invalid_field`.
+
+Set `stages` to move a check that is too slow for each commit. This fragment runs the script at `git push` and in the CI gate, and not at commit or in `gateseal run`:
+
+<!-- manifest tables: push hook -->
+```toml
+[hooks.slow-tests]
+name = "Run the slow tests"
+run = "scripts/slow-tests.sh"
+stages = ["push", "ci"]
+```
+
+See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push) for what each clone needs.
 
 ### Version exceptions
 

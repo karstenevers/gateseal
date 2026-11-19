@@ -16,6 +16,14 @@ files = "^migrations/"
 
 Commit the executable script with a `#!` line. The script receives matching staged paths after its configured arguments. It also runs in `gateseal run` and CI. gateseal does not install its dependencies. See [repository hook fields](policy-contract.md#repository-hooks) for restrictions.
 
+A check that is too slow for each commit can run at `git push` instead. Add this line to its table:
+
+```toml
+stages = ["push", "ci"]
+```
+
+The script then receives the paths that the push changes. It still runs in CI. Each clone needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push).
+
 ## Skip an optional hook
 
 A policy may allow a repository to skip selected hooks. For example, if the policy marks `check-yaml` optional, add:

@@ -17,8 +17,8 @@ See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions e
 | Field | Value |
 | --- | --- |
 | `kind` | `pre-commit-repository`, `release-binary` or `uv-project`. |
-| `stages` | `["commit", "run", "ci"]` or `["ci"]`. |
-| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook runs at every commit, gets no filenames and checks the whole project. |
+| `stages` | `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. |
+| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook runs at every commit, or at every push in the push stage. It gets no filenames and checks the whole project. |
 | `configuration.format` | Optional `toml`. The generated file is `.gateseal/<name>.toml`. |
 | `files.<key>` | Optional fixed file with lowercase `extension` and text `content` using LF line endings. |
 | `hooks.<id>` | At least one hook. |
@@ -26,6 +26,16 @@ See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions e
 | `choices.<name>` | Optional choice in the tool configuration. It needs `configuration`. |
 
 An unsupported kind or value gives `unsupported_tool_definition`. Unknown fields are invalid.
+
+## Stages
+
+| `stages` | The hooks run |
+| --- | --- |
+| `["commit", "run", "ci"]` | At commit, in `gateseal run`, and in the CI gate. |
+| `["push", "ci"]` | At `git push` and in the CI gate. |
+| `["ci"]` | In the CI gate alone. |
+
+Use the push stage for a tool that is too slow for each commit. Each clone then needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push). A gateseal release without the push stage gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has the stage.
 
 ## Hooks
 
@@ -50,7 +60,7 @@ A `uv-project` source has a `package`: the tool's name on PyPI, with any extras 
 
 The repository needs `pyproject.toml` and `uv.lock` at its root, and `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. A commit through pre-commit alone has no such check: without a project, uv starts the tool outside one. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
 
-A hook with the `project` scope runs at every commit and gate run, also when the change only deletes files. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. The CI gate checks a new clone.
+A hook with the `project` scope runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. The CI gate checks a new clone.
 
 Release binaries run through `mise --no-config exec --deny-env`. A hook from a `pre-commit-repository` or `uv-project` source receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
 

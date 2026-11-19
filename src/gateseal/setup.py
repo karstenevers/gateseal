@@ -8,23 +8,29 @@ new clone. It changes no PATH and no tool that the user installed. Undoing it is
 unsetting init.templateDir and deleting the tools, bin and git-template folders
 under data_root().
 
-It installs no push launcher: with one in the template, git lfs install fails
-and a push then uploads no Git LFS object.
+The template holds no push launcher: with one there, Git LFS cannot write its
+own push hook in a new clone, and a push then uploads no Git LFS object. A
+clone gets its push launcher from pre-commit install, which keeps the hook of
+Git LFS and runs it first.
 """
 
+import contextlib
+import json
 import os
 import shlex
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from gateseal import __version__
 from gateseal.compiler_release import MINIMUM_UV, PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment, uv_environment
-from gateseal.managed_files import read_optional, write_atomic
+from gateseal.managed_files import CONFIG, read_optional, write_atomic
 from gateseal.processes import MINIMUM_GIT, execute, find_git, find_tool
+from gateseal.tools.model import LAUNCHERS
 from gateseal.tools.release_binary import mise_problem, require_mise
 from gateseal.validation import version_key
 from gateseal.worktree import Worktree, locate_worktree
@@ -77,8 +83,8 @@ def run(clone: Path | None) -> Result:
     """Converge this machine on the owned pre-commit and its launcher.
 
     Every check runs before the first change, so a missing tool or another
-    template folder changes nothing. With clone, the launcher also goes into
-    that existing clone, which Git's template never reaches.
+    template folder changes nothing. With clone, that existing clone, which
+    Git's template never reaches, also gets the launchers it asks for.
     """
     home = Path.home()
     git = _require(home, "Git", MINIMUM_GIT, find_git)
@@ -92,8 +98,7 @@ def run(clone: Path | None) -> Result:
     if not _installed(layout, PRE_COMMIT, home):
         _install(uv, layout, PRE_COMMIT, home)
         changed.append(str(layout.tools / "pre-commit"))
-    launcher = _launcher(layout, home)
-    if _place_launcher(layout, launcher):
+    if _place_launcher(layout, _launcher(layout, home)):
         changed.append(str(layout.launcher))
     if not configured:
         execute(
@@ -109,7 +114,7 @@ def run(clone: Path | None) -> Result:
     )
     next_steps = ("Run gateseal setup --refresh in each clone you made before.",)
     if worktree is not None:
-        refreshed, kept = _refresh(worktree, layout, launcher)
+        refreshed, kept = _refresh(worktree, layout)
         changed += refreshed
         notes += kept
         message += f" So does the clone at {worktree.root}."
@@ -328,32 +333,108 @@ def _place_launcher(layout: Layout, launcher: bytes) -> bool:
     return stale
 
 
-def _refresh(
-    worktree: Worktree, layout: Layout, launcher: bytes
-) -> tuple[list[str], tuple[Note, ...]]:
-    """Install the launcher in an existing clone with pre-commit install.
+def push_launcher(commit: bytes) -> bytes:
+    """Return the push launcher that pre-commit writes beside the commit launcher.
 
-    pre-commit keeps an earlier hook as pre-commit.legacy and runs it first.
+    pre-commit writes one script for each hook type, and the scripts differ
+    only in the type they name.
     """
-    hook = worktree.hook
-    try:
-        current = hook.read_bytes()
-    except FileNotFoundError:
-        current = None
-    if current == launcher and os.access(hook, os.X_OK):
-        return [], ()
-    execute(
-        [str(layout.python), "-I", "-m", "pre_commit", "install"]
-        + ["--hook-type", "pre-commit", "--allow-missing-config"],
+    return commit.replace(b"--hook-type=pre-commit", b"--hook-type=pre-push")
+
+
+def _launchers(folder: Path) -> dict[Path, tuple[bytes, bool]]:
+    """Return each launcher in folder with its bytes and whether Git can start it."""
+    return {
+        path: (path.read_bytes(), os.access(path, os.X_OK))
+        for path in (folder / name for name in LAUNCHERS)
+        if path.is_file()
+    }
+
+
+def _config_asks_for_push_launcher(root: Path) -> bool:
+    """Tell whether the generated configuration in root asks for the push launcher.
+
+    gateseal generates the configuration as JSON. A worktree with another
+    configuration, or with none, asks for no push launcher.
+    """
+    config: object = None
+    with contextlib.suppress(OSError, ValueError):
+        config = json.loads((root / CONFIG).read_bytes())
+    asked = (
+        cast("dict[str, object]", config).get("default_install_hook_types")
+        if isinstance(config, dict)
+        else None
+    )
+    return isinstance(asked, list) and LAUNCHERS[1] in asked
+
+
+def asks_for_push_launcher(worktree: Worktree) -> bool:
+    """Tell whether a worktree of the clone asks for the push launcher.
+
+    The worktrees of a clone share its launchers, so one that runs a hook at a
+    push needs the push launcher in all of them.
+    """
+    listed = execute(
+        [worktree.git, "worktree", "list", "--porcelain", "-z"],
         worktree.root,
         tool_environment(),
-        next_step="Fix what pre-commit reports, then run gateseal setup --refresh.",
+    ).stdout
+    return any(
+        _config_asks_for_push_launcher(
+            Path(os.fsdecode(line.removeprefix(b"worktree ")))
+        )
+        for line in listed.split(b"\0")
+        if line.startswith(b"worktree ")
     )
-    legacy = hook.with_name("pre-commit.legacy")
-    kept = Note(
-        "info",
-        "legacy_hook",
-        f"The commit launcher in {worktree.root} runs the earlier hook, which "
-        f"pre-commit keeps as {legacy}.",
+
+
+def _refresh(worktree: Worktree, layout: Layout) -> tuple[list[str], tuple[Note, ...]]:
+    """Make the launchers of an existing clone the ones its configuration asks for.
+
+    pre-commit install writes the commit launcher, and the push launcher when a
+    selected hook runs at a push. It keeps an earlier hook as <launcher>.legacy
+    and runs it first. A launcher that is current stays as it is. A push
+    launcher of an earlier refresh that no configuration asks for any more runs
+    no check and keeps Git LFS from writing its push hook, so pre-commit
+    uninstall removes it and puts the kept hook back.
+    """
+    pre_commit = [str(layout.python), "-I", "-m", "pre_commit"]
+    step = "Fix what pre-commit reports, then run gateseal setup --refresh."
+    commit, push = (worktree.hooks / name for name in LAUNCHERS)
+    launcher = layout.launcher.read_bytes()
+    current = {commit: (launcher, True), push: (push_launcher(launcher), True)}
+    asked = asks_for_push_launcher(worktree)
+    before = _launchers(worktree.hooks)
+    stale = [
+        path
+        for path in ((commit, push) if asked else (commit,))
+        if before.get(path) != current[path]
+    ]
+    if stale:
+        execute(
+            [*pre_commit, "install", "--allow-missing-config"]
+            + [option for path in stale for option in ("--hook-type", path.name)],
+            worktree.root,
+            tool_environment(),
+            next_step=step,
+        )
+    if not asked and before.get(push, (None,))[0] == current[push][0]:
+        execute(
+            [*pre_commit, "uninstall", "--hook-type", push.name],
+            worktree.root,
+            tool_environment(),
+            next_step=step,
+        )
+    after = _launchers(worktree.hooks)
+    changed = [path for path in (commit, push) if before.get(path) != after.get(path)]
+    kept = tuple(
+        Note(
+            "info",
+            "legacy_hook",
+            f"The launcher {path} runs the earlier hook, which pre-commit keeps "
+            f"as {legacy}.",
+        )
+        for path in changed
+        if path in after and (legacy := path.with_name(path.name + ".legacy")).exists()
     )
-    return [str(hook)], (kept,) if legacy.exists() else ()
+    return [str(path) for path in changed], kept

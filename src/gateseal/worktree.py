@@ -43,8 +43,9 @@ class Worktree:
         return self.git_dir / PREPARATION
 
     @property
-    def hook(self) -> Path:
-        return self.common_dir / "hooks" / "pre-commit"
+    def hooks(self) -> Path:
+        """The folder of the hooks that Git starts, launchers among them."""
+        return self.common_dir / "hooks"
 
 
 def locate_worktree(requested: Path) -> Worktree:

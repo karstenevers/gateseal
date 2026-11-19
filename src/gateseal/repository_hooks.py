@@ -2,24 +2,36 @@
 
 A Repository Maintainer adds a hook that runs a file of the repository. It runs
 after every policy hook, at a commit, in gateseal run and in the CI gate, so a
-commit and CI keep running one generated configuration. It only adds a check:
-its ID may name no hook of the policy, and gateseal installs nothing for it.
+commit and CI keep running one generated configuration. Its stages can move it
+to a push, or to the gate alone. It only adds a check: its ID may name no hook
+of the policy, and gateseal installs nothing for it.
 """
 
+import json
 import re
 import shlex
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from gateseal.compiler_release import CHECK_HOOK, CHECK_HOOK_NAME
+from gateseal.compiler_release import OWN_HOOKS
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.managed_files import MANIFEST
 from gateseal.paths import resolved
-from gateseal.tools.model import NAME, Hook, Origin, OutputFormat, Scope, Stage
+from gateseal.tools.model import (
+    AT_COMMIT,
+    NAME,
+    STAGE_SETS,
+    Hook,
+    Origin,
+    OutputFormat,
+    Scope,
+    Stage,
+    stage_set,
+)
 from gateseal.validation import mapping, sequence, string
 
-FIELDS = frozenset({"name", "run", "args", "files"})
+FIELDS = frozenset({"name", "run", "args", "files", "stages"})
 
 RUN = re.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
 """A file's path from the repository root, in portable characters only, so the
@@ -31,8 +43,8 @@ class RepositoryHook:
     """One [hooks.<id>] table.
 
     run is the file it starts, relative to the repository root, with args
-    before the staged file names. files is pre-commit's pattern of the files
-    that start it, or None for every file.
+    before the file names. files is pre-commit's pattern of the files that
+    start it, or None for every file. stages is one of STAGE_SETS' sets.
     """
 
     id: str
@@ -40,6 +52,7 @@ class RepositoryHook:
     run: str
     args: tuple[str, ...]
     files: str | None
+    stages: frozenset[Stage]
 
     @property
     def hook(self) -> Hook:
@@ -79,7 +92,7 @@ def _hook(hook_id: str, value: object) -> RepositoryHook:
         raise GatesealError(
             "invalid_field",
             f"{field} has {', '.join(extra)}, which a repository hook does not take. "
-            "It takes name, run, args and files.",
+            "It takes name, run, args, files and stages.",
         )
     missing = sorted({"name", "run"} - set(table))
     if missing:
@@ -106,6 +119,7 @@ def _hook(hook_id: str, value: object) -> RepositoryHook:
             for item in sequence(table.get("args", []), f"{field}.args")
         ),
         _files(table["files"], f"{field}.files") if "files" in table else None,
+        _stages(table["stages"], f"{field}.stages") if "stages" in table else AT_COMMIT,
     )
 
 
@@ -120,17 +134,32 @@ def _files(value: object, field: str) -> str:
     return pattern
 
 
+def _stages(value: object, field: str) -> frozenset[Stage]:
+    listed = [string(item, field) for item in sequence(value, field)]
+    stages = stage_set(listed)
+    if stages is None:
+        accepted = [
+            json.dumps([stage for stage in Stage if stage in stages])
+            for stages in STAGE_SETS
+        ]
+        raise GatesealError(
+            "invalid_field",
+            f"{field} must be {', '.join(accepted[:-1])} or {accepted[-1]}.",
+        )
+    return stages
+
+
 def require_own_ids(
     hooks: tuple[RepositoryHook, ...], policy_hooks: Iterable[Hook]
 ) -> None:
     """Require no repository hook to share an ID or a name with another hook.
 
-    The IDs and names of policy_hooks and of gateseal's own check hook are
-    taken, because results and pre-commit's SKIP name a hook by its ID and
+    The IDs and names of policy_hooks and of gateseal's own hooks are taken,
+    because results and pre-commit's SKIP name a hook by its ID and
     pre-commit's report by its name.
     """
-    ids = {CHECK_HOOK: "gateseal's own check hook"}
-    names = {CHECK_HOOK_NAME: "gateseal's own check hook"}
+    ids = dict.fromkeys(OWN_HOOKS, "gateseal's own check hook")
+    names = dict.fromkeys(OWN_HOOKS.values(), "gateseal's own check hook")
     for hook in policy_hooks:
         ids[hook.id] = names[hook.name] = "a hook of the selected policy"
     for hook in hooks:
@@ -168,13 +197,12 @@ def repository_entry(hooks: tuple[RepositoryHook, ...]) -> dict[str, object]:
     """Render hooks as the native configuration's last repository.
 
     pre-commit starts run from the repository root with args and the file
-    names, through the file's own interpreter line, at a commit, in gateseal
-    run and in the gate.
+    names, through the file's own interpreter line, in each of its stages.
     """
     return {
         "repo": "local",
         "hooks": [
-            hook.hook.base_entry(None, frozenset(Stage), Scope.FILES)
+            hook.hook.base_entry(None, hook.stages, Scope.FILES)
             | {
                 "language": "unsupported_script",
                 "entry": shlex.join([hook.run, *hook.args]),
