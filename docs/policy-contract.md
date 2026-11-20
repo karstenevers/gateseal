@@ -64,7 +64,7 @@ The Manifest is UTF-8 TOML with schema `1`. It needs `capabilities`, `policy`, `
 
 ### Capabilities
 
-Select at least one distinct capability from the policy. The bundled policy offers `hygiene`, `python`, `python-types`, `secrets` and [`typescript`](typescript.md). Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
+Select at least one distinct capability from the policy. The bundled policy offers `hygiene`, `python`, `python-types`, `secrets`, [`typescript`](typescript.md) and [`typescript-types`](typescript.md#type-checks-at-push). Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
 
 ### Policy
 

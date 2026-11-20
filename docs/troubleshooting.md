@@ -42,6 +42,12 @@ If a commit passes and the CI gate reports a missing import, `.venv` holds a pac
 
 A team's tool that imports the project's packages itself needs a uv cache whose path holds no space. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
 
+## A push stops at the Node project's packages
+
+The hook `gateseal-node-packages` installs the packages that the lockfile pins before `tsc` runs. If `package-lock.json` or `pnpm-lock.yaml` does not match `package.json`, run `npm install` or `pnpm install`. Commit the lockfile. Then push again. The checks after the install run only when it passes. If the project lacks `package.json` or a lockfile, the hook names the file to add.
+
+If `tsc` reports missing types after the install, check whether an install script or a code generator makes them. No install script runs. Commit the generated files. If it reports `error TS5101` or `error TS5102`, `tsconfig.json` sets an option that TypeScript 7 removed, such as `baseUrl`. See [Which TypeScript runs](typescript.md#which-typescript-runs).
+
 ## A generated file differs
 
 `gateseal.toml` is the Manifest that selects the policy and checks. To change checks, edit the Manifest. Run `gateseal configure`. Review the Manifest, Lock, and generated files. Commit them together. If the Lock was deleted by mistake, restore it from Git. If `ownership_conflict` names an edited generated file, save any changes you need. Restore the generated file before retrying.

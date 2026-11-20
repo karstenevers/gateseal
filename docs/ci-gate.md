@@ -14,7 +14,7 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 `gateseal.lock` is the Lock. It records the selection and the generated files.
 
-Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here.
+Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. Before `tsc` or another tool that reads the Node project, step 4 installs the project's packages from its lockfile.
 
 ## What the gate checks
 

@@ -536,7 +536,7 @@ def test_interrupted_fetch_stops_git(monkeypatch, tmp_path):
 
 
 FIXTURES = "https://github.com/karstenevers/gateseal-fixtures.git"
-FIXTURE_COMMIT = "ebdd7acf5d312b1dc4d530f7f3d969e9f130d87a"
+FIXTURE_COMMIT = "bcc82caf4f60f730321013418aaad4a14753446e"
 """The fixture repository's commit whose policy folder is the bundled policy."""
 
 

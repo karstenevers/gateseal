@@ -98,6 +98,22 @@
           "revision": "ef6cf06c079dd6b299dfc720b0f14400c9d168e1"
         }
       }
+    },
+    "tsc": {
+      "versions": {
+        "5.9.3": {
+          "package": "typescript",
+          "packages": {}
+        },
+        "6.0.3": {
+          "package": "typescript",
+          "packages": {}
+        },
+        "7.0.2": {
+          "package": "typescript",
+          "packages": {}
+        }
+      }
     }
   },
   "generated_by": "gateseal policy lock",

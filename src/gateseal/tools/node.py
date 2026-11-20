@@ -143,11 +143,15 @@ and --logs-max=0 write no timing file and no log file, since START gives npm
 a cache folder and a log folder that it deletes.
 """
 
-START = (
+REQUIRE_NODE = (
     "node=$(mise --no-config where {install} 2>/dev/null) && node=$node/bin && "
     '[ -x "$node/node" ] || {{ echo "mise has no install of Node {node}, '
     'the pinned Node. Turn the auto-install of mise on." >&2; exit 1; }}; '
     "PATH=$node:$PATH; "
+)
+"""Put the bin folder of the pinned install in node and first on PATH, or stop."""
+
+START = REQUIRE_NODE + (
     "case ${{XDG_CACHE_HOME-}} in /*) cache=$XDG_CACHE_HOME ;; "
     "*) cache=$HOME/.cache ;; esac; "
     "dir=$cache/gateseal/npm/$(uname -s)-$(uname -m)/{folder}; "
@@ -299,6 +303,16 @@ class Node:
         """Return the command that installs packages once and starts executable."""
         install = mise_install(NAME, self.version, self.platforms)
         return (*self.prefix, *launch(self.version, install, packages, executable))
+
+    def included(self, program: str) -> tuple[str, ...]:
+        """Return the command that starts program of Node's distribution, such as npm.
+
+        It starts program by its path in the pinned install, as START starts npm.
+        """
+        install = mise_install(NAME, self.version, self.platforms)
+        script = REQUIRE_NODE.format(install=shlex.quote(install), node=self.version)
+        script += 'exec "$node/$0" "$@"'
+        return (*self.prefix, "/bin/sh", "-c", script, program)
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:
         """Return the Lock's native_artifacts entry of this Node."""

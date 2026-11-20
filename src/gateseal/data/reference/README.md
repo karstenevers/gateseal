@@ -17,7 +17,9 @@ this README and every other file.
   definition.
 - `node` at the top of `policy.toml` pins the Node that every tool from npm
   runs on. The `typescript` capability runs ESLint and then Prettier on it.
-  Each tool's `packages` table pins the npm packages that it installs beside
+  The `typescript-types` capability runs tsc on it in the repository's own npm
+  or pnpm project, whose lockfile pins the packages that tsc reads. Each
+  tool's `packages` table pins the npm packages that it installs beside
   itself, such as the parser that the ESLint rules name.
 - `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
   the Ruff configuration, the Pyright configuration and the Betterleaks rules

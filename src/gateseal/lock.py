@@ -39,10 +39,11 @@ from gateseal.manifest import (
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.setup import PYTHON
+from gateseal.tools import require_projects
 from gateseal.tools.configurations import owned_outputs
 from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, exclusion
+from gateseal.tools.node_project import install_hooks
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
-from gateseal.tools.uv_project import require_project
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -86,7 +87,9 @@ def compile_outputs(
 
     The native configuration starts with gateseal's own repository at the
     pinned commit, whose hook checks the staged files against the Lock before
-    any tool runs. Each tool renders its repository after it, in
+    any tool runs. A node-project tool adds the repository's hook that
+    installs the project's packages, so they are in place before the tool
+    runs. Each tool renders its repository after it, in
     capability order, and declares its own outputs, which its capability's
     choices may change. A capability's exclude choice applies to the hooks of
     every tool the policy puts in it, so a file is kept from a tool only by a
@@ -98,7 +101,7 @@ def compile_outputs(
     CI installs and the policy repository its credential helper serves.
     """
     repositories = [
-        pin.hook_repository(selection.pushes),
+        pin.hook_repository(selection.pushes, *install_hooks(selection.tools)),
         *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
     ]
     if selection.repository_hooks:
@@ -527,7 +530,7 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
     outputs False leaves the outputs unread: the Manifest and Lock must agree,
     and the snapshot holds the outputs they compile to. An upgrade reads that,
     since an output may hold what an interrupted upgrade wrote, and
-    owned_changes decides what it may replace. It also leaves the uv project
+    owned_changes decides what it may replace. It also leaves the project
     unchecked, because an upgrade requires the project of its target, which
     may run no tool in it.
     """
@@ -538,7 +541,7 @@ def load(root: Path, preparation: Path, *, outputs: bool = True) -> Locked:
         source, policy = inputs.manifest.source, inputs.policy
         pin, selection = inputs.pin, inputs.selection
         if outputs:
-            require_project(root, selection.tools)
+            require_projects(root, selection.tools)
         compiled = compile_outputs(selection, pin, source)
         found = {
             name: tracked(root, name) if outputs else content
@@ -761,7 +764,7 @@ def configure(
         pin = _locked_pin(recorded)
     policy, checks = acquire(parsed, recorded.get("policy"), preparation, git)
     selection = resolve(parsed, policy)
-    require_project(root, selection.tools)
+    require_projects(root, selection.tools)
     outputs = compile_outputs(selection, pin, parsed.source)
     document = compile_lock(manifest, parsed.source, policy, pin, selection)
     if _other_build(recorded, document, parsed.source):

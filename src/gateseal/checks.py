@@ -19,6 +19,7 @@ from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import execute, pre_commit_command
 from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, Tool, ToolDefinition
+from gateseal.tools.node_project import INSTALL
 from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
@@ -51,8 +52,7 @@ def run(locked: lock.Locked) -> Result:
         allow_failure=True,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    results = hook_results(details, locked.selection.hooks, "run")
-    entries = tuple(_on_node(results, locked))
+    entries = tuple(_hook_entries(details, locked, "run"))
     if process.returncode == 0:
         return Result(
             "run", "checks_passed", "Checks passed.", details=details, entries=entries
@@ -129,8 +129,7 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
             scans.append((tool, scanned))
     duration, over = _duration(monotonic() - started, locked.policy.time_budget_seconds)
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    results = hook_results(details, locked.selection.hooks, "ci")
-    entries = [duration, *_on_node(results, locked)]
+    entries = [duration, *_hook_entries(details, locked, "ci")]
     outcomes: set[str] = set()
     for tool, scanned in scans:
         definition = tool.definition
@@ -147,16 +146,21 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     return replace(result, notes=over)
 
 
-def _on_node(
-    entries: list[dict[str, object]], locked: lock.Locked
+def _hook_entries(
+    details: str, locked: lock.Locked, stage: str
 ) -> list[dict[str, object]]:
-    """Name the Node of each result and finding of a hook that runs on one."""
+    """Return the result and findings of each hook in details, with its Node.
+
+    gateseal's install hook is reported beside the selection's hooks wherever
+    it ran. It runs on the Node that every tool on one shares.
+    """
     nodes = {
         hook.id: tool.node.version
         for tool in locked.selection.tools
         if tool.node
-        for hook in tool.use.hooks
+        for hook in (*tool.use.hooks, INSTALL)
     }
+    entries = hook_results(details, (*locked.selection.hooks, INSTALL), stage)
     for entry in entries:
         node = nodes.get(str(entry.get("hook")))
         if node is not None:

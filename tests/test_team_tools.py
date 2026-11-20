@@ -384,6 +384,29 @@ def test_a_policys_tools_claim_distinct_hooks_and_repositories(
 
 
 @pytest.mark.parametrize(
+    "old,new,claim",
+    [
+        ("[hooks.yamllint]", "[hooks.gateseal-check]", "hook ID 'gateseal-check'"),
+        (
+            'name = "yamllint check"',
+            'name = "Install the Node project\'s packages from its lockfile"',
+            'hook name "Install the Node project\'s packages from its lockfile"',
+        ),
+    ],
+)
+def test_a_policys_tools_leave_gateseals_own_hooks_alone(tmp_path, old, new, claim):
+    definition = hook_tool(YAMLLINT, "yamllint")
+    assert old in definition
+    root = team(tmp_path, files={"tools/yamllint.toml": definition.replace(old, new)})
+    with pytest.raises(GatesealError) as failure:
+        authoring.lock(root)
+    assert failure.value.code == "duplicate_identifier"
+    assert f"gateseal's own hooks and yamllint both claim the {claim}" in str(
+        failure.value
+    )
+
+
+@pytest.mark.parametrize(
     "old,new,code",
     [
         (

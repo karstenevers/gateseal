@@ -1,6 +1,6 @@
 # Add a tool to your policy
 
-A team policy can add a release binary, a Python pre-commit repository, or a tool from npm. It can also add a tool that runs in the repository's uv project. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
+A team policy can add a release binary, a Python pre-commit repository, or a tool from npm. It can also add a tool that reads the repository's uv project or Node project. Start with a [bundled policy copy](author-a-policy.md#start-a-policy) in `policy/`. The examples need GitHub access. See [Tool definitions](tool-definitions.md) for the fields.
 
 ## Add Gitleaks
 
@@ -271,3 +271,52 @@ A repository that adopts the release selects the tool with `--capability docs`. 
 - `--` ends the options, so Prettier formats a file named like an option as a file.
 
 The hook skips every file that gateseal generates. See [the `npm-package` kind](tool-definitions.md#tools-from-npm) for what the kind guarantees.
+
+## Check a second tsconfig with strict tsc flags
+
+A `node-project` tool runs from npm on the pinned Node, like an `npm-package` tool. It also reads the packages of the repository's Node project. gateseal installs them from the project's lockfile before the tool runs. The bundled `typescript-types` capability runs `tsc` this way on the project's `tsconfig.json`. This example adds a second check for a project whose application has its own `tsconfig.app.json`. The built-in name `tsc` is taken, so the team tool needs another name.
+
+Save this definition as `policy/tools/tsc-app.toml`:
+
+<!-- policy file: tools/tsc-app.toml -->
+```toml
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "typescript"
+
+[executable]
+name = "tsc"
+
+[hooks.tsc-app]
+name = "Check the types of the app with tsc"
+args = ["--noEmit", "--project", "tsconfig.app.json", "--strict"]
+output = "plain"
+```
+
+Add this table at the end of `policy/policy.toml`:
+
+<!-- policy tables: tsc-app -->
+```toml
+[capabilities.app-types.tools.tsc-app]
+pin = "7.0.2"
+reviewed = ["7.0.2"]
+```
+
+The tool runs on the Node that `node` pins, as [the Prettier example](#format-markdown-with-prettier-from-npm) shows. Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command checks that the npm registry has TypeScript 7.0.2.
+
+A repository that adopts the release selects the tool with `--capability app-types`. It needs `package.json` and one lockfile at its root, `package-lock.json` or `pnpm-lock.yaml`. Each push then runs two hooks:
+
+1. `gateseal-node-packages` installs the packages that the lockfile pins into `node_modules`.
+2. `tsc-app` runs `tsc --noEmit --project tsconfig.app.json --strict` with the pinned TypeScript.
+
+The definition sets how the check runs:
+
+- With `stages = ["push", "ci"]`, the check runs at `git push` and in the CI gate, not at a commit.
+- With `scope = "project"`, `tsc` gets no file names. `tsconfig.app.json` chooses the files.
+- A flag in `args` wins over the same option in the project's `tsconfig.json`. So `--strict` holds when `tsconfig.app.json` sets `"strict": false`, and the policy owns the strict options.
+- The project's own `typescript` package does not run in place of the pinned one.
+
+See [the `node-project` kind](tool-definitions.md#tools-that-read-the-node-project) for what the kind guarantees.

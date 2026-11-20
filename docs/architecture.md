@@ -13,14 +13,14 @@ After an edit, `gateseal configure` writes the Lock and the pre-commit configura
 ```mermaid
 flowchart LR
     accTitle: What gateseal keeps in Git and on your machine
-    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. Each commit runs the hooks that the generated files pin. pre-commit and mise install them once per machine, and uv installs a project tool's packages in each clone.
+    accDescr: gateseal configure turns gateseal.toml and a policy into gateseal.lock and generated files, which you commit. Each commit runs the hooks that the generated files pin. pre-commit and mise install them once per machine. uv, npm or pnpm installs a project tool's packages in each clone.
     policy["Policy<br/>bundled or from Git"]
     subgraph git["Committed to Git"]
         manifest["gateseal.toml<br/>your choices"]
         lock["gateseal.lock<br/>and generated files"]
     end
     subgraph machine["On your machine only"]
-        tools["Hook environments, release binaries<br/>and each clone's uv project environment"]
+        tools["Hook environments, release binaries<br/>and each clone's project packages"]
     end
     policy --> configure(["gateseal configure"])
     manifest --> configure
@@ -109,7 +109,7 @@ flowchart TD
 
 The first commit hook compares staged generated files with the staged Lock. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI.
 
-A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash, and so does Pyright's. A tool from npm, such as ESLint, installs version-pinned npm packages without an integrity hash, on a Node archive whose SHA-256 the Lock records. Pyright runs in the repository's uv project, where the repository's `uv.lock` pins the packages that it reads. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, uv, the host, and the policy's authors must be trusted.
+A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash, and so does Pyright's. A tool from npm, such as ESLint, installs version-pinned npm packages without an integrity hash, on a Node archive whose SHA-256 the Lock records. Pyright runs in the repository's uv project, where the repository's `uv.lock` pins the packages that it reads. `tsc` reads the packages that the repository's npm or pnpm lockfile pins, which gateseal's hook installs without install scripts. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, uv, the host, and the policy's authors must be trusted.
 
 A local user can bypass hooks with `git commit --no-verify`. A repository administrator can require the CI check before merging. See [the CI gate](ci-gate.md) for event scopes, and [GitHub CI](github-ci.md) or [Azure Pipelines](azure-pipelines.md) for the setup and private policy access.
 

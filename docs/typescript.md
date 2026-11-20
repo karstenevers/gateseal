@@ -2,6 +2,8 @@
 
 The bundled `typescript` capability checks staged `.ts` and `.tsx` files with ESLint and then formats them with Prettier. Both tools run on a Node that the policy pins. So a commit needs no Node or npm on the machine. The checks run at each commit, in `gateseal run`, and in the CI gate.
 
+The bundled `typescript-types` capability checks the project's types with `tsc` at each push and in the CI gate. Select it beside `typescript` or alone. See [Type checks at push](#type-checks-at-push).
+
 ## Select the capability
 
 [Install gateseal](install.md), pre-commit and mise first. From the repository root, run:
@@ -49,7 +51,7 @@ The bundled rules are ESLint's recommended rules and typescript-eslint's recomme
 
 ## What the repository cannot change
 
-The hooks ignore the repository's own settings and packages:
+The ESLint and Prettier hooks ignore the repository's own settings and packages:
 
 - **ESLint configuration.** ESLint gets gateseal's loader with `--config`, so an `eslint.config.js` of the repository does not run.
 - **Prettier settings.** Prettier gets the policy's options with `--config`, and ignores `.prettierrc`, `.prettierignore` and `.editorconfig`.
@@ -112,8 +114,95 @@ After you edit `node` or `packages`, run `gateseal policy lock policy`. It recor
 - npm does not pin the packages that the pinned packages depend on, and it enforces no integrity hash. Your own npm settings, such as `~/.npmrc`, choose the registry.
 - ESLint and Prettier skip each file in a `node_modules` folder, also a staged one, as both do without gateseal.
 - The hooks get `.ts` and `.tsx` files only. pre-commit gives `.mts` and `.cts` files no TypeScript type, so they are not checked.
-- No rule needs type information, and this capability runs no type check.
+- No rule needs type information, and this capability runs no type check. `typescript-types` runs one at each push.
 - `gateseal run --json` and `gateseal gate --json` list no ESLint finding by file and line. The hook's entry says that it failed, and the text output shows ESLint's report.
 - The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. The ESLint format refuses `extends`, so a preset cannot load. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`.
 - The hooks pass your whole environment to npm, so npm uses your proxy and CA settings. A release binary, such as Betterleaks, gets only a few variables, such as `HOME` and `PATH`.
 - A commit that an npm script starts, such as `npm run commit`, gets the npm settings of that script. npm gives a script the settings of the project's `.npmrc` as `npm_config_` variables, and the first use of a hook passes them to npm. Such a script runs the repository's code already. To keep the project's settings out, run `git commit` yourself.
+
+## Type checks at push
+
+The bundled `typescript-types` capability runs `tsc --noEmit` on the whole project. It reads the project's own `tsconfig.json` and the packages that the project's lockfile pins. It runs at `git push` and in the CI gate. It does not run at a commit or in `gateseal run`.
+
+The capability is separate from `typescript`, because a check of the whole project cannot skip paths with `exclude`. The project's `tsconfig.json` chooses the files that `tsc` checks.
+
+### Select the type check
+
+The repository needs `package.json`, `tsconfig.json` and exactly one lockfile at its root: `package-lock.json` for npm, or `pnpm-lock.yaml` for pnpm. From the repository root, run:
+
+```sh
+gateseal configure \
+  --capability hygiene \
+  --capability typescript \
+  --capability typescript-types \
+  --ci github
+pre-commit install
+```
+
+In a configured repository, add `"typescript-types"` to `capabilities` in `gateseal.toml` and run `gateseal configure` instead. Commit the changed files. Each clone then needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push).
+
+Without `package.json` or a lockfile, `configure` stops with `missing_project`. With both lockfiles, it stops with `ambiguous_project`. It also stops with `ambiguous_project` when `npm-shrinkwrap.json` is beside `package-lock.json`, because npm reads the shrinkwrap in place of the lockfile. `gateseal check` stops the same way when the project changes later. gateseal does not check for `tsconfig.json`. Without one, `tsc` prints its help and the push stops.
+
+Each developer needs pre-commit and mise, as for `typescript`. Node, npm, pnpm and gateseal are not needed. pre-commit builds gateseal's hook from gateseal's repository. The first push downloads Node, TypeScript and the project's packages. Later pushes reuse them.
+
+### What a push does
+
+1. gateseal's hook `gateseal-node-packages` installs the packages that the lockfile pins into `node_modules`.
+2. `tsc --noEmit` checks the types of the project.
+
+The install is different for each package manager:
+
+- **npm.** `npm ci --dry-run` checks that `package-lock.json` matches `package.json`. Then `npm install --no-save` installs only what changed. npm is the one of the pinned Node's install, never an npm on `PATH`. Without that install, the hook stops.
+- **pnpm.** `pnpm install --frozen-lockfile` does both in one step. gateseal installs pnpm 10.28.0 once on the pinned Node and starts it from that install, outside the repository. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
+
+The hook sets its options on the command line, so a setting in `.npmrc` or `pnpm-workspace.yaml` cannot leave out the lockfile, the development dependencies or the install itself, and cannot move the install out of the project. Registry, proxy and login settings still apply. See [the commands that the hook runs](tool-definitions.md#tools-that-read-the-node-project). No install script of a package runs. A lockfile that does not match `package.json` stops the push. The checks after the install do not run then, so the push shows one error. Run `npm install` or `pnpm install`, commit the lockfile, and push again.
+
+A type error also stops the push. `tsc` names the file, the line and the error, such as `src/total.ts(3,46): error TS2322`.
+
+To run both hooks without a push, run this from the repository root:
+
+```sh
+pre-commit run --hook-stage pre-push --all-files
+```
+
+The CI gate runs the same two hooks in a new clone. `gateseal gate --json` lists the install as a hook entry with the hook `gateseal-node-packages`, the tool `gateseal` and the origin `built-in`. `gateseal status` describes the check like this:
+
+```text
+Tool tsc 6.0.3 for typescript-types: built-in, node-project on Node 24.22.3; the repository's lockfile pins what it imports.
+```
+
+### Which TypeScript runs
+
+The policy's TypeScript runs, never the `typescript` package of the project. The bundled policy pins TypeScript 6.0.3, the version that its ESLint packages use. The bundled `policy.toml` has these lines for `typescript-types`:
+
+<!-- policy tables: typescript-types -->
+```toml
+[capabilities.typescript-types.tools.tsc]
+pin = "6.0.3"
+reviewed = ["6.0.3", "7.0.2", "5.9.3"]
+```
+
+TypeScript 6.0.3 reports `error TS5101` for a `tsconfig.json` option that TypeScript 7 removed, such as `baseUrl`. Replace the option, or set `"ignoreDeprecations": "6.0"` in `compilerOptions`. TypeScript 5.9.3 accepts these options.
+
+To select another reviewed version, add a [version exception](policy-contract.md#version-exceptions) to `gateseal.toml`. TypeScript 7.0.2 is the faster native compiler, but it reports `error TS5102` for the removed options and has no setting that allows them. This exception selects it:
+
+<!-- manifest tables: tsc exception -->
+```toml
+[exceptions.tsc]
+version = "7.0.2"
+reason = "Check types with the faster native compiler."
+review_by = 2027-03-01
+```
+
+Run `gateseal configure` and commit the changed files. A team policy reviews another version with `gateseal policy add tsc <version> policy`.
+
+### What the type check cannot do
+
+- No install script runs. Some projects get types from an install or generate step, such as a `postinstall` code generator. `tsc` then reports missing types. Commit the generated files, so that each push and the CI gate find them.
+- No pnpmfile runs: not `.pnpmfile.cjs`, not one that a setting names, and not one from a config dependency. pnpm records a pnpmfile's checksum in `pnpm-lock.yaml`. So when the lockfile was written with a pnpmfile, the install stops with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`. Move what the pnpmfile changes into `overrides` or `packageExtensions` in `pnpm-workspace.yaml`. Then delete the pnpmfile, run `pnpm install` and commit the lockfile.
+- npm's `legacy-peer-deps` applies as the project or the user sets it. With it, npm installs no package that only a peer dependency asks for, even when the lockfile pins it. So write the lockfile with the setting that the push uses.
+- pnpm keeps a folder at the top of `node_modules` that it did not make, such as a package from an earlier npm install or from an install with `node-linker=hoisted`. `tsc` can then find a package that `package.json` does not name, so a push can pass that the CI gate stops. After a change of the package manager or of `node-linker`, delete `node_modules` one time.
+- The generated CI file gives npm and pnpm no registry token. So the CI gate can install only packages that need no login.
+- The built-in `tsc` takes its options from the project's `tsconfig.json`, so a project can turn strict checks off. A team policy can own them with [its own tool and strict flags](add-a-tool.md#check-a-second-tsconfig-with-strict-tsc-flags).
+- Yarn is not supported. Neither are workspaces nor project references. The check reads one lockfile and one `tsconfig.json`, both at the repository root.
+- `gateseal gate --json` lists no `tsc` error by file and line. The hook's entry says that it failed, and the text output shows the report of `tsc`.
