@@ -38,41 +38,41 @@ ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "9b50770c4ed1372ed9a19bff541f90a85df96a3b1aaec51600bda92a65346b14"
+            "a0262ab6e4a00f856b00f59f9a205d69b5a19756a8f29be52219125f2ea3d474"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "c0ab2c721a75d7b79633702ef1cff06e4b7ebeac7ab9e8a6a27e14d267fc3688"
+            "2f2b68134c11bd35dd2e546cbc44337e08833f454758ef24183cb1c9621b42e7"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "156512c551e4e4d129b88c53f027ab8425f83f263a56f604924d84f15df5b794",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "55f95eff3103f4890a7b0f091b5d632a7a95ef9d32c1e6faed5495299cc54019"
+            "f7422208923c8aa76c88a0f33b71b1daa9c2f5fd4d2a34de8ff312c11ebec62b"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "c78f141f77114729153a11cdf0f155be2f7f95dfe3ba5c733915d065e86d86ba"
+            "1f99e30b619a7a63f09e5128ce1e6c13d857a04d8ebbf053536aec18677cf369"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "5b999cbf0910713c8c8e29de1fb29ce4c20c3a75939870686876eedad16b501f"
+            "2e6cb368a730fc621773134059489ba6841247b7872cffeee43d7ade5867e167"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "9a6575536665c1117a5f4250a51142f5f594838c9e310ecfa7dae22c76689d34"
+            "e257a549454e477ac9238b4a0ce785d7b742a2e9f556423b88f0811c49241f90"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -80,7 +80,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "5c75bf1a3d52912cd0e6feae180550a2c194b422b7d7abdd5c807270fea6195d"
+            "29ccea66b673db26338d53e0c98bd4fb54e928b419133a6cd8391f7c53597c06"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -88,7 +88,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "6f663b62784c7a23a541cfe2aeaa215e0ef7b340ef4ca50f62aea6700224073b"
+            "ea086c77c6569037ae027dc4c2264eed8a984e0855e85bb39c5a464815570e0f"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -96,7 +96,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "16bf3eaba81744c5c4a0c5db06d16bba3ab8e5c29a4fce5643a46f3c8c0119f6"
+            "9bb571196254dd2aa669051e1765b93179a339db3c3841eea7a2fa5bd9f07c68"
         ),
         CONFIG: "d027f65dbbee8a8cc0466becddb3e526f84aab9d15df91fcb36e9cd2e2ead797",
         PYRIGHT: "e7b7d2f1eb0b2fc23e760f8dc124c5a4cedb48a02e97ef94d17537c85f00faf7",

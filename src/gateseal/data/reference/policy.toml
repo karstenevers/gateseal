@@ -20,6 +20,29 @@ reviewed = ["0.17.5", "0.17.1"]
 [capabilities.python.choices]
 target_version = "py311"
 
+# python-tests runs the tests once, under coverage.py, at a push and in the
+# gate, in the repository's uv project. Its coverage report is what
+# python-crap reads, so python-crap needs python-tests too.
+[capabilities.python-tests.tools.coverage]
+pin = "7.17.3"
+reviewed = ["7.17.3", "7.17.2"]
+
+# python-crap scores each changed function from that report. The rules set
+# the limit.
+[capabilities.python-crap.tools.crap]
+configuration = "rules/crap.toml"
+pin = "0.1.0"
+reviewed = ["0.1.0"]
+
+[capabilities.python-crap.choices]
+exclude = []
+
+# python-mutation runs pytestmut on the lines that a push or the gate's range
+# changes. It runs its own tests, apart from python-tests.
+[capabilities.python-mutation.tools.pytestmut]
+pin = "0.1.0"
+reviewed = ["0.1.0"]
+
 # python-types is for a uv project. Pyright runs in the repository's own
 # project, where uv.lock pins the packages that it resolves imports from.
 [capabilities.python-types.tools.pyright]

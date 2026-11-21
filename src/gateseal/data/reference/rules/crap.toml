@@ -1,0 +1,4 @@
+# The highest CRAP score that a function may have. A function's score is
+# complexity squared times (1 - coverage) cubed, plus complexity, so a fully
+# tested function scores its complexity.
+limit = 10

@@ -11,6 +11,7 @@ import tomllib
 
 from conftest import with_git_config
 from doc_examples import example
+from gateseal.validation import canonical
 from team_policy import git, publish
 from test_lock_configure import MANIFEST, configure, worktree
 
@@ -26,7 +27,15 @@ def test_the_example_manifest_configures_against_the_example_policy(
     git(origin, "init", "--initial-branch=main")
 
     def team_policy(data):
+        """Write the example's policy.toml, with the lock facts of its tools only."""
         (data / "policy.toml").write_text(POLICY)
+        capabilities = tomllib.loads(POLICY)["capabilities"].values()
+        tools = {tool for capability in capabilities for tool in capability["tools"]}
+        lock = json.loads((data / "policy.lock").read_bytes())
+        lock["components"] = {
+            name: facts for name, facts in lock["components"].items() if name in tools
+        }
+        (data / "policy.lock").write_bytes(canonical(lock))
 
     commit = publish(origin, "team-2026.11", team_policy)
     manifest = tomllib.loads(MANIFEST_TEXT)

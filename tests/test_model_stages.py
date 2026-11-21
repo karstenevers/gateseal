@@ -1,5 +1,6 @@
 """The stages a parsed Tool Definition records."""
 
+from dataclasses import replace
 from importlib.resources import files
 
 import pytest
@@ -37,15 +38,30 @@ def test_a_definition_can_run_its_hooks_at_a_push_and_in_the_gate(stages):
     assert "always_run" not in entry
 
 
-def test_a_project_hook_of_the_push_stage_runs_at_every_push():
+def test_a_project_hook_without_file_types_starts_at_every_push():
+    definition = ruff('["push", "ci"]')
+    hook = replace(definition.hooks["ruff-check"], types_or=())
+    assert hook.base_entry(None, definition.stages, Scope.PROJECT) == {
+        "id": "ruff-check",
+        "name": "ruff check",
+        "stages": ["pre-push", "manual"],
+        "always_run": True,
+        "pass_filenames": False,
+    }
+
+
+def test_a_project_hook_with_file_types_starts_only_for_a_file_of_those_types():
+    """always_run is false even so, since a hook repository may set it true."""
     definition = ruff('["push", "ci"]')
     hook = definition.hooks["ruff-check"]
-    entry = hook.base_entry(None, definition.stages, Scope.PROJECT)
-    assert (entry["stages"], entry["always_run"], entry["pass_filenames"]) == (
-        ["pre-push", "manual"],
-        True,
-        False,
-    )
+    assert hook.base_entry(None, definition.stages, Scope.PROJECT) == {
+        "id": "ruff-check",
+        "name": "ruff check",
+        "stages": ["pre-push", "manual"],
+        "always_run": False,
+        "pass_filenames": False,
+        "types_or": ["python", "pyi", "jupyter"],
+    }
 
 
 @pytest.mark.parametrize(

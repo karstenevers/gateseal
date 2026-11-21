@@ -1,0 +1,40 @@
+# The tests run once, under coverage.py, at a push and in the gate. The run
+# writes coverage.py's data file, and the report hook turns it into the JSON
+# report that later hooks read. Each hook starts only when a Python file
+# changed. The first erases the data that an earlier push left, parallel data
+# files included, since coverage.py would combine those into this run's
+# report. It names the data file as a report that it writes for that.
+# coverage.py exits with the tests' status, so a failing test fails the run
+# and its output names the test. The project's coverage settings apply,
+# fail_under included.
+kind = "uv-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "coverage"
+
+[executable]
+name = "coverage"
+
+[hooks.coverage-erase]
+name = "clear coverage data"
+args = ["erase", "--data-file", "{coverage.data}"]
+types_or = ["python", "pyi"]
+writes = ["coverage.data"]
+output = "plain"
+
+[hooks.coverage-run]
+name = "tests with coverage"
+args = ["run", "--branch", "--data-file", "{coverage.data}", "-m", "pytest"]
+types_or = ["python", "pyi"]
+writes = ["coverage.data"]
+output = "plain"
+
+[hooks.coverage-json]
+name = "coverage report"
+args = ["json", "--data-file", "{coverage.data}", "-o", "{coverage.json}"]
+types_or = ["python", "pyi"]
+reads = ["coverage.data"]
+writes = ["coverage.json"]
+output = "plain"

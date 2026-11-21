@@ -40,7 +40,11 @@ The bundled Pyright reads `.venv` at the repository root, where uv installs the 
 
 If a commit passes and the CI gate reports a missing import, `.venv` holds a package that the hook does not install. Run `uv sync`. Then retry. The hook installs each package's dependencies and its default dependency groups. For a package from an extra or another group, add the group to `tool.uv.default-groups` in `pyproject.toml`, or name the extra in the `dev` group.
 
-A team's tool that imports the project's packages itself needs a uv cache whose path holds no space. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
+## The test hook does not find pytest
+
+The `tests with coverage` hook runs pytest in the repository's uv project. Put pytest in a dependency group that uv installs by default, such as `dev`.
+
+The hook, and a team's tool that imports the project's packages itself, also need a uv cache whose path holds no space. With a space, uv starts the program outside the project, so it does not find pytest or the project's packages. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
 
 ## A generated file differs
 

@@ -34,7 +34,7 @@ Both commands report checks named `lock`, `pre-commit`, `launcher`, `push-launch
 
 ## JSON results
 
-The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. A `failed` result always has at least one next step: a command to run or a plain fix. Diagnostics can identify policies, tools, choices, repository hooks, version exceptions, hooks, findings, or history scans.
+The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, and `next_steps`. The `status` is `ok`, `changed`, or `failed`. A `failed` result always has at least one next step: a command to run or a plain fix. Diagnostics can identify policies, tools, choices, repository hooks, reports, version exceptions, hooks, findings, or history scans.
 
 A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them.
 
@@ -52,6 +52,6 @@ A warning leaves the exit code unchanged. Text output prints it as a `Warning:` 
 | 3 | The machine, clone, or stored policy is not ready. |
 | 4 | A prerequisite, download, file operation, or executable failed, or the command was interrupted. |
 
-The diagnostic names the result and any suggested action. `run` reports `tool_failed` when pre-commit exits with a code other than 0 or 1.
+The diagnostic names the result and any suggested action. `run` reports `tool_failed` when pre-commit exits with a code other than 0 or 1. `gate` reports `missing_report` and exits 2 when a hook ran without a [report](tool-definitions.md#reports) that it reads, and the hook that writes it did not fail. `configure` and the policy commands report `missing_report` when no earlier hook writes a report that a hook reads.
 
 During a commit, pre-commit streams hook output to Git. `gateseal-check` runs the version pinned by the staged Lock. When it stops a commit, it prints a `gateseal:` line and a `Next:` line. gateseal redacts recognized credentials from captured child output. Other tool output can pass through unchanged.

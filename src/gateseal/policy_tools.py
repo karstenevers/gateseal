@@ -33,6 +33,7 @@ from gateseal.tools.model import (
     ToolDefinition,
     ToolUse,
 )
+from gateseal.tools.reports import reads
 from gateseal.validation import (
     fields,
     mapping,
@@ -195,7 +196,8 @@ def read_toolset(
     """Validate a policy's capabilities and the tools of each.
 
     A tool belongs to exactly one capability. The tools' hook IDs, hook names
-    and owned outputs must be distinct.
+    and owned outputs must be distinct, and each report that a hook reads
+    must be written before it.
     """
     tables: dict[str, tuple[str, dict[str, object]]] = {}
     hook_choices: dict[tuple[str, str], HookChoice] = {}
@@ -226,6 +228,7 @@ def read_toolset(
         uses[name] = _use(capability, definitions[name], table, field, asset)
         catalogs[name] = _catalog(name, table, field, known)
     _require_hook_choices(hook_choices, uses)
+    reads((definitions[name], use) for name, use in uses.items())
     return Toolset(tuple(entries), definitions, uses, catalogs, hook_choices, defaults)
 
 

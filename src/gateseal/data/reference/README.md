@@ -22,6 +22,9 @@ this README and every other file.
   and `venv` name `.venv`, the environment of the repository's uv project.
   The Betterleaks rules start from the rules built into Betterleaks, and
   `disabledRules` turns some of them off.
+- `rules/crap.toml` holds only `limit`, the highest CRAP score that a
+  function may have. configure copies it to `.gateseal/crap.toml`, which the
+  CRAP hook reads.
 - `gateseal policy add <tool> <version>` reviews a new version, and
   `gateseal policy pin <tool> <version>` makes a reviewed version the pin.
   Both edit only their own lines of `policy.toml` and keep its comments.

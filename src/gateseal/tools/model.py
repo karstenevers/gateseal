@@ -36,6 +36,9 @@ Its language, unsupported, came with pre-commit 4.4.0.
 NAME = re.compile(r"[a-z][a-z0-9-]*")
 """A tool's, hook's or file's name, as owned paths use it."""
 
+REPORT = re.compile(r"[a-z][a-z0-9-]*\.[a-z0-9]+")
+"""A report's name: a file that one hook writes and a later hook reads."""
+
 PROGRAM = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 """An executable's bare name, which its kind finds in the tool it installs."""
 
@@ -83,9 +86,10 @@ class Scope(StrEnum):
 
     A FILES hook gets the names of the changed files that match it. A PROJECT
     hook gets no file names and checks the whole project, because a change in
-    one file can break another that the commit does not change. It starts at
-    every run and takes no file types: a deleted file breaks its importers,
-    and pre-commit matches no hook against a deleted file.
+    one file can break another that the commit does not change. Without file
+    types it starts at every run. With file types it starts only when a file
+    of those types changed, so a change that only deletes such a file does
+    not start it: pre-commit matches no hook against a deleted file.
     """
 
     FILES = "files"
@@ -216,7 +220,9 @@ class Hook:
     says who wrote the hook. id and name are unique among the hooks a
     selection runs, gateseal's check hook included: the Lock and run's results
     name a hook by its id, and pre-commit's status line by its name. args
-    follow the program that runs the hook, never through a shell.
+    follow the program that runs the hook, never through a shell. reads and
+    writes name the reports that the hook takes from an earlier hook and
+    leaves for a later one, each at its report_path.
     """
 
     tool: str
@@ -226,6 +232,8 @@ class Hook:
     args: tuple[str, ...]
     types_or: tuple[str, ...]
     output: OutputFormat
+    reads: tuple[str, ...] = ()
+    writes: tuple[str, ...] = ()
 
     def base_entry(
         self, exclude: str | None, stages: frozenset[Stage], scope: Scope
@@ -241,7 +249,8 @@ class Hook:
             "stages": list(STAGE_SETS[stages]),
         }
         if scope is Scope.PROJECT:
-            entry["always_run"] = True
+            # Explicit false also overrides a hook repository's always_run.
+            entry["always_run"] = not self.types_or
             entry["pass_filenames"] = False
         if self.types_or:
             entry["types_or"] = list(self.types_or)
@@ -392,12 +401,18 @@ class ToolDefinition:
         return (*configuration, *self.files)
 
 
+def report_path(name: str) -> str:
+    """Return the path of the report name, which Git ignores and no Lock records."""
+    return f"{OWNED}/reports/{name}"
+
+
 def _arguments(
     value: object, field: str, owned: Mapping[str, str], kept: str = ""
 ) -> tuple[str, ...]:
     """Validate literal arguments, resolving each exact {<owned key>} to its path.
 
-    Any other brace fails, so an argument reaches an owned output only through
+    A hook's owned also holds its reports. Any other brace fails, so an
+    argument reaches an owned output only through
     its exact placeholder. kept names a placeholder that stays in place, such
     as RANGE, which the gate resolves. Other literals, such as Betterleaks'
     /dev/null, pass to the tool unchanged.
@@ -412,7 +427,8 @@ def _arguments(
             raise GatesealError(
                 "invalid_field",
                 f"{field} holds {text!r}; an argument names an owned file only as "
-                "exactly {configuration} or {<files key>}.",
+                "exactly {configuration} or {<files key>}, and a report that its "
+                "hook reads or writes only as exactly {<report name>}.",
             )
         arguments.append(text)
     return tuple(arguments)
@@ -493,39 +509,48 @@ def _files(name: str, value: object, field: str) -> dict[str, tuple[str, bytes]]
     return found
 
 
+def _reports(value: object, field: str) -> tuple[str, ...]:
+    """Return the report names that field lists, each a REPORT named once."""
+    names = tuple(string(item, field) for item in sequence(value, field))
+    if len(set(names)) != len(names) or not all(map(REPORT.fullmatch, names)):
+        raise GatesealError(
+            "invalid_field",
+            f"{field} lists report names of lowercase letters, digits and -, with "
+            "an extension, such as coverage.json, each once.",
+        )
+    return names
+
+
 def _hook(
-    tool: str,
-    origin: Origin,
-    hook_id: str,
-    value: object,
-    owned: Mapping[str, str],
-    scope: Scope,
+    tool: str, origin: Origin, hook_id: str, value: object, owned: Mapping[str, str]
 ) -> Hook:
     field = f"tools.{tool}.hooks.{hook_id}"
     table = mapping(value, field)
     output = closed(table.get("output"), OutputFormat, f"{field}.output")
-    table = fields(
-        table, {"name", "output"} | ({"args", "types_or"} & set(table)), field
-    )
+    optional = {"args", "types_or", "reads", "writes"}
+    table = fields(table, {"name", "output"} | (optional & set(table)), field)
     if not NAME.fullmatch(hook_id):
         raise GatesealError("invalid_field", f"{field} needs a lowercase id.")
-    if scope is Scope.PROJECT and "types_or" in table:
+    reads = _reports(table.get("reads", []), f"{field}.reads")
+    writes = _reports(table.get("writes", []), f"{field}.writes")
+    if set(reads) & set(writes):
         raise GatesealError(
-            "invalid_field",
-            f"{field}.types_or has no effect: a hook of a tool with the project "
-            "scope starts at every run.",
+            "invalid_field", f"{field}.writes names a report that the hook reads."
         )
+    paths = {name: report_path(name) for name in (*reads, *writes)}
     return Hook(
         tool,
         origin,
         hook_id,
         string(table["name"], f"{field}.name"),
-        _arguments(table.get("args", []), f"{field}.args", owned),
+        _arguments(table.get("args", []), f"{field}.args", {**owned, **paths}),
         tuple(
             string(item, f"{field}.types_or")
             for item in sequence(table.get("types_or", []), f"{field}.types_or")
         ),
         output,
+        reads,
+        writes,
     )
 
 
@@ -545,11 +570,11 @@ def _stages(value: object, field: str) -> frozenset[Stage]:
 
 
 def _hooks(
-    tool: str, origin: Origin, value: object, owned: Mapping[str, str], scope: Scope
+    tool: str, origin: Origin, value: object, owned: Mapping[str, str]
 ) -> dict[str, Hook]:
     field = f"tools.{tool}.hooks"
     hooks = {
-        hook_id: _hook(tool, origin, hook_id, item, owned, scope)
+        hook_id: _hook(tool, origin, hook_id, item, owned)
         for hook_id, item in mapping(value, field).items()
     }
     if not hooks or len({hook.name for hook in hooks.values()}) != len(hooks):
@@ -621,7 +646,7 @@ def parse_definition(
     files = _files(name, document.get("files", {}), f"{field}.files")
     owned |= {key: path for key, (path, _) in files.items()}
     executable = _source_executable(document.get("executable"), field, source)
-    hooks = _hooks(name, origin, document["hooks"], owned, scope)
+    hooks = _hooks(name, origin, document["hooks"], owned)
     history = (
         _history(document["history"], f"{field}.history", owned, source)
         if "history" in document

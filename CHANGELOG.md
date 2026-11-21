@@ -24,11 +24,32 @@ change the manifest, policy or lock format, and its entry says how to move.
   `uv.lock` pins what the tool reads. `gateseal configure` and `gateseal
   check` stop with `missing_project` in a repository without `pyproject.toml`
   or `uv.lock`, or with `tool.uv.managed = false`.
-- The `project` scope of a tool definition. Its hooks run at every commit, get
-  no file names and check the whole project.
+- The `project` scope of a tool definition. Its hooks get no file names and
+  check the whole project. A hook runs at every commit, or, when it lists
+  `types_or`, only when a file of those types changed.
+- Reports. A hook of a tool definition lists in `writes` each file that it
+  leaves for a later hook, and in `reads` each one that it takes. A report is
+  `.gateseal/reports/<name>`, and an argument names it as `{<name>}`. A policy
+  whose hook reads a report that no earlier hook writes stops with
+  `missing_report`, and so does a Manifest that selects the reading hook
+  without the writing one. A selection with a writing hook owns
+  `.gateseal/reports/.gitignore`, so Git ignores the reports. `gateseal gate`
+  deletes the reports of an earlier run first, and exits 2 with
+  `missing_report` when a hook ran without a report that it reads, unless
+  the writing hook failed. `check`,
+  `status` and `doctor` name each report and the hook that writes it.
 - The bundled policy's `python-types` capability, which runs Pyright in strict
   mode as a built-in `uv-project` tool. A repository that selects `python`
   alone gets no new check.
+- Python test checks at a push and in the CI gate, as three opt-in
+  capabilities of the bundled policy. `python-tests` runs the tests once under
+  coverage.py 7.17.3 and writes coverage.py's JSON report. `python-crap` reads
+  that report and fails a function in a changed Python file whose CRAP score
+  is over 10, unless `.crap-baseline.toml` lists it. A change may lower or
+  remove a baseline entry, but not add or raise one. `python-mutation` runs
+  pytestmut 0.1.0 on the lines that a push or a ranged gate changes, and fails
+  on any mutant that no test kills. Each starts only when a Python file
+  changed. A repository that selects none of them gets no new check.
 - The push stage. A tool definition or a repository hook with
   `stages = ["push", "ci"]` runs at `git push` and in the CI gate, and not at
   commit or in `gateseal run`. A repository hook takes the new `stages` field.

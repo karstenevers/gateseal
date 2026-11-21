@@ -112,7 +112,8 @@ def upstream(installed, tmp_path):
     """
     root = tmp_path / "upstream"
     settings = {}
-    for url, tool in ((HOOKS, "pre-commit-hooks"), (RUFF, "ruff")):
+    crap = BUNDLED_TOOLS["crap"].definition.source.repository
+    for url, tool in ((HOOKS, "pre-commit-hooks"), (RUFF, "ruff"), (crap, "crap")):
         repository = root / url.rsplit("/", 1)[1]
         repository.mkdir(parents=True)
         git(repository, "init", "-q", "--initial-branch=main")
@@ -122,10 +123,11 @@ def upstream(installed, tmp_path):
         settings[f"url.{repository.as_uri()}.insteadOf"] = url
     for version in SECRETS.versions:
         release(root, version)
-    for version in BUNDLED_TOOLS["pyright"].versions:
-        page = root / f"pypi.org/pypi/pyright/{version}/json"
-        page.parent.mkdir(parents=True)
-        page.write_bytes(b"{}")
+    for tool in ("coverage", "pyright", "pytestmut"):
+        for version in BUNDLED_TOOLS[tool].versions:
+            page = root / f"pypi.org/pypi/{tool}/{version}/json"
+            page.parent.mkdir(parents=True)
+            page.write_bytes(b"{}")
     environment = {
         key: value
         for key, value in installed.environment.items()
@@ -157,6 +159,7 @@ def started(installed, tmp_path):
         "policy.lock",
         "policy.toml",
         "rules/betterleaks.toml",
+        "rules/crap.toml",
         "rules/pyright.toml",
         "rules/ruff.toml",
     ]
@@ -193,6 +196,9 @@ def test_lock_resolves_every_reviewed_version_from_upstream(
     hooks = components["pre-commit-hooks"]["versions"]
     assert hooks["5.0.0"] == {"revision": upstream.commit(HOOKS, "v5.0.0")}
     assert hooks["6.0.0"] == {"revision": upstream.commit(HOOKS, "v6.0.0")}
+    crap = BUNDLED_TOOLS["crap"].definition.source.repository
+    revision = upstream.commit(crap, "v0.1.0")
+    assert components["crap"]["versions"]["0.1.0"] == {"revision": revision}
     platforms = components["betterleaks"]["versions"]["1.9.0"]["platforms"]
     name = "betterleaks_1.9.0_darwin_arm64.tar.gz"
     assert platforms["macos-arm64"] == {
