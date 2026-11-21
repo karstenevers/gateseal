@@ -290,11 +290,19 @@ def test_policy_without_secrets_still_loads(tmp_path):
     (tmp_path / "rules" / "betterleaks.toml").unlink()
     relock(tmp_path, lambda components: components.pop("betterleaks"))
     policy = load_policy_tree(tmp_path)
-    assert policy.capabilities == ("hygiene", "python", "python-types")
+    assert policy.capabilities == (
+        "hygiene",
+        "python",
+        "python-tests",
+        "python-crap",
+        "python-mutation",
+        "python-types",
+    )
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
         "policy.toml",
         "rules/ruff.toml",
+        "rules/crap.toml",
         "rules/pyright.toml",
         "policy.lock",
     ]
@@ -310,7 +318,14 @@ def test_policy_without_python_offers_no_python(tmp_path):
     (tmp_path / "rules" / "ruff.toml").unlink()
     relock(tmp_path, lambda components: components.pop("ruff"))
     policy = load_policy_tree(tmp_path)
-    assert policy.capabilities == ("hygiene", "python-types", "secrets")
+    assert policy.capabilities == (
+        "hygiene",
+        "python-tests",
+        "python-crap",
+        "python-mutation",
+        "python-types",
+        "secrets",
+    )
     assert "ruff" not in policy.tools
     assert "rules/ruff.toml" not in {asset.path for asset in policy.assets}
     manifest = parse_manifest(

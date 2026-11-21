@@ -39,6 +39,7 @@ from gateseal.manifest import (
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
 from gateseal.setup import PYTHON
+from gateseal.tools import reports
 from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, owned_outputs
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.tools.uv_project import require_project
@@ -102,7 +103,8 @@ def compile_outputs(
     policy that exposes exclude in that tool's capability. The Manifest's
     Repository Hooks come last. A selection with a hook at a push also asks
     pre-commit install for the push launcher, and only such a selection, so
-    no other clone gets a push hook file, which Git LFS also wants. A
+    no other clone gets a push hook file, which Git LFS also wants. A hook
+    that writes a report adds the report folder's ignore file. A
     Manifest's [ci] adds the provider's file, which names the gateseal commit
     CI installs and the policy repository its credential helper serves.
     """
@@ -121,6 +123,7 @@ def compile_outputs(
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
+    outputs |= reports.ignore_file(selection.hooks)
     if selection.ci is not None:
         provider = PROVIDERS[selection.ci.provider]
         outputs[provider.path] = provider.write(_gate_job(selection.ci, pin, source))
@@ -312,7 +315,7 @@ def acquire(
 
 
 def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
-    """Name the policy release, gateseal, tools, hooks, choices and exceptions."""
+    """Name the policy release, gateseal, tools, hooks, reports, choices, exceptions."""
     source, policy, pin = locked.source, locked.policy, locked.pin
     if isinstance(source, BundledSource):
         origin = f"bundled with gateseal {pin.version}"
@@ -337,6 +340,7 @@ def describe(locked: Locked, today: date | None = None) -> tuple[Note, ...]:
         release,
         *map(tool_note, locked.selection.tools),
         *(hook.note() for hook in locked.selection.repository_hooks),
+        *reports.notes(locked.selection.reads),
         *notes(locked.selection, today or date.today()),
     )
 

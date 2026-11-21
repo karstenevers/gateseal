@@ -1,0 +1,23 @@
+# CRAP scores of the changed Python files, from the coverage report that the
+# tests wrote earlier in the same run. The policy's configuration sets the
+# limit. The repository keeps .crap-baseline.toml, the functions that may stay
+# over the limit, and a push or a ranged gate fails a change that adds or
+# raises an entry.
+kind = "pre-commit-repository"
+stages = ["push", "ci"]
+scope = "files"
+
+[source]
+repository = "https://github.com/karstenevers/gateseal-hooks"
+tag = "v{version}"
+
+[configuration]
+format = "toml"
+
+# The final -- ends the options before pre-commit appends file names.
+[hooks.crap-score-python]
+name = "CRAP score"
+args = ["--config", "{configuration}", "--coverage", "{coverage.json}", "--"]
+types_or = ["python"]
+reads = ["coverage.json"]
+output = "plain"

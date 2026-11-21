@@ -224,18 +224,23 @@ def gateseal_origin(tmp_path_factory):
 def installed(gateseal_origin, tmp_path_factory):
     """Install the wheel, and set up a home of its own as gateseal setup does.
 
-    The home's Git reaches gateseal's repository at gateseal_origin.
+    The home's Git reaches gateseal's repository at gateseal_origin. Git
+    rewrites every URL that starts with REPOSITORY, and the longest match
+    wins. So every URL that starts with REPOSITORY- maps to itself, and the
+    CRAP hook's repository stays on GitHub. A test's own rewrite of that
+    full URL is longer, so it still wins.
     """
     base = tmp_path_factory.mktemp("installed wheel ü").resolve()
+    hooks = f"{REPOSITORY}-"
     with pytest.MonkeyPatch.context() as patch:
         for name, value in home_environment(base / "home ü").items():
             patch.setenv(name, value)
         make_home(Path.home())
-        success(
-            ["git", "config", "--global"]
-            + [f"url.{gateseal_origin.as_uri()}.insteadOf", REPOSITORY],
-            Path.home(),
-        )
+        for url, insteadof in ((gateseal_origin.as_uri(), REPOSITORY), (hooks, hooks)):
+            success(
+                ["git", "config", "--global", f"url.{url}.insteadOf", insteadof],
+                Path.home(),
+            )
         installation = install(base)
         installation.cli(Path.home(), "setup")
     return installation

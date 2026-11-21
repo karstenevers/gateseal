@@ -10,7 +10,7 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, and `betterleaks`. A team definition cannot reuse those names or the reserved names `pre-commit` and `python`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, and `betterleaks`. A team definition cannot reuse those names or the reserved names `pre-commit` and `python`.
 
 ## Shared fields
 
@@ -18,7 +18,7 @@ See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions e
 | --- | --- |
 | `kind` | `pre-commit-repository`, `release-binary` or `uv-project`. |
 | `stages` | `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. |
-| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook runs at every commit, or at every push in the push stage. It gets no filenames and checks the whole project. |
+| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook gets no filenames and checks the whole project. It runs at every commit, or at every push in the push stage, unless it lists `types_or`. |
 | `configuration.format` | Optional `toml`. The generated file is `.gateseal/<name>.toml`. |
 | `files.<key>` | Optional fixed file with lowercase `extension` and text `content` using LF line endings. |
 | `hooks.<id>` | At least one hook. |
@@ -39,7 +39,36 @@ Use the push stage for a tool that is too slow for each commit. Each clone then 
 
 ## Hooks
 
-Each hook has a distinct `name`, optional literal `args`, optional `types_or`, and `output`. A hook of a tool with the `project` scope takes no `types_or`. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file. Other braces are invalid. Arguments are passed without a shell.
+Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, and `output`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+
+## Reports
+
+A hook can leave a file for a later hook, such as coverage data for a hook that scores it. The writing hook lists the report's name in `writes`. The reading hook lists it in `reads`:
+
+```toml
+[hooks.coverage-run]
+name = "tests with coverage"
+output = "plain"
+args = ["run", "--data-file", "{coverage.data}", "-m", "pytest"]
+types_or = ["python", "pyi"]
+writes = ["coverage.data"]
+
+[hooks.coverage-json]
+name = "coverage report"
+output = "plain"
+args = ["json", "--data-file", "{coverage.data}", "-o", "{coverage.json}"]
+types_or = ["python", "pyi"]
+reads = ["coverage.data"]
+writes = ["coverage.json"]
+```
+
+- A report name matches `[a-z][a-z0-9-]*\.[a-z0-9]+`, such as `coverage.json`. Its file is `.gateseal/reports/<name>`.
+- Use `{<report name>}` as a whole argument to pass that path. A hook can name only a report that it reads or writes. It lists each name once, and it cannot read a report that it writes.
+- An earlier hook must write each report that a hook reads, in a tool whose `stages` include every stage of the reading hook's tool. Hooks run in the order of the policy's capabilities, then tools, then hooks. Otherwise the policy stops with `missing_report`. `gateseal configure` stops with the same code when a Manifest selects the reading hook without the writing one.
+- A repository with a hook that writes a report gets the generated `.gateseal/reports/.gitignore`, so Git ignores every report.
+- `gateseal gate` deletes the reports of an earlier run before it starts the hooks. If a hook ran without a report that it reads, the gate exits 2 with `missing_report`. When the writing hook failed, the gate fails as a failed check instead. A commit or push through pre-commit alone does neither. So a tool that adds to a report of an earlier run, such as coverage.py with parallel data files, needs a hook that deletes it first.
+- Give a reading hook the `types_or` of the hook that writes its report. Otherwise it can run when the writing hook does not.
+- `gateseal check`, `status` and `doctor` name each report and the hook that writes it.
 
 ## Sources and executables
 
@@ -60,7 +89,7 @@ A `uv-project` source has a `package`: the tool's name on PyPI, with any extras 
 
 The repository needs `pyproject.toml` and `uv.lock` at its root, and `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. A commit through pre-commit alone has no such check: without a project, uv starts the tool outside one. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
 
-A hook with the `project` scope runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. The CI gate checks a new clone.
+A hook with the `project` scope and no `types_or` runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. With `types_or`, it runs only when a changed file has one of those types. A change that only deletes such files does not start it, because pre-commit matches no hook against a deleted file. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. At a push, pre-commit hides nothing, so the tool reads the checked-out files, also when the push names another branch. The CI gate checks a new clone.
 
 Release binaries run through `mise --no-config exec --deny-env`. A hook from a `pre-commit-repository` or `uv-project` source receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
 

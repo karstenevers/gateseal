@@ -2,7 +2,7 @@
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import TypeGuard, cast
@@ -21,6 +21,7 @@ from gateseal.policy import (
 from gateseal.policy_tools import CAPABILITY, SKIP
 from gateseal.repository_hooks import RepositoryHook, parse_hooks, require_own_ids
 from gateseal.tools.model import Hook, Origin, Stage, Starts, Tool, require_local_hooks
+from gateseal.tools.reports import Read, reads
 from gateseal.validation import (
     fields,
     mapping,
@@ -308,7 +309,8 @@ class Selection:
 
     tools holds every tool the capabilities use, in capability order, each at
     its selected version with exceptions applied and running only the hooks
-    that the choices keep. ci and repository_hooks are the Manifest's.
+    that the choices keep. ci and repository_hooks are the Manifest's. reads
+    holds each report that a selected hook reads, with the hook that writes it.
     """
 
     choices: Mapping[str, Mapping[str, ChoiceValue]]
@@ -316,6 +318,7 @@ class Selection:
     tools: tuple[Tool, ...]
     ci: CI | None
     repository_hooks: tuple[RepositoryHook, ...]
+    reads: tuple[Read, ...]
 
     @property
     def hooks(self) -> tuple[Hook, ...]:
@@ -347,7 +350,8 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
     Each tool's release must accept the value of every choice its definition
     declares, the policy's default included. No Repository Hook may take the
     ID or name of a hook of the policy, selected or not, so selecting another
-    capability never clashes.
+    capability never clashes. A selected hook must write each report that a
+    later one reads.
     """
     _require_offered(manifest, policy)
     require_own_ids(
@@ -385,6 +389,20 @@ def resolve(manifest: Manifest, policy: Policy) -> Selection:
         tools,
         manifest.ci,
         manifest.hooks,
+        _reads(tools),
+    )
+
+
+def _reads(tools: Iterable[Tool]) -> tuple[Read, ...]:
+    """Return the reports that the hooks of tools read, each written before.
+
+    A policy's hooks write each in policy order. A Manifest can still leave
+    the writing hook out, with its capability or through a choice.
+    """
+    return reads(
+        ((tool.definition, tool.use) for tool in tools),
+        f"Select the capability whose tool writes the report in {MANIFEST}, and "
+        "keep the hook that writes it. Then run gateseal configure.",
     )
 
 

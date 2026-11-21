@@ -52,6 +52,23 @@
         }
       }
     },
+    "coverage": {
+      "versions": {
+        "7.17.2": {
+          "package": "coverage"
+        },
+        "7.17.3": {
+          "package": "coverage"
+        }
+      }
+    },
+    "crap": {
+      "versions": {
+        "0.1.0": {
+          "revision": "24dc182c92ea328748ef14c9c63b71bd19fb9ec2"
+        }
+      }
+    },
     "pre-commit-hooks": {
       "versions": {
         "5.0.0": {
@@ -66,6 +83,13 @@
       "versions": {
         "1.1.414": {
           "package": "pyright[nodejs]"
+        }
+      }
+    },
+    "pytestmut": {
+      "versions": {
+        "0.1.0": {
+          "package": "pytestmut"
         }
       }
     },

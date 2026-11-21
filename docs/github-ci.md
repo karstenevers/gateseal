@@ -19,7 +19,7 @@ git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
   .github/workflows/gateseal.yml
 ```
 
-If Python, Pyright or secrets was newly enabled, stage `.gateseal/` too. Review the changes. Commit them together. `gateseal.toml` is the Manifest that selects the policy and checks. `gateseal.lock` is the Lock that records the selection and generated files.
+If `git status` shows new files under `.gateseal/`, stage them too. Python, Pyright, secrets and the test checks write files there. Review the changes. Commit them together. `gateseal.toml` is the Manifest that selects the policy and checks. `gateseal.lock` is the Lock that records the selection and generated files.
 
 To turn CI off, remove `[ci]`. Run `gateseal configure`. Commit the changes, including the removal of the generated workflow.
 

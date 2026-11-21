@@ -1,0 +1,20 @@
+# Mutation tests of the lines that a push, or the range the gate checks,
+# changes. pytestmut reads the range from PRE_COMMIT_FROM_REF, which
+# pre-commit sets for both. --min-score 100 fails on any mutant that no test
+# kills. The repository's [tool.pytestmut] settings, such as its paths, its
+# pytest arguments and its diff budget, still apply.
+kind = "uv-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "pytestmut"
+
+[executable]
+name = "pytestmut"
+
+[hooks.pytestmut]
+name = "mutation tests"
+args = ["run", "--hook", "--min-score", "100"]
+types_or = ["python"]
+output = "plain"

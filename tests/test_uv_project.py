@@ -220,7 +220,6 @@ def test_a_source_names_a_package_with_optional_extras(package):
         ('package = "mypy"', 'distribution = "mypy"'),
         ('[executable]\nname = "mypy"\n', ""),
         ('name = "mypy"\n\n[hooks', 'name = "../mypy"\n\n[hooks'),
-        ('output = "plain"', 'types_or = ["python"]\noutput = "plain"'),
     ],
     ids=[
         "version",
@@ -236,7 +235,6 @@ def test_a_source_names_a_package_with_optional_extras(package):
         "no package",
         "no executable",
         "executable path",
-        "file types",
     ],
 )
 def test_an_invalid_definition_names_its_field(old, new):
@@ -245,6 +243,15 @@ def test_an_invalid_definition_names_its_field(old, new):
     failure = refused(load_definition, "mypy", text.encode(), Origin.TEAM)
     assert failure.code == "invalid_field"
     assert "tools.mypy" in str(failure) or "uv-project tool" in str(failure)
+
+
+def test_a_hook_of_a_project_tool_may_list_file_types():
+    text = DEFINITION.replace(
+        'output = "plain"', 'types_or = ["python"]\noutput = "plain"'
+    )
+    assert text != DEFINITION
+    definition = load_definition("mypy", text.encode(), Origin.TEAM)
+    assert definition.hooks["mypy"].types_or == ("python",)
 
 
 def test_a_uv_project_tool_takes_a_history_scan():

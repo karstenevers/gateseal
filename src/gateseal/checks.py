@@ -18,6 +18,7 @@ from gateseal.diagnostics import Note, Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import execute, pre_commit_command
+from gateseal.tools import reports
 from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, ToolDefinition
 from gateseal.worktree import Worktree
 
@@ -30,6 +31,13 @@ SCAN_MESSAGES = {
     "stopped": "stopped without a finding.",
 }
 """How a history scan ended, by outcome, as its diagnostic says."""
+
+MISSING_REPORT = (
+    "Read the output of the hook that writes the report and fix what it reports, "
+    "then push again. If pre-commit skipped that hook, give both hooks the same "
+    "file types in the policy."
+)
+"""The next step of a gate whose hook ran without a report that it reads."""
 
 
 def run(locked: lock.Locked) -> Result:
@@ -89,7 +97,9 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     pre-commit reads the files from the worktree, so a scope that names a head
     needs that commit checked out with no uncommitted changes. That also means
     a ranged run, which pre-commit would otherwise stash as a commit does,
-    finds no unstaged edits.
+    finds no unstaged edits. The reports of an earlier run go first, and a
+    hook that then ran without a report it reads ends the gate with
+    missing_report.
     """
     if scope is None:
         return Result(
@@ -106,6 +116,7 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     if scope.head is not None:
         ci.require_checked_out(worktree, scope.head)
     env = dict(os.environ) | OFFLINE
+    reports.clear(locked.root, locked.selection.hooks)
     started = monotonic()
     process = execute(
         pre_commit_command(python, [*hook_run(Stage.CI), *files, "--color", "never"]),
@@ -128,7 +139,9 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
             scans.append((definition, scanned))
     duration, over = _duration(monotonic() - started, locked.policy.time_budget_seconds)
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    entries = [duration, *hook_results(details, locked.selection.hooks, "ci")]
+    results = hook_results(details, locked.selection.hooks, "ci")
+    missing = reports.missing(locked.root, locked.selection.reads, results)
+    entries = [duration, *results]
     outcomes: set[str] = set()
     for definition, scanned in scans:
         output = scanned.stdout.decode("utf-8", errors="replace")
@@ -138,7 +151,9 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         outcomes.add(outcome)
         entries.append(_scan_entry(definition, revisions, outcome))
         entries += findings
-    result = _gate_result(scope.reason, process.returncode, outcomes, details, entries)
+    result = _gate_result(
+        scope.reason, process.returncode, outcomes, missing, details, entries
+    )
     return replace(result, notes=over)
 
 
@@ -196,9 +211,11 @@ def _gate_result(
     reason: str,
     returncode: int,
     outcomes: set[str],
+    missing: str | None,
     details: str,
     entries: list[dict[str, object]],
 ) -> Result:
+    """Return the gate's result: a stopped tool first, then a missing report."""
     if returncode not in (0, 1) or "stopped" in outcomes:
         stopped = (
             f"pre-commit stopped with status {returncode}."
@@ -211,6 +228,16 @@ def _gate_result(
             f"{stopped} {reason}",
             4,
             next_steps=("gateseal doctor",),
+            details=details,
+            entries=tuple(entries),
+        )
+    if missing is not None:
+        return Result(
+            "gate",
+            "missing_report",
+            f"{missing} {reason}",
+            2,
+            next_steps=(MISSING_REPORT,),
             details=details,
             entries=tuple(entries),
         )

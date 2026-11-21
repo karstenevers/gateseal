@@ -14,11 +14,11 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 `gateseal.lock` is the Lock. It records the selection and the generated files.
 
-Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here.
+Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 4 runs the repository's tests when the change has a Python file.
 
 ## What the gate checks
 
-For a pull request on GitHub, the gate finds the merge base of the pull request and its target branch. Azure Pipelines builds the merge of the pull request into its target branch, so the gate there compares that merge commit with the target branch. The gate gives the range to pre-commit as `--from-ref` and `--to-ref`, so the hooks check only the changed files. A hook with the `project` scope, such as Pyright, gets no filenames. It checks the whole project whenever the gate checks files.
+For a pull request on GitHub, the gate finds the merge base of the pull request and its target branch. Azure Pipelines builds the merge of the pull request into its target branch, so the gate there compares that merge commit with the target branch. The gate gives the range to pre-commit as `--from-ref` and `--to-ref`, so the hooks check only the changed files. A hook with the `project` scope, such as Pyright, gets no filenames. It checks the whole project whenever the gate checks files. A project hook that lists `types_or`, such as the test checks, starts only when a changed file has one of those types.
 
 | Event | Files checked | History scanned |
 | --- | --- | --- |
@@ -62,6 +62,6 @@ A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool 
 
 ## Time budget
 
-Each gate reports how long it took. The time includes the hooks, any install of their environments, and the history scans. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because machine speed changes with load and caches.
+Each gate reports how long it took. The time includes the hooks, a test run if the gate has one, any install of their environments, and the history scans. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because machine speed changes with load and caches.
 
 The warning shows in the job log, on the run's summary page, and in the `--json` result as `over_time_budget`. On GitHub it also shows on the pull request's **Checks** tab. Neither provider sends a notification for a warning in a passing run. To fix a slow gate, speed up its slowest checks or raise the budget.

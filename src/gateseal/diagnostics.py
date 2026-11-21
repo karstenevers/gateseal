@@ -77,6 +77,11 @@ NEXT_STEPS = {
         "Install the program that the message names and put it on PATH, then run the "
         "command again."
     ),
+    "missing_report": (
+        "Make a hook before the reading hook write the report, in a tool whose "
+        "stages include every stage of the reading hook's tool, then run the command "
+        "again."
+    ),
     "operation_in_progress": (
         "Wait until the other gateseal command ends, then run this command again."
     ),
