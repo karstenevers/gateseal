@@ -7,17 +7,16 @@ environment, as it does at git commit.
 
 import os
 import re
-import subprocess
 from dataclasses import replace
-from time import monotonic
 
 from gateseal import ci, lock, setup
+from gateseal.check_times import CheckTime, gate_time
 from gateseal.ci import OFFLINE, Scope
 from gateseal.compiler_release import CHECK_HOOK
-from gateseal.diagnostics import Note, Result
+from gateseal.diagnostics import Result
 from gateseal.hook_results import COLOR, FINDING, hook_results
 from gateseal.managed_files import CONFIG
-from gateseal.processes import execute, pre_commit_command
+from gateseal.processes import Timed, execute, execute_timed, pre_commit_command
 from gateseal.tools import reports
 from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, ToolDefinition
 from gateseal.worktree import Worktree
@@ -117,33 +116,37 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         ci.require_checked_out(worktree, scope.head)
     env = dict(os.environ) | OFFLINE
     reports.clear(locked.root, locked.selection.hooks)
-    started = monotonic()
-    process = execute(
+    pre_commit = execute_timed(
         pre_commit_command(python, [*hook_run(Stage.CI), *files, "--color", "never"]),
         locked.root,
         env,
-        allow_failure=True,
     )
+    process = pre_commit.process
     revisions = scope.history
-    scans: list[tuple[ToolDefinition, subprocess.CompletedProcess[bytes]]] = []
+    scans: list[tuple[ToolDefinition, Timed]] = []
     for tool in locked.selection.tools:
         definition, history = tool.definition, tool.definition.history
         program = tool.program(OFFLINE)
         if revisions is not None and history is not None and program is not None:
-            scanned = execute(
+            scanned = execute_timed(
                 [*program, *(a.replace(RANGE, revisions) for a in history)],
                 locked.root,
                 env,
-                allow_failure=True,
             )
             scans.append((definition, scanned))
-    duration, over = _duration(monotonic() - started, locked.policy.time_budget_seconds)
+    duration, times, over = gate_time(
+        pre_commit,
+        locked.selection.hooks,
+        [CheckTime(f"{d.name} history scan", timed.seconds) for d, timed in scans],
+        locked.policy.time_budget_seconds,
+    )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
     results = hook_results(details, locked.selection.hooks, "ci")
     missing = reports.missing(locked.root, locked.selection.reads, results)
     entries = [duration, *results]
     outcomes: set[str] = set()
-    for definition, scanned in scans:
+    for definition, timed in scans:
+        scanned = timed.process
         output = scanned.stdout.decode("utf-8", errors="replace")
         details += output + scanned.stderr.decode("utf-8", errors="replace")
         findings = _history_findings(definition, output)
@@ -154,31 +157,7 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     result = _gate_result(
         scope.reason, process.returncode, outcomes, missing, details, entries
     )
-    return replace(result, notes=over)
-
-
-def _duration(
-    elapsed: float, budget: int | None
-) -> tuple[dict[str, object], tuple[Note, ...]]:
-    """Return the gate's time to one decimal, and a warning if it broke the budget."""
-    seconds = round(elapsed, 1)
-    took = f"The gate took {seconds:.1f} seconds"
-    entry: dict[str, object] = {
-        "severity": "info",
-        "category": "duration",
-        "seconds": seconds,
-        "message": f"{took}.",
-    }
-    if budget is None:
-        return entry, ()
-    entry["budget_seconds"] = budget
-    if seconds <= budget:
-        return entry, ()
-    warning = (
-        f"{took}, over the policy's time budget of {budget} seconds. Speed up its "
-        "slowest checks, or raise time_budget_seconds in the policy."
-    )
-    return entry, (Note("warning", "over_time_budget", warning),)
+    return replace(result, notes=over, check_times=times)
 
 
 def _scan_outcome(returncode: int, findings: list[dict[str, object]]) -> str:

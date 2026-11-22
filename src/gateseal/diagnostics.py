@@ -214,6 +214,9 @@ class Result:
     notes: tuple[Note, ...] = ()
     entries: tuple[dict[str, object], ...] = ()
     """Structured diagnostics, such as one per hook and one per finding."""
+    check_times: tuple[str, ...] = ()
+    """Lines of text output after the details, such as the time of each check.
+    JSON leaves them out, and they are never cut."""
 
     def render(
         self,
@@ -242,8 +245,9 @@ class Result:
                 else n.message
                 for n in notes
             ]
+            times = [redact(line) for line in self.check_times]
             return "\n".join(
-                [*messages, *lines, *(f"Next: {s}" for s in self.next_steps)]
+                [*messages, *times, *lines, *(f"Next: {s}" for s in self.next_steps)]
             )
         return json.dumps(
             {

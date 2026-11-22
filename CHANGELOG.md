@@ -69,6 +69,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   add to a push hook that pre-commit kept. It accepts a push hook of Git's
   configuration that runs `git lfs pre-push`.
 
+- The CI gate lists the time of each check in its log, and names the
+  slowest. The warning of a gate over its time budget names the slowest
+  check and its time too.
+
 ### Changed
 
 - The weekly run of the generated CI file is now off by default. The next

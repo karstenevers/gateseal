@@ -62,6 +62,6 @@ A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool 
 
 ## Time budget
 
-Each gate reports how long it took. The time includes the hooks, a test run if the gate has one, any install of their environments, and the history scans. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because machine speed changes with load and caches.
+Each gate reports how long it took. The time includes the hooks, a test run if the gate has one, any install of their environments, and the history scans. The job log also lists the time of each check and of pre-commit's setup, and names the slowest check. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because machine speed changes with load and caches.
 
-The warning shows in the job log, on the run's summary page, and in the `--json` result as `over_time_budget`. On GitHub it also shows on the pull request's **Checks** tab. Neither provider sends a notification for a warning in a passing run. To fix a slow gate, speed up its slowest checks or raise the budget.
+The warning names the slowest check and its time. It shows in the job log, on the run's summary page, and in the `--json` result as `over_time_budget`. On GitHub it also shows on the pull request's **Checks** tab. Neither provider sends a notification for a warning in a passing run. To fix a slow gate, speed up its slowest checks or raise the budget.
