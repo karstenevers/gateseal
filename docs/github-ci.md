@@ -19,7 +19,7 @@ git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
   .github/workflows/gateseal.yml
 ```
 
-If `git status` shows new files under `.gateseal/`, stage them too. Python, Pyright, the dependency audit, secrets and the test checks write files there. Review the changes. Commit them together. `gateseal.toml` is the Manifest that selects the policy and checks. `gateseal.lock` is the Lock that records the selection and generated files.
+If `git status` shows new files under `.gateseal/`, stage them too. Python, Pyright, the dependency audit, secrets, TypeScript and the test checks write files there. Review the changes. Commit them together. `gateseal.toml` is the Manifest that selects the policy and checks. `gateseal.lock` is the Lock that records the selection and generated files.
 
 To turn CI off, remove `[ci]`. Run `gateseal configure`. Commit the changes, including the removal of the generated workflow.
 
@@ -82,4 +82,4 @@ The bundled policy needs no token. The workflow's default GitHub token can read 
 
 For your own workflow, use the policy URL from the base branch. Scope the credential helper to that exact URL so a pull request cannot redirect the token.
 
-The token is for the policy fetch. The runner also needs unauthenticated read access to gateseal's repository and to each selected hook repository.
+The token is for the policy fetch. The runner also needs unauthenticated read access to gateseal's repository and to each selected hook repository. A selected tool from npm, such as ESLint, also needs nodejs.org and the npm registry.

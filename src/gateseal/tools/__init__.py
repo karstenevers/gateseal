@@ -5,7 +5,9 @@ its [source] table. A Built-in Tool is a Tool Definition in the package's
 data/tools, <name>.tool.toml, so the gateseal commit that the Lock pins
 covers it. The suffix keeps every tool from reading a definition as its own
 configuration, as Ruff reads any ruff.toml it walks past. Kind modules import
-gateseal.tools.model, never this package, so loading it cannot cycle.
+gateseal.tools.model and the shared modules gateseal.tools.mise and
+gateseal.tools.node, never this package or another kind, so loading it cannot
+cycle.
 """
 
 import functools
@@ -14,7 +16,12 @@ from importlib.resources import files
 from importlib.resources.abc import Traversable
 
 from gateseal.diagnostics import GatesealError
-from gateseal.tools import pre_commit_repository, release_binary, uv_project
+from gateseal.tools import (
+    npm_package,
+    pre_commit_repository,
+    release_binary,
+    uv_project,
+)
 from gateseal.tools.model import (
     NAME,
     Origin,
@@ -28,6 +35,7 @@ from gateseal.validation import mapping, parse_toml, string
 SUFFIX = ".tool.toml"
 
 KINDS: Mapping[str, Callable[[object, str], Source]] = {
+    npm_package.NpmPackage.kind: npm_package.parse_source,
     pre_commit_repository.PreCommitRepository.kind: pre_commit_repository.parse_source,
     release_binary.ReleaseBinary.kind: release_binary.parse_source,
     uv_project.UvProject.kind: uv_project.parse_source,

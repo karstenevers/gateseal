@@ -1,0 +1,89 @@
+kind = "npm-package"
+stages = ["commit", "run", "ci"]
+scope = "files"
+
+[source]
+package = "eslint"
+
+[executable]
+name = "eslint"
+
+# The policy's ESLint data: the files ESLint checks, the parser and plugins
+# from the tool's pinned packages, and the rules. configure checks it and
+# writes it as .gateseal/eslint.json, which the loader reads.
+[configuration]
+format = "eslint"
+
+# The one loader of every policy. ESLint starts it through --config, so a
+# repository's own ESLint configuration never runs. It resolves the parser and
+# each plugin from the folder whose node_modules/.bin holds the program that
+# the hook started, the root of the hook's install. So it loads the packages at
+# the versions that the policy pins, never a copy that ESLint itself depends
+# on, and never the repository's node_modules. It refuses a package that Node
+# finds outside that install, such as one in a folder above it or on
+# NODE_PATH, when the install lost its own. It reads the data whose name it
+# shares: <name>.json beside <name>-loader.mjs.
+[files.loader]
+extension = "mjs"
+content = '''
+// gateseal owns this file; gateseal configure writes it.
+import { readFileSync, realpathSync } from "node:fs";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const root = process.argv[1].replace(/node_modules\/\.bin\/[^\/]+$/, "");
+const tool = createRequire(root);
+const installed = realpathSync(`${root}node_modules`);
+const load = async (name) => {
+  const entry = tool.resolve(name);
+  if (!entry.startsWith(`${installed}/${name}/`)) {
+    throw new Error(`The install ${installed} holds no package ${name}.`);
+  }
+  const module = await import(pathToFileURL(entry).href);
+  return module.default ?? module;
+};
+const file = fileURLToPath(import.meta.url).replace(/-loader\.mjs$/, ".json");
+const data = JSON.parse(readFileSync(file, "utf8"));
+const plugins = {};
+for (const [prefix, name] of Object.entries(data.plugins)) {
+  plugins[prefix] = await load(name);
+}
+export default [
+  {
+    files: data.files,
+    languageOptions: data.parser ? { parser: await load(data.parser) } : {},
+    plugins,
+    rules: data.rules,
+  },
+];
+'''
+
+# An empty list of suppressions. Without --suppressions-location, ESLint
+# reads eslint-suppressions.json at the repository root and passes each
+# violation that the file lists. The hook names this file instead, so no file
+# of the repository accepts a finding. The option needs ESLint 9.24.0 or later.
+[files.suppressions]
+extension = "json"
+content = """
+{}
+"""
+
+# The policy's files patterns choose which of the hook's files ESLint checks,
+# and --no-warn-ignored keeps quiet about the rest. --fix applies ESLint's
+# fixes. The final -- ends the options, so a file named like an option is
+# checked as a file. ESLint exits 1 on a finding and 2 when it cannot lint,
+# such as on a broken install.
+[hooks.eslint]
+name = "eslint"
+args = [
+  "--config",
+  "{loader}",
+  "--suppressions-location",
+  "{suppressions}",
+  "--no-warn-ignored",
+  "--fix",
+  "--",
+]
+types_or = ["ts", "tsx"]
+finding_exit_codes = [1]
+output = "plain"

@@ -32,6 +32,7 @@ def test_the_example_manifest_configures_against_the_example_policy(
         capabilities = tomllib.loads(POLICY)["capabilities"].values()
         tools = {tool for capability in capabilities for tool in capability["tools"]}
         lock = json.loads((data / "policy.lock").read_bytes())
+        lock.pop("node")
         lock["components"] = {
             name: facts for name, facts in lock["components"].items() if name in tools
         }

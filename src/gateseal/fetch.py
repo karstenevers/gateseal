@@ -11,7 +11,7 @@ be the project's own, so they are not fetched.
 
 import os
 import re
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from time import sleep
@@ -22,7 +22,12 @@ from gateseal.environments import tool_environment
 from gateseal.managed_files import CONFIG
 from gateseal.platforms import machine
 from gateseal.processes import execute, pre_commit_command
-from gateseal.tools.release_binary import BinaryTool, require_mise
+from gateseal.tools.mise import Download as Archive
+from gateseal.tools.mise import mise_request, require_mise
+from gateseal.tools.model import Tool
+from gateseal.tools.node import NAME as NODE
+from gateseal.tools.node import Node
+from gateseal.tools.release_binary import BinaryTool
 
 WAITS = (1, 3)
 
@@ -53,17 +58,43 @@ def run(locked: lock.Locked) -> Result:
 
 
 def fetch(locked: lock.Locked, python: str) -> tuple[dict[str, object], ...]:
-    binaries = [tool for tool in locked.selection.tools if isinstance(tool, BinaryTool)]
-    downloads = [*release_binaries(binaries), hook_environments(python)]
+    downloads = [*release_downloads(locked.selection.tools), hook_environments(python)]
     return download(downloads, locked.root, dict(os.environ))
 
 
-def release_binaries(tools: Iterable[BinaryTool]) -> list[Download]:
-    archives = [(tool, _archive_url(tool)) for tool in tools]
-    if not archives:
+def release_downloads(tools: Iterable[Tool]) -> list[Download]:
+    """Return what mise downloads when a hook starts: each release binary, and
+    each pinned Node that a tool from npm runs on."""
+    binaries = [tool for tool in tools if isinstance(tool, BinaryTool)]
+    nodes = {tool.node.version: tool.node for tool in tools if tool.node}
+    archives = [
+        (tool, _archive_url(_name(tool), tool.release.platforms)) for tool in binaries
+    ]
+    node_archives = [
+        (node, _archive_url(f"node {node.version}", node.platforms))
+        for node in nodes.values()
+    ]
+    if not archives and not node_archives:
         return []
     mise = require_mise(tool_environment())
-    return [_release_binary(mise, tool, url) for tool, url in archives]
+    return [
+        *(_release_binary(mise, tool, url) for tool, url in archives),
+        *(_node_download(mise, node, url) for node, url in node_archives),
+    ]
+
+
+def _node_download(mise: str, node: Node, url: str) -> Download:
+    name = f"node {node.version}"
+    return Download(
+        [
+            mise,
+            "--no-config",
+            "install",
+            mise_request(NODE, node.version, node.platforms),
+        ],
+        f"mise installed {name} from {url}.",
+        lambda output: f"mise could not install {name} from {url}",
+    )
 
 
 def _release_binary(mise: str, tool: BinaryTool, url: str) -> Download:
@@ -79,9 +110,7 @@ def _name(tool: BinaryTool) -> str:
     return f"{tool.definition.name} {tool.version}"
 
 
-def _archive_url(tool: BinaryTool) -> str:
-    name = _name(tool)
-    archives = tool.release.platforms
+def _archive_url(name: str, archives: Mapping[str, Archive]) -> str:
     platform = machine()
     if platform is None or platform not in archives:
         raise GatesealError(

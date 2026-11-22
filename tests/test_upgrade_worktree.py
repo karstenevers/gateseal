@@ -58,7 +58,8 @@ def without_old_versions(data):
 
 def without_secrets(data):
     toml = data / "policy.toml"
-    toml.write_text(toml.read_text().split("\n[capabilities.secrets.")[0])
+    before, secrets = toml.read_text().split("\n[capabilities.secrets.")
+    toml.write_text(before + secrets.split("\n\n", 1)[1])
     (data / "rules/betterleaks.toml").unlink()
     document = json.loads((data / "policy.lock").read_bytes())
     del document["components"]["betterleaks"]

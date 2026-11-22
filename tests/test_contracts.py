@@ -286,7 +286,8 @@ def test_secret_rules_can_start_from_the_rules_built_into_betterleaks(tmp_path, 
 def test_policy_without_secrets_still_loads(tmp_path):
     bundled = tree(tmp_path)
     path = tmp_path / "policy.toml"
-    path.write_text(path.read_text().split("\n[capabilities.secrets.")[0])
+    before, secrets = path.read_text().split("\n[capabilities.secrets.")
+    path.write_text(before + secrets.split("\n\n", 1)[1])
     (tmp_path / "rules" / "betterleaks.toml").unlink()
     relock(tmp_path, lambda components: components.pop("betterleaks"))
     policy = load_policy_tree(tmp_path)
@@ -300,6 +301,7 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "python-lock",
         "python-audit",
         "python-dependencies",
+        "typescript",
     )
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
@@ -308,6 +310,8 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "rules/crap.toml",
         "rules/pyright.toml",
         "rules/uv-audit.toml",
+        "rules/eslint.toml",
+        "rules/prettier.toml",
         "policy.lock",
     ]
     assert policy.content_digest != bundled.content_digest
@@ -332,6 +336,7 @@ def test_policy_without_python_offers_no_python(tmp_path):
         "python-audit",
         "python-dependencies",
         "secrets",
+        "typescript",
     )
     assert "ruff" not in policy.tools
     assert "rules/ruff.toml" not in {asset.path for asset in policy.assets}
@@ -516,6 +521,55 @@ def test_pyright_configuration_cannot_extend_another_configuration(tmp_path, ext
         "The pyright configuration must not extend another configuration: "
         "remove tool.pyright.extends."
     )
+
+
+@pytest.mark.parametrize(
+    "plugins",
+    [
+        'plugins = ["prettier-plugin-x"]\n',
+        "plugins = []\n",
+        '[[overrides]]\nfiles = "*.ts"\n\n[[overrides]]\nfiles = "*.tsx"\n'
+        '[overrides.options]\nplugins = ["prettier-plugin-x"]\n',
+    ],
+    ids=["top level", "empty", "second override"],
+)
+def test_prettier_configuration_cannot_name_plugins(tmp_path, plugins):
+    tree(tmp_path)
+    path = tmp_path / "rules" / "prettier.toml"
+    path.write_text(plugins + path.read_text())
+    with pytest.raises(GatesealError) as refused:
+        load_policy_tree(tmp_path)
+    assert refused.value.code == "invalid_field"
+    assert str(refused.value) == (
+        "The prettier configuration must not name plugins, also not in the "
+        "options of an override: Prettier loads a plugin from the repository, "
+        "where no policy pins it."
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '[[overrides]]\nfiles = "*.ts"\nplugins = "x"\n[overrides.options]\nsemi = 1\n',
+        '[overrides]\nplugins = "x"\n',
+        '[other.options]\nplugins = "x"\n',
+        'overrides = ["plugins"]\n',
+    ],
+    ids=["beside options", "overrides table", "other table", "override string"],
+)
+def test_a_configuration_may_name_plugins_outside_prettier_s_options(tmp_path, text):
+    tree(tmp_path)
+    path = tmp_path / "rules" / "prettier.toml"
+    path.write_text(path.read_text() + text)
+    load_policy_tree(tmp_path)
+
+
+@pytest.mark.parametrize("name", ["ruff", "pyright", "betterleaks"])
+def test_a_configuration_of_a_tool_outside_node_may_name_plugins(tmp_path, name):
+    tree(tmp_path)
+    path = tmp_path / "rules" / f"{name}.toml"
+    path.write_text('plugins = ["x"]\n' + path.read_text())
+    load_policy_tree(tmp_path)
 
 
 def test_a_configuration_may_name_extends_outside_pyright_s_table(tmp_path):

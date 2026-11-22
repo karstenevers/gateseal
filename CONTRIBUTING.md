@@ -86,8 +86,10 @@ lines, and a strict build of the documentation.
 
 Release gateseal from `main` in three steps:
 
-1. In one pull request, set `version` in `pyproject.toml` and `__version__` in
-   `src/gateseal/__init__.py` to the new version, and run `uv lock`. In
+1. In one pull request, set `version` in `pyproject.toml`, `__version__` in
+   `src/gateseal/__init__.py` and `minimum_compiler` in
+   `src/gateseal/data/reference/policy.toml` to the new version, and run
+   `uv lock`. In
    [CHANGELOG.md](CHANGELOG.md), move the Unreleased entries to a new
    `## [X.Y.Z] - YYYY-MM-DD` section.
 2. Merge the pull request. This starts the Release workflow. The workflow

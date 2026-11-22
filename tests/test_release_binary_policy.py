@@ -20,7 +20,10 @@ from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import bundled_root, load_bundled_policy, load_policy_tree
 from gateseal.tools import built_in_tools
+from gateseal.tools.model import Catalog
 from gateseal.validation import canonical
+
+CATALOG = Catalog("1.9.0", {"1.9.0": {}}, {})
 
 GITLEAKS = """\
 kind = "release-binary"
@@ -297,7 +300,7 @@ def sha(data):
 def test_a_listing_line_as_sha256sum_writes_it_locks_its_archive():
     tool = built_in_tools()["betterleaks"]
     files = release_files(lambda name, data: f"{sha(data)} *{name}\n")
-    assert tool.source.lock(tool, "1.9.0", None, Releases(files)) == {
+    assert tool.source.lock(tool, CATALOG, "1.9.0", None, Releases(files)) == {
         "platforms": {
             platform: {
                 "executable": "betterleaks",
@@ -321,7 +324,7 @@ def test_a_listing_line_without_a_sha256_lists_no_archive():
         )
     )
     with pytest.raises(GatesealError) as failure:
-        tool.source.lock(tool, "1.9.0", None, Releases(files))
+        tool.source.lock(tool, CATALOG, "1.9.0", None, Releases(files))
     assert failure.value.code == "upstream_checksum_missing"
     named = ("checksums.txt", "betterleaks_1.9.0_linux_x64.tar.gz", "linux-x64")
     assert all(value in str(failure.value) for value in named)

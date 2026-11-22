@@ -12,6 +12,7 @@ import pytest
 from gateseal import __version__, lock
 from gateseal.compiler_release import REPOSITORY, GatesealPin
 from gateseal.policy import load_bundled_policy
+from gateseal.tools.npm_package import NpmTool
 from gateseal.tools.release_binary import BinaryTool
 from installation import (
     clone,
@@ -232,7 +233,7 @@ def release_archives(tmp_path_factory):
     reviewed = [
         tool.select(version)
         for tool in BUNDLED_TOOLS.values()
-        if isinstance(tool, BinaryTool)
+        if isinstance(tool, BinaryTool | NpmTool)
         for version in tool.versions
     ]
     mise_cache.fill(reviewed, tmp_path_factory.mktemp("mise fill"))

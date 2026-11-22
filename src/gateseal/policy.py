@@ -26,6 +26,8 @@ from gateseal.tools.model import (
     ToolUse,
     lock_failure,
 )
+from gateseal.tools.node import NAME as NODE
+from gateseal.tools.node import read_node
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -187,11 +189,13 @@ class Review:
     definitions holds every tool the capabilities name, uses how the policy
     uses it, and catalogs its pin and reviewed versions, each by tool name in
     capability then tool order. The Policy Lock adds each reviewed version's
-    facts.
+    facts. node is the Node version that policy.toml pins for the tools on
+    Node, or None when no tool runs on Node.
     """
 
     release: str
     minimum_compiler: str
+    node: str | None
     capabilities: tuple[str, ...]
     definitions: Mapping[str, ToolDefinition]
     uses: Mapping[str, ToolUse]
@@ -294,6 +298,28 @@ def _time_budget(value: object) -> int | None:
     return value
 
 
+def _require_node(node: str | None, definitions: Mapping[str, ToolDefinition]) -> None:
+    """Require policy.toml's node exactly when a tool runs on Node.
+
+    A node without such a tool is refused, so the Policy Lock never holds a
+    Node that no hook starts.
+    """
+    tools = [name for name, item in definitions.items() if item.source.on_node]
+    if tools and node is None:
+        raise GatesealError(
+            "invalid_field",
+            f"{POLICY} needs {NODE}, the version of Node for {', '.join(tools)}.",
+            next_step=f'Add {NODE} = "<major.minor.patch>" at the top of {POLICY}, '
+            "then run gateseal policy lock.",
+        )
+    if node is not None and not tools:
+        raise GatesealError(
+            "invalid_field",
+            f"{POLICY} pins {NODE}, but no tool of the policy runs on Node.",
+            next_step=f"Remove {NODE} from {POLICY}.",
+        )
+
+
 def review_policy(
     read_asset: Callable[[str], bytes], *, compiler: str = __version__
 ) -> Review:
@@ -332,6 +358,8 @@ def review_policy(
     document = mapping(parse_toml(source), "policy")
     minimum = _compatibility(document, version(compiler, "compiler_version"))
     time_budget = _time_budget(document.pop(TIME_BUDGET, None))
+    node = document.pop(NODE, None)
+    node = None if node is None else version(node, NODE)
     required = {"schema", "release", "minimum_compiler", "capabilities"}
     extra = sorted(set(document) - required)
     if extra:
@@ -339,7 +367,7 @@ def review_policy(
             "invalid_field",
             f"{POLICY} has {', '.join(extra)} at its top level, which holds only "
             "schema, release, minimum_compiler, capabilities and the optional "
-            f"{TIME_BUDGET}.",
+            f"{TIME_BUDGET} and {NODE}.",
             next_step="Write each tool as capabilities.<capability>.tools.<tool>, "
             "with its pin and reviewed versions, and each choice in "
             "capabilities.<capability>.choices.",
@@ -351,6 +379,7 @@ def review_policy(
             "invalid_field", "Policy release must be a short printable label."
         )
     toolset = read_toolset(document["capabilities"], read_asset, asset)
+    _require_node(node, toolset.definitions)
     catalogs = toolset.catalogs
     require_compatible(
         {
@@ -370,6 +399,7 @@ def review_policy(
     return Review(
         release,
         minimum,
+        node,
         toolset.capabilities,
         toolset.definitions,
         toolset.uses,
@@ -396,13 +426,14 @@ def load_policy(
         raise lock_failure(
             "policy_lock_missing", f"The policy has no {LOCK}."
         ) from None
-    records = _records(data, review.catalogs)
+    records, recorded = _records(data, review.catalogs, review.node)
     tools: dict[str, Tool] = {}
     try:
+        node = None if review.node is None else read_node(review.node, recorded)
         for name, use in review.uses.items():
             definition = review.definitions[name]
             tools[name] = definition.source.offer(
-                definition, use, review.catalogs[name], records[name]
+                definition, use, review.catalogs[name], records[name], node
             )
     except GatesealError as exc:
         if exc.code != "invalid_field":
@@ -423,15 +454,18 @@ def load_policy(
 
 
 def _records(
-    data: bytes, catalogs: Mapping[str, Catalog]
-) -> dict[str, dict[str, object]]:
+    data: bytes, catalogs: Mapping[str, Catalog], node: str | None
+) -> tuple[dict[str, dict[str, object]], object]:
     """Return each reviewed version's Policy Lock record, by tool and version.
 
     The lock must be the canonical JSON that gateseal policy lock writes, with
-    a record for exactly each version the catalogs review.
+    a record for exactly each version the catalogs review, and a node record
+    exactly when policy.toml pins node. The node record comes second.
     """
     try:
-        document = fields(decode_json(data), {"components", "generated_by"}, LOCK)
+        document = mapping(decode_json(data), LOCK)
+        names = {"components", "generated_by"} | ({NODE} & set(document))
+        document = fields(document, names, LOCK)
         records = {
             name: mapping(
                 fields(value, {"versions"}, f"components.{name}")["versions"],
@@ -446,6 +480,7 @@ def _records(
             "policy_lock_edited",
             f"{LOCK} is not the file {LOCK_COMMAND} writes; it was edited.",
         )
+    _require_node_record(node, NODE in document)
     reviewed = {name: catalog.requires for name, catalog in catalogs.items()}
     missing = [
         f"{name} {key}"
@@ -469,7 +504,21 @@ def _records(
             "policy_lock_unreviewed",
             f"{LOCK} lists {', '.join(unreviewed)}, which policy.toml does not review.",
         )
-    return records
+    return records, document.get(NODE)
+
+
+def _require_node_record(node: str | None, recorded: bool) -> None:
+    """Require the lock to record a Node exactly when policy.toml pins one."""
+    if node is not None and not recorded:
+        raise lock_failure(
+            "policy_lock_stale",
+            f"{LOCK} has no facts for {NODE} {node}, which {POLICY} pins.",
+        )
+    if node is None and recorded:
+        raise lock_failure(
+            "policy_lock_unreviewed",
+            f"{LOCK} records {NODE}, but {POLICY} pins none.",
+        )
 
 
 def require_compatible(

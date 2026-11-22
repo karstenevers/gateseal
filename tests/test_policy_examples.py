@@ -1,12 +1,15 @@
-"""The policy-format guide's alternatives fragment is part of add-a-tool's Black policy.
+"""Policy fragments that the docs show are part of a policy that tests run.
 
-The add-a-tool guide's Gitleaks and Black policies have tests of their own,
-which lock, compile and run them.
+The policy-format guide's alternatives fragment is part of add-a-tool's Black
+policy, and the TypeScript guide's tables are part of the bundled policy. The
+add-a-tool guide's policies have tests of their own, which lock, compile and
+run them.
 """
 
 import tomllib
 
 from doc_examples import example
+from gateseal.policy import bundled_root
 
 
 def within(part, whole):
@@ -25,3 +28,14 @@ def test_the_alternatives_example_is_part_of_the_black_policy():
     black = tomllib.loads(example("add-a-tool.md", "policy tables: black"))
     assert alternatives["capabilities"]["python"]["alternatives"]
     assert within(alternatives, black)
+
+
+def test_the_typescript_example_is_part_of_the_bundled_policy():
+    shown = tomllib.loads(example("typescript.md", "policy tables: typescript"))
+    bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
+    typescript = bundled["capabilities"]["typescript"]
+    assert typescript["tools"]
+    assert shown == {
+        "node": bundled["node"],
+        "capabilities": {"typescript": typescript},
+    }

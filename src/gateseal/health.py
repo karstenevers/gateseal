@@ -16,13 +16,9 @@ from gateseal import lock, setup
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment
 from gateseal.managed_files import MANIFEST
+from gateseal.tools.mise import MINIMUM_MISE, mise_problem, require_mise
 from gateseal.tools.model import LAUNCHERS
-from gateseal.tools.release_binary import (
-    MINIMUM_MISE,
-    BinaryTool,
-    mise_problem,
-    require_mise,
-)
+from gateseal.tools.release_binary import BinaryTool
 from gateseal.worktree import Worktree, operation_lock, preparation_directory
 
 NOT_STORED = frozenset({"policy_unavailable", "policy_content_mismatch"})
@@ -161,22 +157,46 @@ def _mise(locked: lock.Locked | None) -> Check:
         return Check(
             "mise", "skipped", "The Lock did not load, so its tools are unknown."
         )
-    if not _selects_release_binary(locked):
-        return Check("mise", "skipped", "No selected tool is a release binary.")
+    if not any(_mise_installs(locked)):
+        return Check("mise", "skipped", "No selected tool starts through mise.")
     try:
         mise = require_mise(tool_environment())
     except GatesealError as exc:
         return Check(
             "mise",
             "failed",
-            mise_problem("A release binary starts through", exc),
+            mise_problem("A release binary or the policy's Node starts through", exc),
             f"Install mise {MINIMUM_MISE} or later.",
         )
     return Check("mise", "passed", f"{mise} is mise {MINIMUM_MISE} or later.")
 
 
-def _selects_release_binary(locked: lock.Locked) -> bool:
-    return any(isinstance(tool, BinaryTool) for tool in locked.selection.tools)
+def _mise_installs(locked: lock.Locked) -> tuple[bool, bool]:
+    """Say whether mise installs a release binary, and the policy's Node, for
+    the selection."""
+    tools = locked.selection.tools
+    binary = any(isinstance(tool, BinaryTool) for tool in tools)
+    return binary, any(tool.node for tool in tools)
+
+
+def _without_install(binary: bool, node: bool) -> str:
+    """Say what a hook does when mise has not installed what it starts.
+
+    mise then starts an executable of the same name from the PATH. That holds
+    for a release binary. A hook on Node asks mise for its install and stops
+    without it.
+    """
+    effects: list[str] = []
+    if binary:
+        effects.append(
+            "a hook starts an executable of the same name from the PATH when "
+            "mise has not installed its tool"
+        )
+    if node:
+        effects.append(
+            "a hook on Node stops when mise has not installed the pinned Node"
+        )
+    return ", and ".join(effects)
 
 
 def _checks(
@@ -204,13 +224,13 @@ def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note
     off = [
         name for name in AUTO_INSTALL if os.environ.get(name, "").strip().lower() in OFF
     ]
-    if off and locked is not None and _selects_release_binary(locked):
+    binary, node = (False, False) if locked is None else _mise_installs(locked)
+    if off and (binary or node):
         warning = Note(
             "warning",
             "mise_auto_install_off",
             f"mise's install at first use is off through {' and '.join(off)}, "
-            "so a hook starts an executable of the same name from the PATH when "
-            "mise has not installed its tool.",
+            f"so {_without_install(binary, node)}.",
         )
         warnings.append((warning, f"Unset {' and '.join(off)}."))
     return warnings
