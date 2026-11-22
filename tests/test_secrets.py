@@ -361,10 +361,14 @@ def test_a_commit_ignores_mise_files_and_a_host_betterleaks(
     for path, label in configs.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(HOSTILE.format(url=url, sentinels=sentinels, label=label))
+    # pre-commit drops GIT_CONFIG_GLOBAL when it clones a hook's repository and
+    # reads the home's own file, whose rewrite names the test's gateseal origin.
+    shutil.copy(installed.environment["GIT_CONFIG_GLOBAL"], home / ".gitconfig")
     host = script(tmp_path / "host bin/betterleaks", f"touch {sentinels}/host\n")
     env = dict(
         installed.environment,
         HOME=str(home),
+        GIT_CONFIG_GLOBAL=str(home / ".gitconfig"),
         PATH=os.pathsep.join([installed.environment["PATH"], str(host.parent)]),
         MISE_TRUSTED_CONFIG_PATHS=str(tmp_path),
         MISE_YES="1",
