@@ -9,7 +9,6 @@ import json
 
 import pytest
 from gate_runs import AZURE, EOF_FAILED, GITHUB, YAML_PASSED, gateseal, stand_in
-from gateseal import setup
 from gateseal.ci_providers import PROVIDERS
 
 SUMMARY = """\
@@ -35,7 +34,7 @@ def configured(tmp_path_factory):
 
 @pytest.fixture
 def clone(configured, monkeypatch):
-    monkeypatch.setattr(setup, "require_pre_commit", lambda: configured.python)
+    configured.use(monkeypatch)
     yield configured
     configured.reset()
 

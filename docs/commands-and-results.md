@@ -22,6 +22,7 @@ The Manifest is `gateseal.toml`, which selects the policy and checks. The Lock i
 | `status` | Report readiness without network access. This is the default command. |
 | `doctor` | Report readiness, fetch a missing policy, and warn about conflicting settings. |
 | `run` | Run commit checks on all tracked files using setup's pre-commit. |
+| `fetch` | Download each selected release binary and build the hook environments. |
 | `gate` | Run CI-stage checks and selected history scans. |
 | `upgrade` | Select another policy, reviewed tool version, or gateseal release. |
 | `policy init`, `lock`, `check`, `add`, `pin` | Create and maintain a policy directory. |
@@ -38,6 +39,8 @@ The result has `schema`, `command`, `status`, `code`, `changed`, `diagnostics`, 
 
 A `check` diagnostic names the check and its status. A `hook` diagnostic names the hook, tool, origin, stage, status, and whether it modified files. Its status is `passed`, `failed`, `skipped`, or `stopped`. A hook is `stopped` when its tool lists the exit codes of its findings and the hook failed with another exit code, such as an audit that cannot reach its service. A `stopped` hook also gives its `exit_code`. A `finding` can name a file, line, column, rule, and message. A history finding can also name a commit. A `history` diagnostic names the scan status and range. By default, a result lists at most 200 entries, including a gate's `duration` entry. A `truncated` diagnostic reports omitted entries; `--verbose` includes them. In GitHub Actions and Azure Pipelines, every result shows all its output and entries, as with `--verbose`.
 
+A `download` diagnostic of `fetch` names what one download installed, and gives its `attempts`. `fetch` and `gate` try a download three times. A download that still fails ends the command with `download_failed`. The result then has the output of mise or pre-commit as a second diagnostic.
+
 A `duration` diagnostic gives the `gate`'s time in `seconds`, to one decimal, before its other entries. Its message also names the slowest check when a check ran. It also gives `budget_seconds` when the policy sets a [time budget](ci-gate.md#time-budget). A gate over the budget also gives an `over_time_budget` warning. A `nothing_to_check` result has no time.
 
 A warning leaves the exit code unchanged. Text output prints it as a `Warning:` line. In GitHub Actions, where `GITHUB_ACTIONS` is `true`, text output prints it as `::warning title=gateseal::<message>`. In Azure Pipelines, where `TF_BUILD` is `True`, text output prints it as `##vso[task.logissue type=warning]<message>`. Each provider shows that line as a warning on the run. `--json` output never holds this line.
@@ -52,6 +55,6 @@ A warning leaves the exit code unchanged. Text output prints it as a `Warning:` 
 | 3 | The machine, clone, or stored policy is not ready. |
 | 4 | A prerequisite, download, file operation, or executable failed, or the command was interrupted. |
 
-The diagnostic names the result and any suggested action. `run` and `gate` report `tool_failed` when pre-commit exits with a code other than 0 or 1, or when a hook stopped. For a stopped hook, the message names the hook and its exit code. `gate` reports `missing_report` and exits 2 when a hook ran without a [report](tool-definitions.md#reports) that it reads, and the hook that writes it did not fail. `configure` and the policy commands report `missing_report` when no earlier hook writes a report that a hook reads.
+The diagnostic names the result and any suggested action. `fetch` and `gate` report `download_failed` and exit 4 when a download fails, and `unsupported_machine` and exit 3 when a selected release binary has no archive for the machine. In both cases no check ran. `run` and `gate` report `tool_failed` when pre-commit exits with a code other than 0 or 1, or when a hook stopped. For a stopped hook, the message names the hook and its exit code. `gate` reports `missing_report` and exits 2 when a hook ran without a [report](tool-definitions.md#reports) that it reads, and the hook that writes it did not fail. `configure` and the policy commands report `missing_report` when no earlier hook writes a report that a hook reads.
 
 During a commit, pre-commit streams hook output to Git. `gateseal-check` runs the version pinned by the staged Lock. When it stops a commit, it prints a `gateseal:` line and a `Next:` line. gateseal redacts recognized credentials from captured child output. Other tool output can pass through unchanged.

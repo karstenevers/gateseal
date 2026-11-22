@@ -45,7 +45,7 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
     assert job["name"] == (
         "${{ github.event_name == 'push' && 'gateseal-push' || 'gateseal' }}"
     )
-    checkout, prepare, gate = job["steps"]
+    checkout, prepare, _, gate = job["steps"]
     assert checkout["uses"] == CHECKOUT
     assert checkout["with"] == {"fetch-depth": 0, "persist-credentials": False}
     assert gate["env"]["GATESEAL_HEAD"] == "${{ github.sha }}"
@@ -59,6 +59,16 @@ def test_the_workflow_guards_every_event_with_read_only_full_history():
         .endswith('"$RUNNER_TEMP/gateseal-command/bin/gateseal" gate "$@"')
     )
     assert "TOKEN" not in str(gate["env"])
+
+
+def test_a_push_that_deleted_its_branch_downloads_nothing():
+    steps = gate_file("github").document["jobs"]["gateseal"]["steps"]
+    assert [step.get("if") for step in steps] == [
+        None,
+        None,
+        "${{ !github.event.deleted }}",
+        None,
+    ]
 
 
 def evaluate(text, github):

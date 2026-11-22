@@ -20,9 +20,7 @@ def git(root, *arguments):
     return success(["git", *IDENTITY, *arguments], root).stdout.strip()
 
 
-def publish(origin, tag, change=None, annotated=True):
-    """Commit origin's policy/ as the bundled release, changed, and tag it."""
-    data = origin / "policy"
+def write(data, change=None):
     shutil.rmtree(data, ignore_errors=True)
     data.mkdir()
     for asset in POLICY.assets:
@@ -30,6 +28,11 @@ def publish(origin, tag, change=None, annotated=True):
         (data / asset.path).write_bytes(asset.content)
     if change:
         change(data)
+
+
+def publish(origin, tag, change=None, annotated=True):
+    """Commit origin's policy/ as the bundled release, changed, and tag it."""
+    write(origin / "policy", change)
     git(origin, "add", "-A")
     git(origin, "commit", "--allow-empty", "-m", f"Release {tag}")
     git(origin, "tag", *(["-a", "-m", tag] if annotated else []), tag)

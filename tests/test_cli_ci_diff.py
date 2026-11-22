@@ -15,7 +15,6 @@ from gate_runs import (
     gateseal,
     stand_in,
 )
-from gateseal import setup
 from gateseal.diagnostics import COLOR
 
 HEADER = "Changes that the hooks made:"
@@ -30,7 +29,7 @@ def configured(tmp_path_factory):
 
 @pytest.fixture
 def clone(configured, monkeypatch):
-    monkeypatch.setattr(setup, "require_pre_commit", lambda: configured.python)
+    configured.use(monkeypatch)
     yield configured
     configured.reset()
 

@@ -13,8 +13,7 @@ from gateseal.processes import Timed
 from gateseal.tools.model import Hook
 
 HEADING = "Time of each check, in seconds:"
-SETUP = "pre-commit setup, such as installing hooks"
-"""The row of pre-commit's own time, as it starts and installs hook environments."""
+SETUP = "pre-commit's own work, such as reading its configuration"
 
 
 @dataclass(frozen=True)
@@ -35,7 +34,7 @@ def gate_time(
 
     The gate's time is pre-commit's and each history scan's, to one decimal,
     and only past the budget does it warn. A hook that pre-commit skipped is
-    no check, and neither is pre-commit's setup, so neither is the slowest.
+    no check, and neither is pre-commit's own work, so neither is the slowest.
     When no check ran, there are no lines and the entry names no slowest.
     """
     ran = _hook_times(pre_commit, {hook.name for hook in hooks})

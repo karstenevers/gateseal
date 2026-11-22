@@ -26,7 +26,7 @@ from gateseal.tools import built_in_tools, load_definition, reports
 from gateseal.tools.model import Origin
 from gateseal.validation import canonical
 from installation import success
-from stand_ins import executable
+from stand_ins import INSTALLED, executable
 
 CONFIG = ".pre-commit-config.yaml"
 REPORTS = ".gateseal/reports"
@@ -374,7 +374,7 @@ def gate(locked, monkeypatch, written=(), status=0, **statuses):
     for hook, name in NAMES.items():
         ended = statuses.get(hook.replace("-", "_"), "Passed")
         lines.append(f"echo '{name}{'.' * 9}{ended}'")
-    script = "#!/bin/sh\n" + "\n".join([*lines, f"exit {status}\n"])
+    script = "#!/bin/sh\n" + INSTALLED + "\n".join([*lines, f"exit {status}\n"])
     python = executable(locked.root.parent / "stand-in" / "python", script)
     monkeypatch.setattr(setup, "require_pre_commit", lambda: str(python))
     return checks.gate(None, locked, EVERY_FILE)

@@ -32,7 +32,7 @@ def test_each_check_is_listed_with_its_time_and_the_slowest_is_named():
     slowest = "The slowest check took 2.0 seconds: Sleep, then refuse FAIL."
     assert lines == (
         "Time of each check, in seconds:",
-        "    1.2  pre-commit setup, such as installing hooks",
+        "    1.2  pre-commit's own work, such as reading its configuration",
         "    0.1  check yaml",
         "    2.0  Sleep, then refuse FAIL",
         "    0.4  betterleaks history scan",
@@ -58,7 +58,7 @@ def test_a_skipped_hook_and_a_status_line_of_no_hook_are_no_checks():
     _, lines, _ = gate_time(timed, HOOKS, [], None)
     assert lines == (
         "Time of each check, in seconds:",
-        "    4.0  pre-commit setup, such as installing hooks",
+        "    4.0  pre-commit's own work, such as reading its configuration",
         "    1.0  check yaml",
         "The gate took 5.0 seconds. The slowest check took 1.0 seconds: check yaml.",
     )

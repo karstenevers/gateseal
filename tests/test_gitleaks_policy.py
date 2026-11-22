@@ -10,12 +10,14 @@ import json
 import re
 import subprocess
 
+import mise_cache
 import pytest
 from conftest import BUNDLED_TOOLS, on_machine
 from doc_examples import example
+from gateseal.policy import load_policy_tree
 from gateseal.validation import canonical
 from installation import clone, success
-from team_policy import URL, environment, git, publish
+from team_policy import URL, environment, git, publish, write
 
 pytestmark = pytest.mark.integration
 
@@ -72,6 +74,14 @@ def add_gitleaks(data, locked=True):
     lock["components"]["gitleaks"] = {"versions": {"8.30.0": record("8.30.0")}}
     if locked:
         (data / "policy.lock").write_bytes(canonical(lock))
+
+
+@pytest.fixture(scope="module", autouse=True)
+def gitleaks_archive(tmp_path_factory):
+    scratch = tmp_path_factory.mktemp("gitleaks archive")
+    write(scratch / "policy", add_gitleaks)
+    gitleaks = load_policy_tree(scratch / "policy").tools["gitleaks"]
+    mise_cache.fill([gitleaks], scratch)
 
 
 @pytest.fixture(scope="module")

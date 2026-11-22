@@ -185,6 +185,17 @@ GIT_CONFIG_GLOBAL="$HOME/.gitconfig-setup" GIT_CONFIG_NOSYSTEM=1 \\
 """
 
 
+FETCH = "Download the locked tools and hook environments"
+
+
+def fetch(temporary: str) -> str:
+    return (
+        "set -euo pipefail\n"
+        + job_home(temporary)
+        + f'"{temporary}/gateseal-command/bin/gateseal" fetch\n'
+    )
+
+
 def scoped_helper(repository: str, helper: str) -> dict[str, str]:
     """Return the Git configuration that serves helper's token to repository only.
 

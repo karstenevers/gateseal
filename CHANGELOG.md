@@ -9,6 +9,12 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Added
 
+- `gateseal fetch` downloads each selected release binary with mise and
+  builds the hook environments with pre-commit, before any hook runs. It tries
+  a download three times. A download that still fails ends with
+  `download_failed` and exit 4. The message names the archive or the hook
+  repository and says that the code was not checked, and the result shows the
+  output of mise or pre-commit.
 - New keys in `[ci]` adjust the generated CI file. `branches` adds branches
   whose pushes the gate checks, such as `"release/*"`. `schedule = true` adds
   the weekly run. `timeout_minutes` sets the job's time limit. `pool` (Azure
@@ -95,6 +101,11 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- The generated CI file downloads the selected tools in a step of its own,
+  before the gate. The next `gateseal upgrade` writes the file with the step.
+  `gateseal gate` makes the same downloads before its first hook, so a failed
+  download ends the gate with `download_failed` and no longer with
+  `checks_failed`. The gate's time leaves out these downloads.
 - The weekly run of the generated CI file is now off by default. The next
   `gateseal configure` or `gateseal upgrade` writes the file without it. Add
   `schedule = true` to `[ci]` to keep it.

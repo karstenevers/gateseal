@@ -11,6 +11,7 @@ from gateseal import (
     authoring,
     checks,
     ci,
+    fetch,
     health,
     lock,
     setup,
@@ -90,6 +91,7 @@ def _parser() -> Parser:
             "by a newer gateseal"
         ),
         "run": "gateseal run; gateseal --repo '/work/team repo' run --json",
+        "fetch": "gateseal fetch; gateseal fetch --json",
         "gate": "gateseal gate; gateseal gate --base BASE_SHA --head HEAD_SHA; "
         "gateseal gate --merge MERGE_SHA; gateseal gate --after AFTER_SHA; "
         "gateseal gate --before BEFORE_SHA --after AFTER_SHA --json",
@@ -242,6 +244,8 @@ def _locked(
         )
     if command == "run":
         return checks.run(locked)
+    if command == "fetch":
+        return fetch.run(locked)
     return checks.gate(worktree, locked, _scope(worktree, arguments), in_ci)
 
 
@@ -340,6 +344,7 @@ def _command_name(raw: list[str]) -> str:
                 "check",
                 "upgrade",
                 "run",
+                "fetch",
                 "gate",
                 "status",
                 "doctor",
@@ -381,6 +386,7 @@ def main(argv: list[str] | None = None) -> int:
             str(exc),
             exc.exit_code,
             next_steps=(exc.next_step,) if exc.next_step else (),
+            details=exc.details,
         )
     print(_output(result, as_json, full, provider))
     return result.exit_code

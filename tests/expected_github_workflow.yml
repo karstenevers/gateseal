@@ -93,6 +93,21 @@ jobs:
             GIT_CONFIG_COUNT=0 GIT_CONFIG_PARAMETERS= \
             "$command/bin/gateseal" setup
           "$command/bin/gateseal" check
+      - name: Download the locked tools and hook environments
+        if: ${{ !github.event.deleted }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export HOME="$RUNNER_TEMP/gateseal-home"
+          unset XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME
+          unset GIT_CONFIG_GLOBAL GIT_TEMPLATE_DIR PRE_COMMIT_HOME SKIP
+          unset UV_CACHE_DIR UV_PYTHON_CACHE_DIR UV_PYTHON_INSTALL_DIR UV_CONFIG_FILE
+          unset UV_PROJECT_ENVIRONMENT PIP_CACHE_DIR VIRTUALENV_OVERRIDE_APP_DATA
+          for name in ${!MISE_@}; do
+            unset "$name"
+          done
+          export MISE_SYSTEM_DATA_DIR="$HOME/mise-system"
+          "$RUNNER_TEMP/gateseal-command/bin/gateseal" fetch
       - name: Run the gateseal gate
         shell: bash
         env:

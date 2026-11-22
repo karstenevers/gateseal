@@ -11,7 +11,7 @@ import json
 
 import pytest
 from conftest import PIN
-from gate_files import SERVED, credential, gate_file, manifest
+from gate_files import SERVED, credential, gate_file, job, manifest
 from gateseal.ci_providers import PROVIDERS
 from gateseal.ci_providers.model import MISE_SHA256, MISE_URL, UV_SHA256, UV_URL
 from gateseal.cli import main
@@ -68,6 +68,49 @@ def test_preparation_checks_each_download_before_it_runs_one(provider):
     assert '"gateseal @ git+$GATESEAL_REPOSITORY@$GATESEAL_COMMIT"' in script
 
 
+def step_names(provider):
+    steps = job(provider, gate_file(provider).document)["steps"]
+    return [step["name" if provider == "github" else "displayName"] for step in steps]
+
+
+@EACH
+def test_every_download_is_a_step_of_its_own_before_the_gate(provider):
+    file = gate_file(provider)
+    assert step_names(provider)[2:] == [
+        "Download the locked tools and hook environments",
+        "Run the gateseal gate",
+    ]
+    assert file.fetch.script.splitlines()[-1] == (
+        f'"${TEMPORARY[provider]}/gateseal-command/bin/gateseal" fetch'
+    )
+    assert file.fetch.env == {}
+
+
+@EACH
+def test_the_fetch_installs_into_the_home_that_the_gate_reads(provider):
+    file = gate_file(provider)
+    moved = file.fetch.script.splitlines()[:-1]
+    assert moved[:2] == [
+        "set -euo pipefail",
+        f'export HOME="${TEMPORARY[provider]}/gateseal-home"',
+    ]
+    assert file.gate.script.splitlines()[: len(moved)] == moved
+
+
+@EACH
+def test_a_fetch_that_fails_ends_its_step(provider, tmp_path):
+    command = tmp_path / "gateseal-command" / "bin" / "gateseal"
+    command.parent.mkdir(parents=True)
+    command.write_text('#!/bin/sh\necho "$1 from $HOME"\nexit 4\n')
+    command.chmod(0o755)
+    environment = {"PATH": "/usr/bin:/bin", TEMPORARY[provider]: str(tmp_path)}
+    ran = process(
+        ["bash", "-c", gate_file(provider).fetch.script], tmp_path, environment
+    )
+    assert ran.returncode == 4
+    assert ran.stdout == f"fetch from {tmp_path}/gateseal-home\n"
+
+
 @EACH
 def test_a_lock_value_reaches_a_script_only_through_env(provider):
     other = dataclasses.replace(
@@ -75,11 +118,12 @@ def test_a_lock_value_reaches_a_script_only_through_env(provider):
     )
     first = gate_file(provider, SERVED[provider])
     second = gate_file(provider, SERVED[provider] + "-2", branch="trunk", pin=other)
-    assert (first.prepare.script, first.gate.script) == (
+    assert (first.prepare.script, first.fetch.script, first.gate.script) == (
         second.prepare.script,
+        second.fetch.script,
         second.gate.script,
     )
-    scripts = second.prepare.script + second.gate.script
+    scripts = second.prepare.script + second.fetch.script + second.gate.script
     values = (other.repository, other.commit, SERVED[provider], "trunk", UV_SHA256)
     assert not [value for value in values if value in scripts]
     assert other.commit in second.prepare.env.values()

@@ -44,8 +44,11 @@ uv run pytest tests -n auto -m 'not network'
 
 The first pytest command runs the unit layer in seconds. The second adds the
 integration layer, which builds a wheel, installs it and drives the installed
-`gateseal` command in real Git repositories. Tests marked `network` read
-private test fixtures and run in CI.
+`gateseal` command in real Git repositories. Its first run downloads each
+release binary archive that the tests need into `.pytest_cache`, as
+`gateseal fetch` does. Every mise in the tests then installs from that folder
+with the network off, so a test that asks for another archive fails at once.
+Tests marked `network` read private test fixtures and run in CI.
 
 Run these too when they apply:
 

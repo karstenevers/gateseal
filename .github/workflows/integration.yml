@@ -57,6 +57,11 @@ jobs:
           uv --version
           MISE_OFFLINE=1 mise --version
           uv run python --version
+      - name: Keep the archives that mise downloads for the tests
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .pytest_cache/d/mise-downloads
+          key: mise-downloads-${{ runner.os }}-${{ hashFiles('src/gateseal/data/reference/policy.lock', 'tests/test_gitleaks_policy.py') }}
       - name: Test built wheels and real hooks
         run: uv run pytest tests -n auto -m 'not network' -q
 
@@ -82,6 +87,11 @@ jobs:
         run: uv sync --locked --python 3.14.10
       - name: Install the tested mise floor
         uses: ./.github/actions/install-mise
+      - name: Keep the archives that mise downloads for the tests
+        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: .pytest_cache/d/mise-downloads
+          key: mise-downloads-${{ runner.os }}-${{ hashFiles('src/gateseal/data/reference/policy.lock', 'tests/test_gitleaks_policy.py') }}
       - name: Test every layer under coverage
         env:
           # A fine-grained token that reads only karstenevers/gateseal-fixtures.
