@@ -3,11 +3,13 @@
 Git LFS uploads a push's objects from its own pre-push hook, and pre-commit's
 push launcher takes that hook's place. pre-commit install keeps a hook it
 finds as pre-push.legacy and runs it first, so Git LFS keeps uploading when it
-was set up before the launcher. Set up later, Git LFS cannot write its hook,
-and a push then passes without an upload. This hook stops that push when a
-file of the index, or a commit that the remote lacks, is of Git LFS.
-pre-commit builds it from gateseal's repository at the commit the Lock pins and
-runs it at every push of a selection with a push hook.
+was set up before the launcher. Set up later, Git LFS cannot write its hook.
+gateseal setup --refresh then uploads from a push hook of Git's configuration,
+but a plain pre-commit install writes none, and a push passes without an
+upload. This hook stops that push when a file of the index, or a commit that
+the remote lacks, is of Git LFS. pre-commit builds it from gateseal's
+repository at the commit the Lock pins and runs it at every push of a
+selection with a push hook.
 """
 
 import os
@@ -38,6 +40,12 @@ POINTER = re.compile(
 
 POINTER_LIMIT = 1024
 """Git LFS reads no file of this many bytes or more as a pointer."""
+
+SET_UP = r"^filter\.lfs\.(clean|process)$"
+"""A pattern of the settings of the clean and the process filter of Git LFS.
+
+Git makes pointers with either filter, so either means Git LFS is set up.
+"""
 
 REMOTE = "PRE_COMMIT_REMOTE_NAME"
 """Where pre-commit names the remote of the push."""
@@ -104,12 +112,8 @@ def remote_lacks_pointer(git: str, root: Path, remote: str | None) -> bool:
 
 
 def lfs_configured(git: str, root: Path) -> bool:
-    """Tell whether Git LFS is set up for this user, so commits hold its pointers.
-
-    Git makes a pointer with the clean filter or with the process filter.
-    """
-    setting = r"^filter\.lfs\.(clean|process)$"
-    return bool(_optional(git, root, "config", "--get-regexp", setting))
+    """Tell whether Git LFS is set up for this user, so commits hold its pointers."""
+    return bool(_optional(git, root, "config", "--get-regexp", SET_UP))
 
 
 def uploads(git: str, root: Path, hooks: Path) -> bool:
@@ -152,11 +156,12 @@ def check(git: str, root: Path, remote: str | None = None) -> None:
         "This repository tracks files with Git LFS, but no push hook of this "
         "clone starts Git LFS, so a push uploads no LFS object.",
         # git lfs update --force and pre-commit install would replace a kept hook.
-        next_step=f'Add the line git lfs pre-push "$@" to the hook {kept} and make '
-        "that file executable. pre-commit runs it first. Then push again."
+        next_step="Run gateseal setup --refresh, or add the line "
+        f'git lfs pre-push "$@" to the hook {kept} and make that file '
+        "executable. Then push again."
         if kept.exists()
-        else "Run git lfs update --force, then pre-commit install or gateseal "
-        "setup --refresh. Then push again.",
+        else "Run gateseal setup --refresh, or git lfs update --force and then "
+        "pre-commit install. Then push again.",
     )
 
 

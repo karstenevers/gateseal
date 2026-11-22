@@ -75,6 +75,11 @@ class Pushing:
         return log.read_text().splitlines() if log.exists() else []
 
 
+def owned_pre_commit():
+    """Return the pre-commit that setup installs in the test's home."""
+    return Path.home() / ".local/share/gateseal/tools/pre-commit/bin/pre-commit"
+
+
 def passed(name, shown):
     return f"{name}{'.' * (79 - len(name) - len('Passed'))}Passed" in shown
 
@@ -131,8 +136,7 @@ def test_a_new_clone_gets_the_push_launcher_from_pre_commit_install(
     success(["git", "clone", "--quiet", module_pushing.remote, clone], tmp_path)
     hooks = clone / ".git" / "hooks"
     assert [path.name for path in hooks.iterdir()] == ["pre-commit"]
-    owned = Path.home() / ".local/share/gateseal/tools/pre-commit/bin/pre-commit"
-    success([owned, "install"], clone)
+    success([owned_pre_commit(), "install"], clone)
     assert sorted(path.name for path in hooks.iterdir()) == ["pre-commit", "pre-push"]
     assert b"--hook-type=pre-push" in (hooks / "pre-push").read_bytes()
     second = Pushing(clone, module_pushing.remote)
@@ -235,9 +239,15 @@ needs_lfs = pytest.mark.skipif(shutil.which("git-lfs") is None, reason="needs Gi
 STOPPED = (
     "gateseal: This repository tracks files with Git LFS, but no push hook of this "
     "clone starts Git LFS, so a push uploads no LFS object.\n"
-    "Next: Run git lfs update --force, then pre-commit install or gateseal setup "
-    "--refresh. Then push again."
+    "Next: Run gateseal setup --refresh, or git lfs update --force and then "
+    "pre-commit install. Then push again."
 )
+
+
+def blob(clone):
+    """Write a blob that Git LFS tracks, not yet added."""
+    (clone / ".gitattributes").write_text("*.bin filter=lfs -text\n")
+    (clone / "blob.bin").write_bytes(bytes(range(256)) * 4)
 
 
 @pytest.fixture
@@ -248,8 +258,7 @@ def tracking(pushing, monkeypatch):
     configuration can hold its filter, so Git does not read that here.
     """
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    (pushing.clone / ".gitattributes").write_text("*.bin filter=lfs -text\n")
-    (pushing.clone / "blob.bin").write_bytes(bytes(range(256)) * 4)
+    blob(pushing.clone)
     return pushing
 
 
@@ -261,6 +270,13 @@ def add_blob(pushing):
 def uploaded(pushing):
     """Return the Git LFS objects that the remote holds."""
     return [p for p in (pushing.remote / "lfs").rglob("*") if p.is_file()]
+
+
+def set_up_git_lfs_late(pushing):
+    """Set up Git LFS, which cannot write its push hook beside the launcher."""
+    refused = process(["git", "lfs", "install", "--local"], pushing.clone)
+    assert refused.returncode != 0, refused.stdout + refused.stderr
+    assert "Hook already exists: pre-push" in refused.stdout + refused.stderr
 
 
 @needs_lfs
@@ -279,27 +295,92 @@ def test_git_lfs_set_up_before_the_push_launcher_uploads_at_a_push(installed, tr
     assert len(uploaded(tracking)) == 1
 
 
+def older_configuration(installed, pushing, branch):
+    """Commit on a new branch the configuration from before the push hook."""
+    pushing.git("switch", "--quiet", "-c", branch)
+    manifest = pushing.clone / "gateseal.toml"
+    manifest.write_text(manifest.read_text().replace(TABLE, ""))
+    installed.cli(pushing.clone, "configure")
+    pushing.git("commit", "--quiet", "-a", "-m", "Drop the push hook")
+
+
+def no_configuration(installed, pushing, branch):
+    """Start a branch as if from before the repository adopted gateseal."""
+    pushing.git("switch", "--quiet", "--orphan", branch)
+
+
 @needs_lfs
-def test_git_lfs_set_up_after_the_push_launcher_stops_the_push_until_repaired(
-    installed, tracking
+@pytest.mark.parametrize("start", [older_configuration, no_configuration])
+def test_git_lfs_set_up_late_uploads_from_a_branch_without_push_checks(
+    installed, tracking, start
 ):
-    """Git LFS cannot write its hook then, and the push would upload nothing."""
-    before = tracking.pushed()
-    refused = process(["git", "lfs", "install", "--local"], tracking.clone)
-    assert refused.returncode != 0, refused.stdout + refused.stderr
+    """gateseal setup --refresh wrote a push hook of Git's configuration for it."""
+    set_up_git_lfs_late(tracking)
+    start(installed, tracking, "plain")
     after = add_blob(tracking)
-    code, shown = tracking.push("main")
+    code, shown = tracking.push("plain")
+    assert code == 0, shown
+    assert LFS_CHECK not in shown, shown
+    assert tracking.pushed("plain") == after
+    assert len(uploaded(tracking)) == 1
+
+
+@needs_lfs
+def test_git_lfs_set_up_late_uploads_from_a_linked_worktree_without_push_checks(
+    installed, tracking, tmp_path
+):
+    set_up_git_lfs_late(tracking)
+    older_configuration(installed, tracking, "plain")
+    tracking.git("switch", "--quiet", "main")
+    linked = Pushing(tmp_path / "linked ü", tracking.remote)
+    tracking.git("worktree", "add", "--quiet", str(linked.clone), "plain")
+    blob(linked.clone)
+    after = add_blob(linked)
+    code, shown = linked.push("plain")
+    assert code == 0, shown
+    assert LFS_CHECK not in shown, shown
+    assert linked.pushed("plain") == after
+    assert len(uploaded(linked)) == 1
+
+
+@pytest.fixture
+def teammate(pushing, tmp_path, monkeypatch):
+    """A second clone, set up with a plain pre-commit install, and a blob."""
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    clone = tmp_path / "teammate"
+    success(["git", "clone", "--quiet", pushing.remote, clone], tmp_path)
+    second = Pushing(clone, pushing.remote)
+    second.git("config", "user.name", "gateseal test")
+    second.git("config", "user.email", "gateseal@example.invalid")
+    success([owned_pre_commit(), "install"], clone)
+    blob(clone)
+    return second
+
+
+@needs_lfs
+@pytest.mark.parametrize("repair", ["setup", "pre-commit"])
+def test_git_lfs_set_up_late_after_a_plain_pre_commit_install_stops_until_repaired(
+    installed, teammate, repair
+):
+    """pre-commit install writes no upload hook, so the Git LFS check stops the push."""
+    before = teammate.pushed()
+    set_up_git_lfs_late(teammate)
+    after = add_blob(teammate)
+    code, shown = teammate.push("main")
     assert code != 0, shown
     assert STOPPED in shown, shown
-    assert tracking.pushed() == before
-    assert uploaded(tracking) == []
-    tracking.git("lfs", "update", "--force")
-    installed.cli(tracking.clone, "setup", "--refresh")
-    code, shown = tracking.push("main")
+    assert teammate.pushed() == before
+    assert uploaded(teammate) == []
+    if repair == "setup":
+        installed.cli(teammate.clone, "setup", "--refresh")
+    else:
+        teammate.git("lfs", "update", "--force")
+        success([owned_pre_commit(), "install"], teammate.clone)
+    code, shown = teammate.push("main")
     assert code == 0, shown
     assert passed(LFS_CHECK, shown), shown
-    assert tracking.pushed() == after
-    assert len(uploaded(tracking)) == 1
+    assert teammate.pushed() == after
+    assert len(uploaded(teammate)) == 1
 
 
 def test_a_user_without_git_lfs_pushes_a_tracked_file_as_it_is(tracking):

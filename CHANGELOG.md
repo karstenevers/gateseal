@@ -80,14 +80,24 @@ change the manifest, policy or lock format, and its entry says how to move.
   without a push hook compiles to the same files as before, and its clones
   get no push launcher. `gateseal setup --refresh` removes a push launcher
   that it wrote when no worktree of the clone has a push hook any more.
+- The Git LFS upload hook. pre-commit's push launcher takes the place of the
+  push hook of Git LFS, and runs that hook only if it was there first. So
+  `gateseal setup --refresh` adds `hook.gateseal-lfs-upload` to the clone's
+  Git configuration beside the push launcher, and removes it with that
+  launcher, unless another push hook keeps Git LFS from writing its own. At
+  each push from a clone that holds Git LFS objects, it starts
+  `git lfs pre-push`, on every branch and in every worktree, or stops the
+  push when `git-lfs` is missing. Git LFS uploads before the checks at a
+  push run, so a push that a check stops can leave its LFS objects on the
+  remote, but not its branch.
 - The `gateseal-lfs-check` hook, which runs at each push of a selection with
-  a push hook. pre-commit's push launcher takes the place of the push hook of
-  Git LFS, and runs that hook only if it was there first. The check stops a
-  push from a clone that has no push hook that starts Git LFS, when a file of
-  its index or a commit that the remote lacks is of Git LFS. It names the
-  repair: `git lfs update --force`, then `pre-commit install`, or a line to
-  add to a push hook that pre-commit kept. It accepts a push hook of Git's
-  configuration that runs `git lfs pre-push`.
+  a push hook. It stops a push from a clone that has no push hook that starts
+  Git LFS, such as after a plain `pre-commit install`, when a file of its
+  index or a commit that the remote lacks is of Git LFS. It names the repair:
+  `gateseal setup --refresh`, or `git lfs update --force` and then
+  `pre-commit install`, or a line to add to a push hook that pre-commit kept.
+  It accepts any push hook of Git's configuration that runs
+  `git lfs pre-push`.
 - A failed gate in GitHub Actions or Azure Pipelines shows more. The job log
   shows all the hook output, in color, and the diff of each file that a hook
   changed. Each failed hook adds an error annotation, on the file and line

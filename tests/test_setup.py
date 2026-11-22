@@ -755,7 +755,7 @@ def test_refresh_installs_the_push_launcher_only_where_the_configuration_asks(
     config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
     code, result = gateseal("--repo", clone, "setup", "--refresh")
     assert (code, result["code"]) == (0, "set_up")
-    assert result["changed"] == [str(hooks / "pre-push")]
+    assert result["changed"] == [str(hooks / "pre-push"), setup.UPLOAD_HOOK]
     assert notes(result) == []
     assert sorted(p.name for p in hooks.iterdir()) == ["pre-commit", "pre-push"]
     launcher = machine.launcher.read_bytes()
@@ -789,15 +789,21 @@ def test_refresh_writes_the_commit_launcher_and_no_launcher_of_another_type(
         (clone / ".pre-commit-config.yaml").write_text(config)
     code, result = gateseal("--repo", clone, "setup", "--refresh")
     hooks = clone / ".git" / "hooks"
+    changed = [str(hooks / name) for name in written]
+    changed += [setup.UPLOAD_HOOK] if "pre-push" in written else []
     assert code == 0
-    assert result["changed"][-len(written) :] == [str(hooks / name) for name in written]
+    assert result["changed"][-len(changed) :] == changed
     assert sorted(p.name for p in hooks.iterdir()) == written
 
 
 def test_refresh_removes_a_push_launcher_that_the_configuration_no_longer_asks_for(
     machine, tmp_path
 ):
-    """That launcher runs no check and keeps Git LFS from writing its push hook."""
+    """That launcher runs no check and keeps Git LFS from writing its push hook.
+
+    The hook that pre-commit kept comes back and keeps Git LFS out too, so the
+    upload hook stays.
+    """
     gateseal("setup")
     clone = repository(tmp_path / "clone")
     hooks = clone / ".git" / "hooks"
@@ -815,6 +821,8 @@ def test_refresh_removes_a_push_launcher_that_the_configuration_no_longer_asks_f
     assert notes(result) == []
     assert sorted(p.name for p in hooks.iterdir()) == ["pre-commit", "pre-push"]
     assert (hooks / "pre-push").read_text() == kept
+    hook = f"{setup.UPLOAD_HOOK}.event"
+    assert success(["git", "config", "--get", hook], clone).stdout == "pre-push\n"
     code, result = gateseal("--repo", clone, "setup", "--refresh")
     assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
     assert (hooks / "pre-push").read_text() == kept
@@ -829,7 +837,10 @@ def test_refresh_removes_a_push_launcher_without_a_kept_hook(machine, tmp_path):
     gateseal("--repo", clone, "setup", "--refresh")
     config.unlink()
     code, result = gateseal("--repo", clone, "setup", "--refresh")
-    assert (code, result["changed"]) == (0, [str(hooks / "pre-push")])
+    assert (code, result["changed"]) == (
+        0,
+        [str(hooks / "pre-push"), setup.UPLOAD_HOOK],
+    )
     assert [p.name for p in hooks.iterdir()] == ["pre-commit"]
 
 
@@ -880,12 +891,12 @@ def test_refresh_writes_the_push_launcher_that_another_worktree_asks_for(
     config = linked / ".pre-commit-config.yaml"
     config.write_text(configuration(tmp_path / "log", "pre-commit", "pre-push"))
     code, result = gateseal("--repo", clone, "setup", "--refresh")
-    assert (code, result["changed"]) == (0, [str(hook)])
+    assert (code, result["changed"]) == (0, [str(hook), setup.UPLOAD_HOOK])
     code, result = gateseal("--repo", clone, "setup", "--refresh")
     assert (code, result["code"], result["changed"]) == (0, "already_set_up", [])
     config.unlink()
     code, result = gateseal("--repo", clone, "setup", "--refresh")
-    assert (code, result["changed"]) == (0, [str(hook)])
+    assert (code, result["changed"]) == (0, [str(hook), setup.UPLOAD_HOOK])
     assert not hook.exists()
 
 
@@ -917,7 +928,7 @@ def test_refresh_keeps_another_tools_push_hook_and_a_push_runs_both(machine, tmp
         configuration(log, "pre-commit", "pre-push")
     )
     code, result = gateseal("--repo", clone, "setup", "--refresh")
-    assert (code, result["changed"]) == (0, [str(hook)])
+    assert (code, result["changed"]) == (0, [str(hook), setup.UPLOAD_HOOK])
     legacy = hook.with_name("pre-push.legacy")
     assert result["diagnostics"][1:] == [
         {

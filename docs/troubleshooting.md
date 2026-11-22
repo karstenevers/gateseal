@@ -16,7 +16,7 @@ Run `pre-commit install` from the clone root. If setup installed pre-commit, `ga
 
 ## A push runs no checks or stops for Git LFS
 
-Run `pre-commit install` from the clone root. It installs the push hook if the repository has checks at a push. If a push reports that no push hook starts Git LFS, see [Git LFS](work-in-a-configured-repository.md#git-lfs).
+Run `pre-commit install` from the clone root. It installs the push hook if the repository has checks at a push. If setup installed pre-commit, run `gateseal setup --refresh` instead. It also adds the hook that starts Git LFS at each push. If a push reports that no push hook starts Git LFS, see [Git LFS](work-in-a-configured-repository.md#git-lfs).
 
 In a repository with SHA-256 object names, pre-commit 4.7.0 stops the deletion of a remote branch. Add `--no-verify` to that `git push`.
 
