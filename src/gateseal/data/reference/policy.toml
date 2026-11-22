@@ -100,3 +100,13 @@ reviewed = ["3.10.1"]
 
 [capabilities.typescript.choices]
 exclude = []
+
+# typescript-types is for an npm or a pnpm project. tsc runs in the
+# repository's own project, where the lockfile pins the packages that it
+# resolves imports from. The pin is the TypeScript that ESLint's packages pin.
+# A Version Exception can select 7.0.2, the faster native compiler. It refuses
+# the tsconfig.json options that TypeScript 7 removed, such as baseUrl. 6.0.3
+# accepts them with "ignoreDeprecations": "6.0", and 5.9.3 accepts them as is.
+[capabilities.typescript-types.tools.tsc]
+pin = "6.0.3"
+reviewed = ["6.0.3", "7.0.2", "5.9.3"]

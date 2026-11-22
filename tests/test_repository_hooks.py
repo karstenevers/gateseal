@@ -208,12 +208,12 @@ def test_run_names_a_file_in_the_repository(tmp_path):
         (
             MIGRATIONS.replace("check-migrations]", "gateseal-check]"),
             "hooks.gateseal-check has the ID gateseal-check, which gateseal's own "
-            "check hook has.",
+            "hook has.",
         ),
         (
             MIGRATIONS.replace("Check migration numbers", CHECK_HOOK_NAME),
             "hooks.check-migrations has the name Check files and tools against "
-            "gateseal.lock, which gateseal's own check hook has.",
+            "gateseal.lock, which gateseal's own hook has.",
         ),
         (
             MIGRATIONS.replace("Check migration numbers", "check yaml"),

@@ -32,7 +32,17 @@ LFS_HOOK = "gateseal-lfs-check"
 LFS_HOOK_NAME = "Check that a push uploads to Git LFS"
 """The name that pre-commit prints for LFS_HOOK."""
 
-OWN_HOOKS = {CHECK_HOOK: CHECK_HOOK_NAME, LFS_HOOK: LFS_HOOK_NAME}
+NODE_PACKAGES_HOOK = "gateseal-node-packages"
+"""The hook of gateseal's repository that installs a Node project's packages."""
+
+NODE_PACKAGES_HOOK_NAME = "Install the Node project's packages from its lockfile"
+"""The name that pre-commit prints for NODE_PACKAGES_HOOK."""
+
+OWN_HOOKS = {
+    CHECK_HOOK: CHECK_HOOK_NAME,
+    LFS_HOOK: LFS_HOOK_NAME,
+    NODE_PACKAGES_HOOK: NODE_PACKAGES_HOOK_NAME,
+}
 """The name of each hook that gateseal's repository defines, by ID."""
 
 MINIMUM_UV = "0.13.5"
@@ -81,15 +91,19 @@ class GatesealPin:
         """Tell whether this is the gateseal that runs, from its repository."""
         return (self.repository, self.version) == (REPOSITORY, __version__)
 
-    def hook_repository(self, pushes: bool) -> dict[str, object]:
+    def hook_repository(
+        self, pushes: bool, *hooks: dict[str, object]
+    ) -> dict[str, object]:
         """Return the native configuration's repository of gateseal's own hooks.
 
         The check hook runs at every commit. pushes says that the selection
-        runs a hook at a push, which adds the hook that guards Git LFS.
+        runs a hook at a push, which adds the hook that guards Git LFS. hooks
+        follow them: entries of other hooks of the repository that the
+        selection needs, such as NODE_PACKAGES_HOOK.
         """
-        hooks = [CHECK_HOOK, LFS_HOOK] if pushes else [CHECK_HOOK]
+        own = [CHECK_HOOK, LFS_HOOK] if pushes else [CHECK_HOOK]
         return {
             "repo": self.repository,
             "rev": self.commit,
-            "hooks": [{"id": hook} for hook in hooks],
+            "hooks": [*({"id": hook} for hook in own), *hooks],
         }

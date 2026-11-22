@@ -5,18 +5,22 @@ its [source] table. A Built-in Tool is a Tool Definition in the package's
 data/tools, <name>.tool.toml, so the gateseal commit that the Lock pins
 covers it. The suffix keeps every tool from reading a definition as its own
 configuration, as Ruff reads any ruff.toml it walks past. Kind modules import
-gateseal.tools.model and the shared modules gateseal.tools.mise and
-gateseal.tools.node, never this package or another kind, so loading it cannot
-cycle.
+gateseal.tools.model and the shared modules gateseal.tools.mise,
+gateseal.tools.node and gateseal.tools.package_managers, never this package.
+Only node_project builds on another kind, npm_package, which imports no kind,
+so loading it cannot cycle.
 """
 
 import functools
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from importlib.resources import files
 from importlib.resources.abc import Traversable
+from pathlib import Path
 
+from gateseal.compiler_release import OWN_HOOKS
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import (
+    node_project,
     npm_package,
     pre_commit_repository,
     release_binary,
@@ -26,6 +30,7 @@ from gateseal.tools.model import (
     NAME,
     Origin,
     Source,
+    Tool,
     ToolDefinition,
     parse_definition,
     unsupported,
@@ -35,12 +40,28 @@ from gateseal.validation import mapping, parse_toml, string
 SUFFIX = ".tool.toml"
 
 KINDS: Mapping[str, Callable[[object, str], Source]] = {
+    node_project.NodeProject.kind: node_project.parse_source,
     npm_package.NpmPackage.kind: npm_package.parse_source,
     pre_commit_repository.PreCommitRepository.kind: pre_commit_repository.parse_source,
     release_binary.ReleaseBinary.kind: release_binary.parse_source,
     uv_project.UvProject.kind: uv_project.parse_source,
 }
 """Each kind's parser of a definition's [source], by its value of kind."""
+
+PROJECT_CHECKS: tuple[Callable[[Path, Iterable[Tool]], None], ...] = (
+    uv_project.require_project,
+    node_project.require_project,
+)
+"""Each check that the repository holds the project its kind's tools run in."""
+
+
+def require_projects(root: Path, tools: Collection[Tool]) -> None:
+    """Require the repository at root to hold the project that each tool runs in.
+
+    A kind whose tools run in a project adds its check to PROJECT_CHECKS.
+    """
+    for check in PROJECT_CHECKS:
+        check(root, tools)
 
 
 def load_definition(name: str, data: bytes, origin: Origin) -> ToolDefinition:
@@ -56,11 +77,14 @@ def require_distinct(definitions: Iterable[ToolDefinition], subject: str) -> Non
     """Require distinct hook IDs, hook names and owned outputs across definitions.
 
     The Lock and run's results name hooks by ID, pre-commit's status lines by
-    name, and each owned output has one writer. Two tools may take different
-    hooks from one hook repository, each at its own pin.
+    name, and each owned output has one writer. gateseal's own hooks claim
+    their IDs and names first. Two tools may take different hooks from one
+    hook repository, each at its own pin.
     subject names the definitions, such as the policy's tools, in the failure.
     """
-    claims: dict[tuple[str, str], str] = {}
+    own = "gateseal's own hooks"
+    claims = {("hook ID", hook): own for hook in OWN_HOOKS}
+    claims |= {("hook name", name): own for name in OWN_HOOKS.values()}
     for definition in definitions:
         claimed = [("hook ID", hook.id) for hook in definition.hooks.values()]
         claimed += [("hook name", hook.name) for hook in definition.hooks.values()]

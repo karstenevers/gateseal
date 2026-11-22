@@ -177,8 +177,8 @@ def require_own_ids(
     because results and pre-commit's SKIP name a hook by its ID and
     pre-commit's report by its name.
     """
-    ids = dict.fromkeys(OWN_HOOKS, "gateseal's own check hook")
-    names = dict.fromkeys(OWN_HOOKS.values(), "gateseal's own check hook")
+    ids = dict.fromkeys(OWN_HOOKS, "gateseal's own hook")
+    names = dict.fromkeys(OWN_HOOKS.values(), "gateseal's own hook")
     for hook in policy_hooks:
         ids[hook.id] = names[hook.name] = "a hook of the selected policy"
     for hook in hooks:

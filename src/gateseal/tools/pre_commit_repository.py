@@ -53,6 +53,7 @@ class PreCommitRepository:
     starts: ClassVar[Starts] = Starts.UPSTREAM_HOOKS
     remark: ClassVar[str] = ""
     on_node: ClassVar[bool] = False
+    scans_history: ClassVar[bool] = False
     repository: str
     tag: str
 

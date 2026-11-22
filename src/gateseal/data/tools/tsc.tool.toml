@@ -1,0 +1,18 @@
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+# tsc reads the project's own tsconfig.json and resolves imports from its
+# node_modules, which gateseal's own hook installs from the lockfile first.
+[source]
+package = "typescript"
+
+[executable]
+name = "tsc"
+
+# --project names the tsconfig.json at the repository root. Without it, tsc
+# looks in each folder above when the root has none.
+[hooks.tsc]
+name = "tsc"
+args = ["--noEmit", "--project", "tsconfig.json"]
+output = "plain"

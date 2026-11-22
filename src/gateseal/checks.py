@@ -21,7 +21,15 @@ from gateseal.hook_results import FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import Timed, execute, execute_timed, pre_commit_command
 from gateseal.tools import reports
-from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, Tool, ToolDefinition
+from gateseal.tools.model import (
+    HOOK_STAGES,
+    RANGE,
+    Hook,
+    Stage,
+    Tool,
+    ToolDefinition,
+)
+from gateseal.tools.node_project import INSTALL
 from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
@@ -67,8 +75,7 @@ def run(locked: lock.Locked) -> Result:
         allow_failure=True,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    results = hook_results(details, locked.selection.hooks, "run")
-    entries = tuple(_on_node(results, locked))
+    entries = tuple(_hook_entries(details, locked, "run"))
     failure = _tool_failure(process.returncode, entries)
     if failure is not None:
         message, step = failure
@@ -146,7 +153,7 @@ def gate(
     scans = _scan_history(locked, revisions, env)
     duration, times, over = gate_time(
         pre_commit,
-        locked.selection.hooks,
+        _reported_hooks(locked),
         [
             CheckTime(f"{tool.definition.name} history scan", timed.seconds)
             for tool, timed in scans
@@ -154,11 +161,11 @@ def gate(
         locked.policy.time_budget_seconds,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    results = hook_results(details, locked.selection.hooks, "ci")
+    results = _hook_entries(details, locked, "ci")
     if clean is not None and any(entry.get("modified") for entry in results):
         details += _changes(worktree) if clean else EDITED
     missing = reports.missing(locked.root, locked.selection.reads, results)
-    entries = [duration, *_on_node(results, locked)]
+    entries = [duration, *results]
     outcomes: set[str] = set()
     for tool, timed in scans:
         definition, scanned = tool.definition, timed.process
@@ -175,16 +182,26 @@ def gate(
     return replace(result, notes=over, check_times=times)
 
 
-def _on_node(
-    entries: list[dict[str, object]], locked: lock.Locked
+def _reported_hooks(locked: lock.Locked) -> tuple[Hook, ...]:
+    """Return the selection's hooks and gateseal's install hook, which results
+    report beside them wherever it ran."""
+    return (*locked.selection.hooks, INSTALL)
+
+
+def _hook_entries(
+    details: str, locked: lock.Locked, stage: str
 ) -> list[dict[str, object]]:
-    """Name the Node of each result and finding of a hook that runs on one."""
+    """Return the result and findings of each hook in details, with its Node.
+
+    The install hook runs on the Node that every tool on one shares.
+    """
     nodes = {
         hook.id: tool.node.version
         for tool in locked.selection.tools
         if tool.node
-        for hook in tool.use.hooks
+        for hook in (*tool.use.hooks, INSTALL)
     }
+    entries = hook_results(details, _reported_hooks(locked), stage)
     for entry in entries:
         node = nodes.get(str(entry.get("hook")))
         if node is not None:

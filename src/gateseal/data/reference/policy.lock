@@ -130,6 +130,22 @@
         }
       }
     },
+    "tsc": {
+      "versions": {
+        "5.9.3": {
+          "package": "typescript",
+          "packages": {}
+        },
+        "6.0.3": {
+          "package": "typescript",
+          "packages": {}
+        },
+        "7.0.2": {
+          "package": "typescript",
+          "packages": {}
+        }
+      }
+    },
     "uv-audit": {
       "versions": {
         "0.13.9": {

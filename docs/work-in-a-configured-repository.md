@@ -1,6 +1,6 @@
 # Work in a configured repository
 
-Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, or a tool from npm such as ESLint, install mise 2026.10.19 or later too. A tool from npm needs no Node or npm on the machine. See [Check TypeScript](typescript.md#what-each-developer-needs). If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A separate gateseal installation is not needed to commit.
+Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, or a tool from npm such as ESLint, install mise 2026.10.19 or later too. A tool from npm needs no Node or npm on the machine. See [Check TypeScript](typescript.md#what-each-developer-needs). If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A tool that reads the Node project, such as `tsc`, needs no npm or pnpm on the machine. A separate gateseal installation is not needed to commit or push.
 
 From each clone's root, install the commit hook:
 
@@ -41,7 +41,13 @@ pre-commit install
 
 Run the command again in a clone that has only the commit hook. If you ran setup, `gateseal setup --refresh` does the same.
 
-A push then checks the files that it changes. A failed check stops the push before the remote changes. The CI gate runs the same checks, so a clone without the push hook is still checked there. A check can read the pushed range from `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF`. Both are empty when pre-commit checks all files, such as at the first push of a repository.
+To run the checks of a push without a push, run:
+
+```sh
+pre-commit run --hook-stage pre-push --all-files
+```
+
+A push then checks the files that it changes. A check of the whole project, such as `tsc`, runs at every push. A failed check stops the push before the remote changes. The CI gate runs the same checks, so a clone without the push hook is still checked there. A check can read the pushed range from `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF`. Both are empty when pre-commit checks all files, such as at the first push of a repository.
 
 pre-commit sets two limits at a push, which the CI gate does not have:
 

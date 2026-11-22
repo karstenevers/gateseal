@@ -139,6 +139,26 @@ change the manifest, policy or lock format, and its entry says how to move.
 - `node` in each hook and finding entry of `run --json` and `gate --json`
   for a tool from npm. The `tool` diagnostic of `status`, `doctor` and
   `check` names that Node too.
+- The `node-project` tool kind. A tool of this kind runs from npm on the
+  policy's Node, as an `npm-package` tool does, and also reads the packages
+  of the repository's own Node project. Before its hooks, gateseal's own hook
+  `gateseal-node-packages` installs what `package-lock.json` or
+  `pnpm-lock.yaml` pins into `node_modules`, without install scripts, in each
+  stage that runs such a tool. A lockfile that does not match `package.json`
+  stops the hook, and no later hook of that stage runs. `gateseal configure`
+  and `gateseal check` stop with `missing_project` in a repository without
+  `package.json` or a lockfile, and with `ambiguous_project` in one with both
+  lockfiles or with `npm-shrinkwrap.json` beside `package-lock.json`. Yarn
+  and workspaces are not supported.
+- The built-in `tsc` tool, which runs `tsc --noEmit` on the whole project
+  with the `tsconfig.json` at the repository root, at `git push` and in the CI
+  gate.
+  The bundled policy's new `typescript-types` capability runs it, pinned to
+  TypeScript 6.0.3, the version of its ESLint packages, and also reviews
+  7.0.2 and 5.9.3. A repository that does not select it gets no new check.
+- The install of a Node project's packages in `run --json` and `gate --json`,
+  as a `hook` entry with the hook `gateseal-node-packages`, the tool
+  `gateseal` and the origin `built-in`.
 - A failed gate in GitHub Actions or Azure Pipelines shows more. The job log
   shows all the hook output, in color, and the diff of each file that a hook
   changed. Each failed hook adds an error annotation, on the file and line
@@ -164,11 +184,18 @@ change the manifest, policy or lock format, and its entry says how to move.
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
 - The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
-  `uv-audit`, `deptry`, `eslint` and `prettier`, and the names `pyright`,
-  `uv lock check`, `uv audit`, `deptry`, `eslint` and `prettier`. A Manifest
-  with a repository hook of such an ID or name stops with
+  `uv-audit`, `deptry`, `eslint`, `prettier` and `tsc`, and the names
+  `pyright`, `uv lock check`, `uv audit`, `deptry`, `eslint`, `prettier` and
+  `tsc`. A Manifest with a repository hook of such an ID or name stops with
   `duplicate_identifier`, also when it does not select the hook's capability.
   Rename the repository hook.
+- gateseal reserves the hook ID `gateseal-node-packages` and its name
+  `Install the Node project's packages from its lockfile` in every Manifest.
+  A repository hook with either stops with `duplicate_identifier`. Rename the
+  repository hook.
+- A policy whose tool has a hook with the ID or name of one of gateseal's own
+  hooks, such as `gateseal-check`, stops with `duplicate_identifier`. Rename
+  the tool's hook.
 - Two tools of a policy may take hooks from the same hook repository. Their
   hook IDs, hook names and outputs stay distinct.
 - The bundled policy pins Ruff 0.17.5 and Betterleaks 1.10.1. It still reviews

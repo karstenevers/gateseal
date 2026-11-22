@@ -15,7 +15,7 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 `gateseal.lock` is the Lock. It records the selection and the generated files.
 
-Step 5 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 5 runs the repository's tests when the change has a Python file.
+Step 5 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 5 runs the repository's tests when the change has a Python file. Before `tsc` or another tool that reads the Node project, step 5 installs the project's packages from its lockfile.
 
 With the [dependency audit](python-dependencies.md#the-audit), step 5 asks a vulnerability service about each locked package. The service gives live data, not data that the policy pins. So a new advisory can fail a run, such as the weekly run, without any commit.
 
