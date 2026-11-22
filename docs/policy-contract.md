@@ -118,6 +118,7 @@ files = "^migrations/"
 | `args` | Optional arguments before the file paths. |
 | `files` | Optional Python regular expression for matching paths. The default matches all staged files. |
 | `stages` | Optional. `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. The default is `["commit", "run", "ci"]`. |
+| `scope` | Optional. `files`, the default, passes the matching paths. `project` passes no paths and runs the script once. |
 
 Commit the script with a `#!` line and executable permission. gateseal does not install its dependencies. By default, a repository hook runs at commit, in `gateseal run`, and in the CI gate. Duplicate IDs or names give `duplicate_identifier`. Missing required fields, invalid paths, expressions or stages, and unknown fields give `invalid_field`.
 
@@ -132,6 +133,19 @@ stages = ["push", "ci"]
 ```
 
 See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push) for what each clone needs.
+
+Set `scope = "project"` for a script that checks or rebuilds the whole project, such as a code generator. With the default `files` scope, pre-commit can split many matching paths across several runs of the script at the same time. This fragment runs the generator once when a schema file changes:
+
+<!-- manifest tables: project hook -->
+```toml
+[hooks.api-types]
+name = "Check that the API types are fresh"
+run = "scripts/generate-api-types.sh"
+files = "^schema/"
+scope = "project"
+```
+
+Without `files`, a project hook runs at every commit, also when the commit only deletes files. With `files`, it runs when a checked file matches: a staged file at a commit, a changed file in a CI gate run on a range, or any tracked file in `gateseal run` and in a CI run that [checks all files](ci-gate.md#what-the-gate-checks). A commit that only deletes matching files does not start it. A hook that changes a tracked file fails, so a freshness check needs only the generator in its script. A new file that Git does not track yet does not fail the hook.
 
 ### Version exceptions
 
