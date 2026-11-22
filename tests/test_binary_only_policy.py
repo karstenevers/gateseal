@@ -26,6 +26,7 @@ def binary_only(data):
     (data / "rules/ruff.toml").unlink()
     lock = json.loads((data / "policy.lock").read_bytes())
     lock["components"] = {"betterleaks": lock["components"]["betterleaks"]}
+    del lock["node"]
     (data / "policy.lock").write_text(json.dumps(lock, indent=2) + "\n")
 
 

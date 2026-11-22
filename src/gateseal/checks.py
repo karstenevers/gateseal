@@ -21,7 +21,7 @@ from gateseal.hook_results import FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import Timed, execute, execute_timed, pre_commit_command
 from gateseal.tools import reports
-from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, ToolDefinition
+from gateseal.tools.model import HOOK_STAGES, RANGE, Stage, Tool, ToolDefinition
 from gateseal.worktree import Worktree
 
 HISTORY_FINDING = re.compile(r"(?P<message>.+) in commit (?P<commit>[0-9a-f]{40,64})")
@@ -67,7 +67,8 @@ def run(locked: lock.Locked) -> Result:
         allow_failure=True,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
-    entries = tuple(hook_results(details, locked.selection.hooks, "run"))
+    results = hook_results(details, locked.selection.hooks, "run")
+    entries = tuple(_on_node(results, locked))
     failure = _tool_failure(process.returncode, entries)
     if failure is not None:
         message, step = failure
@@ -146,7 +147,10 @@ def gate(
     duration, times, over = gate_time(
         pre_commit,
         locked.selection.hooks,
-        [CheckTime(f"{d.name} history scan", timed.seconds) for d, timed in scans],
+        [
+            CheckTime(f"{tool.definition.name} history scan", timed.seconds)
+            for tool, timed in scans
+        ],
         locked.policy.time_budget_seconds,
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
@@ -154,13 +158,13 @@ def gate(
     if clean is not None and any(entry.get("modified") for entry in results):
         details += _changes(worktree) if clean else EDITED
     missing = reports.missing(locked.root, locked.selection.reads, results)
-    entries = [duration, *results]
+    entries = [duration, *_on_node(results, locked)]
     outcomes: set[str] = set()
-    for definition, timed in scans:
-        scanned = timed.process
+    for tool, timed in scans:
+        definition, scanned = tool.definition, timed.process
         output = scanned.stdout.decode("utf-8", errors="replace")
         details += output + scanned.stderr.decode("utf-8", errors="replace")
-        findings = _history_findings(definition, output)
+        findings = _history_findings(tool, output)
         outcome = _scan_outcome(scanned.returncode, findings)
         outcomes.add(outcome)
         entries.append(_scan_entry(definition, revisions, outcome))
@@ -171,13 +175,30 @@ def gate(
     return replace(result, notes=over, check_times=times)
 
 
+def _on_node(
+    entries: list[dict[str, object]], locked: lock.Locked
+) -> list[dict[str, object]]:
+    """Name the Node of each result and finding of a hook that runs on one."""
+    nodes = {
+        hook.id: tool.node.version
+        for tool in locked.selection.tools
+        if tool.node
+        for hook in tool.use.hooks
+    }
+    for entry in entries:
+        node = nodes.get(str(entry.get("hook")))
+        if node is not None:
+            entry["node"] = node
+    return entries
+
+
 def _scan_history(
     locked: lock.Locked, revisions: str | None, env: dict[str, str]
-) -> list[tuple[ToolDefinition, Timed]]:
+) -> list[tuple[Tool, Timed]]:
     """Run and time each history scan of the selected tools on revisions, if any."""
-    scans: list[tuple[ToolDefinition, Timed]] = []
+    scans: list[tuple[Tool, Timed]] = []
     for tool in locked.selection.tools:
-        definition, history = tool.definition, tool.definition.history
+        history = tool.definition.history
         program = tool.program(OFFLINE)
         if revisions is not None and history is not None and program is not None:
             scanned = execute_timed(
@@ -185,7 +206,7 @@ def _scan_history(
                 locked.root,
                 env,
             )
-            scans.append((definition, scanned))
+            scans.append((tool, scanned))
     return scans
 
 
@@ -336,8 +357,11 @@ def _tool_failure(
     return None
 
 
-def _history_findings(tool: ToolDefinition, output: str) -> list[dict[str, object]]:
-    """Return a finding for each file:line:column: rule message in commit line."""
+def _history_findings(tool: Tool, output: str) -> list[dict[str, object]]:
+    """Return a finding for each file:line:column: rule message in commit line,
+    with the Node of a tool that runs on one."""
+    definition = tool.definition
+    node = {"node": tool.node.version} if tool.node else {}
     findings: list[dict[str, object]] = []
     for line in COLOR.sub("", output).splitlines():
         found = FINDING.fullmatch(line)
@@ -348,8 +372,8 @@ def _history_findings(tool: ToolDefinition, output: str) -> list[dict[str, objec
             {
                 "severity": "error",
                 "category": "finding",
-                "tool": tool.name,
-                "origin": str(tool.origin),
+                "tool": definition.name,
+                "origin": str(definition.origin),
                 "hook": "history",
                 "stage": "ci",
                 "file": found["file"],
@@ -358,6 +382,7 @@ def _history_findings(tool: ToolDefinition, output: str) -> list[dict[str, objec
                 "rule": found["rule"],
                 "message": suffix["message"],
                 "commit": suffix["commit"],
+                **node,
             }
         )
     return findings

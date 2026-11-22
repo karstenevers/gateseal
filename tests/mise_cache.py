@@ -40,7 +40,7 @@ def fill(tools, scratch):
     with open(store.with_name(store.name + ".lock"), "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
-            fetch.download(fetch.release_binaries(tools), scratch, env)
+            fetch.download(fetch.release_downloads(tools), scratch, env)
         except GatesealError as failed:
             failed.add_note(failed.details)
             raise

@@ -98,7 +98,7 @@ def test_a_set_up_clone_is_healthy(hygiene, command):
     assert check(result, "mise") == (
         "info",
         "skipped",
-        "No selected tool is a release binary.",
+        "No selected tool starts through mise.",
     )
     assert result["next_steps"] == []
 
@@ -154,7 +154,9 @@ def test_mise_passes_for_a_release_binary(secrets, machine):
         )
 
 
-NEED = "A release binary starts through mise 2026.10.19 or later, and"
+NEED = (
+    "A release binary or the policy's Node starts through mise 2026.10.19 or later, and"
+)
 
 
 @pytest.mark.parametrize(
@@ -223,6 +225,21 @@ def test_doctor_warns_when_mise_would_not_install(secrets, monkeypatch, values, 
     )
     assert result["next_steps"] == [f"Unset {named}."]
     assert warnings(gateseal(secrets, "status")[1]) == []
+
+
+def test_doctor_names_both_effects_for_a_release_binary_and_a_tool_on_node(
+    machine, tmp_path, monkeypatch
+):
+    executable(machine / "mise", "#!/bin/sh\necho 2026.10.19 linux-x64\n")
+    root = clone(tmp_path, "hygiene", "secrets", "typescript")
+    monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
+    [warning] = warnings(gateseal(root, "doctor")[1])
+    assert warning["message"] == (
+        "mise's install at first use is off through MISE_AUTO_INSTALL, so a hook "
+        "starts an executable of the same name from the PATH when mise has not "
+        "installed its tool, and a hook on Node stops when mise has not installed "
+        "the pinned Node."
+    )
 
 
 def test_doctor_does_not_warn_while_mise_installs(secrets, monkeypatch):

@@ -46,15 +46,15 @@ gateseal configure --capability hygiene --capability secrets --ci github
 pre-commit install
 ```
 
-This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff.
+This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for [ESLint and Prettier](docs/typescript.md).
 
 Review the generated files and commit them together. `gateseal.toml`, the Manifest, selects the policy and checks. `gateseal.lock`, the Lock, records that selection and the generated files. See [Install gateseal](docs/install.md) for requirements and [Configure a repository](docs/configure-a-repository.md) for each step.
 
-Teammates need Git and pre-commit, but not gateseal. They also need mise for release binaries such as Betterleaks, and uv for tools that run in the uv project, such as Pyright. See [Work in a configured repository](docs/work-in-a-configured-repository.md).
+Teammates need Git and pre-commit, but not gateseal. They also need mise for release binaries such as Betterleaks and for tools from npm such as ESLint, and uv for tools that run in the uv project, such as Pyright. See [Work in a configured repository](docs/work-in-a-configured-repository.md).
 
 ## What it supports
 
-- **Bundled checks:** file hygiene, Ruff and Pyright for Python, Python tests with coverage, CRAP scores and mutation tests at each push, Python dependency checks with `uv lock --check`, deptry and a vulnerability audit in CI, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
+- **Bundled checks:** file hygiene, Ruff and Pyright for Python, Python tests with coverage, CRAP scores and mutation tests at each push, Python dependency checks with `uv lock --check`, deptry and a vulnerability audit in CI, ESLint and Prettier for TypeScript, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
 - **CI:** GitHub Actions and Azure Pipelines (Azure DevOps).
 - **Platforms:** macOS on arm64 and Linux on x86-64.
 - **Planned:** upgrade pull requests for new tool releases, and Windows.

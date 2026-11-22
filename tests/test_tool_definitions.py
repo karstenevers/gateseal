@@ -23,6 +23,10 @@ CONFIG = ".pre-commit-config.yaml"
 RUFF = ".gateseal/ruff.toml"
 PYRIGHT = ".gateseal/pyright.toml"
 RULES = ".gateseal/betterleaks.toml"
+ESLINT = ".gateseal/eslint.json"
+LOADER = ".gateseal/eslint-loader.mjs"
+SUPPRESSIONS = ".gateseal/eslint-suppressions.json"
+PRETTIER = ".gateseal/prettier.toml"
 REPORT = ".gateseal/betterleaks-report.tmpl"
 HISTORY_REPORT = ".gateseal/betterleaks-history-report.tmpl"
 SECRETS = {
@@ -34,45 +38,51 @@ SECRETS = {
 }
 PYTHON = {RUFF: "ffcf7d3c282f374519e8110da535fbde8e4d9dd0d81b7dad32db64a6979f8c2c"}
 ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
+TYPESCRIPT = {
+    ESLINT: "cd501c706e77af1e4de829bd1a133f76eb3644bb423cf8a469ef1845c2a77071",
+    LOADER: "3e956e1c95547b5c15fc6ceec14d0624ceace0d88b238906f1b283ad4b1ef217",
+    PRETTIER: "8337e1afa204789e8ba2ee47068064308807817324f17f290ccd57d9be88109f",
+    SUPPRESSIONS: "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+}
 
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "5952335760d2b46aafa1a265e0053abfea702983d1e8763d204e20d1b5a74b85"
+            "e2437724f11f31f17166dd446b73fedb29ba28521f9aada7bb3cc67d55bed5c0"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "37c41035924db7fc5748e8096864ec3410d30fef93e205addef67a8f8a9a4b98"
+            "ba64a7e6aed4dd8bf55b1b1d02b017702dcd0862b08c9adeb18ab07e4dcee31b"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "a20efbe6dac974e16bb02ac5a358ab1a3926116daa3520b560505b032010c6ca",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "e75570c4c3f43df3d472a6ea47d7f4c522d88386ce5c695a4771b3df0ba629af"
+            "847f6f562b1f24674a9444d31f670747360242546e10043879258529c1eb568f"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "691b7ea369873d21e8cbb301eee43fa02b81fb4361dcb7aac372b071a4b6ae01"
+            "99e27d4bdea6c437a0d923ce152beccf493549251bac2bd5ebadcec105b61b73"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "30612c3b18fdcc5922ef80b669f0f40805034c7d63e59d58da4edaf4e42a5bad"
+            "06e3d54d09de1630ab168de13933f50328c5f5bbcb485cb72f900938d5b060f7"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "61adbcfd4548aaf78feb4570bf70c920668ea8047be5a8dc56de1eb9b32bc53e"
+            "328502e52acbec4f8c66cfca85188a7582d1a21a78e45fe6e0a63664c4018dda"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -80,7 +90,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "b098dff8c5d68b44b6da5d78aa827bec481ad1d9688f13179566afbd513bc8ce"
+            "87d654c7248a2f9336e1fa167474416d316c4c45e76ad3f594753f4f8a6b0de2"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -88,7 +98,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "81a8c14a48570232b4005d49aebeb58ded562062f960855772ecbb170f864b40"
+            "b2997d3e10a1b68589f6bc116997b80a6babcc56b7da2bc4dd591ea26a73eba4"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -96,11 +106,18 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "24be5f9dc994552ca882fade8300217a807348aaa7425ba3fb67ff4a8d71f1dc"
+            "dc0d4d99b5d303e1f2bb8fb3b4d1d252fa0fb3b2441ccea17b1523803c76d2c9"
         ),
         CONFIG: "d027f65dbbee8a8cc0466becddb3e526f84aab9d15df91fcb36e9cd2e2ead797",
         PYRIGHT: "e7b7d2f1eb0b2fc23e760f8dc124c5a4cedb48a02e97ef94d17537c85f00faf7",
         **PYTHON,
+    },
+    ("hygiene", "typescript"): {
+        "gateseal.lock": (
+            "76b3861fc2bc2a83a958cb4d258f4e3086a5bff28426885104f7829d5dbbff91"
+        ),
+        CONFIG: "5a4243fbb9a076ee9821ef1f7623fa7b4a98e2ce67fccbcce9e31a1665931bcf",
+        **TYPESCRIPT,
     },
 }
 
@@ -118,6 +135,7 @@ GOLDEN = {
         "all with betterleaks 1.8.0",
         "all with an exclude choice",
         "python with types",
+        "typescript",
     ],
 )
 def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
@@ -156,6 +174,27 @@ def test_built_in_tools_name_only_owned_files():
     assert betterleaks.owned == (RULES, REPORT, HISTORY_REPORT)
     args = betterleaks.hooks["betterleaks"].args
     assert args[args.index("--report-template") + 1] == REPORT
+
+
+def test_built_in_npm_tools_name_only_owned_files():
+    eslint, prettier = built_in_tools()["eslint"], built_in_tools()["prettier"]
+    assert eslint.owned == (ESLINT, LOADER, SUPPRESSIONS)
+    assert eslint.files[SUPPRESSIONS] == b"{}\n"
+    assert eslint.hooks["eslint"].args == (
+        "--config",
+        LOADER,
+        "--suppressions-location",
+        SUPPRESSIONS,
+        "--no-warn-ignored",
+        "--fix",
+        "--",
+    )
+    assert prettier.owned == (PRETTIER,)
+    assert prettier.hooks["prettier"].args[:2] == ("--config", PRETTIER)
+    assert prettier.hooks["prettier"].args[-1] == "--"
+    assert eslint.files[LOADER].startswith(
+        b"// gateseal owns this file; gateseal configure writes it.\n"
+    )
 
 
 @pytest.mark.parametrize(

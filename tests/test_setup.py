@@ -631,8 +631,8 @@ def test_setup_accepts_the_oldest_uv_it_supports(machine):
 
 
 NEED = (
-    "A Policy with a release binary, such as Betterleaks, needs mise 2026.10.19 "
-    "or later, and"
+    "A Policy with a release binary or an npm tool, such as Betterleaks or "
+    "Prettier, needs mise 2026.10.19 or later, and"
 )
 
 

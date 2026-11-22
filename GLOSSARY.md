@@ -46,6 +46,7 @@
 
 <a id="project-tool"></a>A **Project Tool** runs in the repository's own uv project, so it reads the packages that the project installs.
 
+<a id="policy-node"></a>The **Policy Node** is the Node version that a policy pins in `node`. Every tool from npm runs on it, whatever Node the machine has.
 <a id="report"></a>A **Report** is a file that one hook writes and a later hook reads, such as coverage data. Git ignores it.
 
 <a id="compiler-runtime"></a>The **Compiler Runtime** is the pre-commit version a gateseal release names and the Python that setup installs for it.

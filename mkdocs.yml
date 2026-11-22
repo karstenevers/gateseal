@@ -50,6 +50,7 @@ nav:
       - Install gateseal: install.md
       - Try gateseal: demo.md
       - Configure a repository: configure-a-repository.md
+      - Check TypeScript: typescript.md
       - Work in a configured repository: work-in-a-configured-repository.md
       - How gateseal works: architecture.md
       - Troubleshooting: troubleshooting.md

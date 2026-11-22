@@ -1,6 +1,6 @@
 # Work in a configured repository
 
-Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, install mise 2026.10.19 or later too. If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A separate gateseal installation is not needed to commit.
+Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, or a tool from npm such as ESLint, install mise 2026.10.19 or later too. A tool from npm needs no Node or npm on the machine. See [Check TypeScript](typescript.md#what-each-developer-needs). If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A separate gateseal installation is not needed to commit.
 
 From each clone's root, install the commit hook:
 
@@ -8,7 +8,7 @@ From each clone's root, install the commit hook:
 pre-commit install
 ```
 
-The first commit needs network access to download the hook environments and selected binaries. Later commits reuse them. Linked worktrees share the clone's hook.
+The first commit needs network access to download the hook environments, selected binaries, and the Node and npm packages of a tool from npm. Later commits reuse them. Linked worktrees share the clone's hook.
 
 ## Commit changes
 

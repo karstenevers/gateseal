@@ -21,7 +21,7 @@ uv tool install "gateseal==VERSION"
 | Git | 2.54.0 or later for repository commands and commits. |
 | uv | 0.13.6 or later is tested for installation and setup, and for commits when the policy selects a tool that runs in the uv project, such as Pyright. |
 | pre-commit | 4.7.0 or later for commits when installed separately. |
-| mise | 2026.10.19 or later for release binaries such as Betterleaks. |
+| mise | 2026.10.19 or later for release binaries such as Betterleaks, and for tools from npm such as ESLint. These need no Node or npm on the machine. |
 
 The supported platforms are macOS on arm64 and Linux on x86-64 with glibc. Windows is unsupported. WSL, Intel Mac, Linux arm64, and Linux with musl are untested. Git submodules are not covered.
 

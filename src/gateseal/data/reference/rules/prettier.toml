@@ -1,0 +1,11 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# Prettier's options. Each value here is Prettier's default, written out so the
+# options that teams change most are easy to find. Leave out plugins: Prettier
+# would load each plugin from the repository.
+printWidth = 80
+tabWidth = 2
+useTabs = false
+semi = true
+singleQuote = false
+trailingComma = "all"
+endOfLine = "lf"

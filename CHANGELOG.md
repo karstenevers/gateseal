@@ -9,8 +9,9 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Added
 
-- `gateseal fetch` downloads each selected release binary with mise and
-  builds the hook environments with pre-commit, before any hook runs. It tries
+- `gateseal fetch` downloads each selected release binary, and the pinned Node
+  of a tool from npm, with mise and builds the hook environments with
+  pre-commit, before any hook runs. It tries
   a download three times. A download that still fails ends with
   `download_failed` and exit 4. The message names the archive or the hook
   repository and says that the code was not checked, and the result shows the
@@ -98,6 +99,39 @@ change the manifest, policy or lock format, and its entry says how to move.
   `pre-commit install`, or a line to add to a push hook that pre-commit kept.
   It accepts any push hook of Git's configuration that runs
   `git lfs pre-push`.
+- The `npm-package` tool kind. A tool of this kind installs a package from
+  the npm registry once, into the user's cache folder, and runs it on the
+  policy's Node, which mise installs and checks against the SHA-256 that the
+  Lock records. A commit needs mise, but no Node or npm, and a later commit
+  calls no npm. npm installs outside the repository's Node project and runs
+  no install script, so the repository's `package.json`, `.npmrc` and
+  `node_modules` do not change what runs. Each Node version and each set of
+  pins has its own install. Each hook skips every file that gateseal
+  generates. `gateseal policy lock` checks that the npm registry has each
+  package.
+- `node` in `policy.toml`, which pins one Node version for every tool from
+  npm. It is required exactly when a tool runs on Node. `gateseal policy
+  lock` records each Node archive's SHA-256 from the release's
+  `SHASUMS256.txt` in a `node` record of `policy.lock`, and the Lock records
+  the Node once in `native_artifacts`. A policy that uses `node` should set
+  `minimum_compiler` to this release, because an older gateseal stops on the
+  unknown field with `invalid_field`.
+- `packages` in a tool's table of `policy.toml`, which pins the npm packages
+  that a tool from npm installs beside itself, such as an ESLint parser.
+- The `eslint` configuration format. Its rule file holds only `files`,
+  `parser`, `plugins` and `rules`, so no key loads another file or a preset.
+  A parser or plugin must be a package that the tool's `packages` pin.
+  `gateseal configure` writes the rules as `.gateseal/eslint.json`, and a
+  loader of the ESLint definition gives them to ESLint.
+- The bundled policy's `typescript` capability. It runs ESLint with the
+  recommended rules of ESLint and typescript-eslint and applies their fixes,
+  then formats with Prettier, on staged `.ts` and `.tsx` files. The
+  repository's own ESLint and Prettier settings do not apply. A rule file
+  that sets Prettier's `plugins` gives `invalid_field`, because Prettier
+  would load each plugin from the repository.
+- `node` in each hook and finding entry of `run --json` and `gate --json`
+  for a tool from npm. The `tool` diagnostic of `status`, `doctor` and
+  `check` names that Node too.
 - A failed gate in GitHub Actions or Azure Pipelines shows more. The job log
   shows all the hook output, in color, and the diff of each file that a hook
   changed. Each failed hook adds an error annotation, on the file and line
@@ -123,17 +157,19 @@ change the manifest, policy or lock format, and its entry says how to move.
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
 - The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
-  `uv-audit` and `deptry`, and the names `pyright`, `uv lock check`,
-  `uv audit` and `deptry`. A Manifest with a repository hook of such an ID or
-  name stops with `duplicate_identifier`, also when it does not select the
-  hook's capability. Rename the repository hook.
+  `uv-audit`, `deptry`, `eslint` and `prettier`, and the names `pyright`,
+  `uv lock check`, `uv audit`, `deptry`, `eslint` and `prettier`. A Manifest
+  with a repository hook of such an ID or name stops with
+  `duplicate_identifier`, also when it does not select the hook's capability.
+  Rename the repository hook.
 - Two tools of a policy may take hooks from the same hook repository. Their
   hook IDs, hook names and outputs stay distinct.
 - The bundled policy pins Ruff 0.17.5 and Betterleaks 1.10.1. It still reviews
   Ruff 0.17.1 and Betterleaks 1.9.0 and 1.8.0, so a Version Exception can keep
   one of them. The policy keeps its label `2026.11-team-tools`, so
   `gateseal upgrade` to this release stops with `bundled_policy_moves` until
-  you add `--policy bundled`.
+  you add `--policy bundled`. A repository that moves and does not select
+  `typescript` gets no new check and needs no Node.
 
 ### Security
 

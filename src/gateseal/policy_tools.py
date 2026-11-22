@@ -18,13 +18,12 @@ hooks is not selected.
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from pathlib import PurePosixPath
 from typing import cast
 
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import built_in_tools, load_definition, require_distinct
-from gateseal.tools.choices import EXTEND
 from gateseal.tools.choices import NAME as CHOICE
+from gateseal.tools.configurations import FORMATS
 from gateseal.tools.model import (
     NAME,
     Catalog,
@@ -33,12 +32,12 @@ from gateseal.tools.model import (
     ToolDefinition,
     ToolUse,
 )
+from gateseal.tools.node import NAME as NODE
+from gateseal.tools.node import package_name
 from gateseal.tools.reports import reads
 from gateseal.validation import (
     fields,
     mapping,
-    nested,
-    parse_toml,
     sequence,
     string,
     version,
@@ -46,13 +45,6 @@ from gateseal.validation import (
 
 CAPABILITY = re.compile(r"[a-z][a-z0-9-]*")
 """A capability's name, as policy.toml and a Manifest name it."""
-
-BUILT_IN_RULES = frozenset({"useDefault", "disabledRules"})
-"""The keys of a Betterleaks or Gitleaks extend table that start from the rules
-built into the tool and turn some of them off, without loading a file."""
-
-PYRIGHT_EXTENDS = ("tool", "pyright", "extends")
-"""The key of a Pyright configuration that loads another file."""
 
 TEAM_TOOLS = "tools/"
 """The directory of a policy's Team-defined Tools, one <name>.toml each."""
@@ -158,38 +150,6 @@ class Toolset:
     defaults: Mapping[tuple[str, str], object]
 
 
-def validate_configuration(data: bytes, field: str) -> None:
-    """Check a native configuration, which configure copies into an owned output.
-
-    Owned outputs are compared with line endings normalized to LF, so a file
-    with a carriage return could never match its own output. A configuration
-    that loads another file would escape review: a top-level extend, or
-    Pyright's extends in [tool.pyright]. An extend table that only selects
-    among the rules built into the tool loads none, and the Lock's checksum of
-    the tool covers those rules.
-    """
-    if b"\r" in data:
-        raise GatesealError(
-            "invalid_field", f"{field} must use LF line endings, without CR."
-        )
-    document = parse_toml(data)
-    extend = document.get(EXTEND)
-    if extend is not None and not (
-        isinstance(extend, dict) and extend.keys() <= BUILT_IN_RULES
-    ):
-        raise GatesealError(
-            "invalid_field",
-            f"{field} must not extend another configuration. A Betterleaks or "
-            "Gitleaks extend table may hold only useDefault and disabledRules.",
-        )
-    if nested(document, *PYRIGHT_EXTENDS) is not None:
-        raise GatesealError(
-            "invalid_field",
-            f"{field} must not extend another configuration: remove "
-            f"{'.'.join(PYRIGHT_EXTENDS)}.",
-        )
-
-
 def read_toolset(
     capabilities: object, read_asset: Callable[[str], bytes], asset: AssetReader
 ) -> Toolset:
@@ -225,8 +185,10 @@ def read_toolset(
     for name, (capability, table) in tables.items():
         field = f"capabilities.{capability}.tools.{name}"
         table = _tool_fields(definitions[name], table, field)
-        uses[name] = _use(capability, definitions[name], table, field, asset)
         catalogs[name] = _catalog(name, table, field, known)
+        uses[name] = _use(
+            capability, definitions[name], table, field, asset, catalogs[name].packages
+        )
     _require_hook_choices(hook_choices, uses)
     reads((definitions[name], use) for name, use in uses.items())
     return Toolset(tuple(entries), definitions, uses, catalogs, hook_choices, defaults)
@@ -343,6 +305,13 @@ def _definition(
             "the Compiler Runtime that each gateseal release carries.",
             next_step="Give the tool another name in its capability's tools.",
         )
+    if name == NODE:
+        raise GatesealError(
+            "reserved_tool_name",
+            f"The policy names the tool {NODE}, but {NODE} names the Node that "
+            f"{NODE} in policy.toml pins.",
+            next_step="Give the tool another name in its capability's tools.",
+        )
     built_in = built_in_tools().get(name)
     if built_in is not None:
         try:
@@ -385,8 +354,15 @@ def _tool_fields(
 
     pin and reviewed are required, hook_ids and requires optional, and
     configuration is required exactly when the definition declares one.
+    packages is optional for a tool on Node and refused for any other.
     """
-    names = {"pin", "reviewed"} | ({"hook_ids", "requires"} & set(table))
+    if "packages" in table and not definition.source.on_node:
+        raise GatesealError(
+            "invalid_field",
+            f"{field}.packages needs a tool that runs on Node, but "
+            f"{definition.name} is a {definition.source.kind} tool.",
+        )
+    names = {"pin", "reviewed"} | ({"hook_ids", "requires", "packages"} & set(table))
     if definition.configuration is not None:
         names.add("configuration")
     return fields(table, names, field)
@@ -398,12 +374,15 @@ def _use(
     table: dict[str, object],
     field: str,
     asset: AssetReader,
+    packages: Mapping[str, str],
 ) -> ToolUse:
     """Return the hooks the policy runs and its configuration of one tool.
 
     Without hook_ids the policy runs every hook of the definition, in its
     order. configuration names a file under rules/ exactly when the
-    definition declares a configuration.
+    definition declares a configuration, and the definition's format checks
+    it against packages, the tool's packages that policy.toml pins. A tool
+    that does not run on Node has none, so its format gets None.
     """
     hooks = tuple(definition.hooks.values())
     if "hook_ids" in table:
@@ -416,16 +395,18 @@ def _use(
                 "invalid_field",
                 f"{field}.configuration must name a file under {RULES}.",
             )
-        configuration = asset(
-            path,
-            f"{field}.configuration",
-            PurePosixPath(definition.configuration).suffix,
-        )
+        rules = FORMATS[definition.configuration.format]
+        configuration = asset(path, f"{field}.configuration", ".toml")
         if configuration is None:
             raise GatesealError(
                 "missing_policy_asset", f"The policy has no file {path}."
             )
-        validate_configuration(configuration, f"The {definition.name} configuration")
+        rules.check(
+            configuration,
+            f"The {definition.name} configuration",
+            packages if definition.source.on_node else None,
+            f"{field}.packages",
+        )
     return ToolUse(capability, hooks, configuration)
 
 
@@ -437,6 +418,7 @@ def _catalog(
     reviewed lists stable releases, each once, and pin is one of them. requires
     maps a reviewed version to the minimum version of each tool it needs,
     which is a Built-in Tool or one of the policy's, and never this one.
+    packages maps each npm package to its exact stable release, by name.
     """
     listed = f"{field}.reviewed"
     reviewed = tuple(
@@ -467,7 +449,12 @@ def _catalog(
     pin = string(table["pin"], f"{field}.pin")
     if pin not in reviewed:
         raise GatesealError("invalid_field", f"{field}.pin {pin} is not in {listed}.")
-    return Catalog(pin, {key: requires.get(key, {}) for key in reviewed})
+    pinned = f"{field}.packages"
+    packages = {
+        package_name(key, pinned): version(value, f"{pinned}.{key}")
+        for key, value in sorted(mapping(table.get("packages", {}), pinned).items())
+    }
+    return Catalog(pin, {key: requires.get(key, {}) for key in reviewed}, packages)
 
 
 def _hooks(value: object, definition: ToolDefinition, field: str) -> tuple[Hook, ...]:

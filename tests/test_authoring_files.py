@@ -16,6 +16,8 @@ BUNDLED = (
     "policy.lock",
     "rules/betterleaks.toml",
     "rules/crap.toml",
+    "rules/eslint.toml",
+    "rules/prettier.toml",
     "rules/pyright.toml",
     "rules/ruff.toml",
     "rules/uv-audit.toml",

@@ -52,7 +52,7 @@ import re
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import MANIFEST
@@ -73,6 +73,9 @@ from gateseal.tools.model import (
     lock_failure,
 )
 from gateseal.validation import fields, nested, parse_toml, string
+
+if TYPE_CHECKING:
+    from gateseal.tools.node import Node
 
 UV_RUN = ("uv", "run", "--locked", "--all-packages", "--with")
 """Start a program in the project, with what uv.lock pins and one more package.
@@ -100,6 +103,7 @@ class UvProject:
     kind: ClassVar[str] = "uv-project"
     starts: ClassVar[Starts] = Starts.EXECUTABLE
     remark: ClassVar[str] = "; the repository's uv.lock pins what it imports"
+    on_node: ClassVar[bool] = False
     package: str
 
     def offer(
@@ -108,6 +112,7 @@ class UvProject:
         use: ToolUse,
         catalog: Catalog,
         records: Mapping[str, object],
+        node: Node | None,
     ) -> ProjectTool:
         """Require each version's record to name the definition's package."""
         name, executable = definition.name, definition.executable
@@ -133,6 +138,7 @@ class UvProject:
     def lock(
         self,
         definition: ToolDefinition,
+        catalog: Catalog,
         version: str,
         recorded: object,
         upstream: Upstream,
@@ -186,6 +192,10 @@ class ProjectTool:
     @property
     def release(self) -> Release:
         return self.versions[self.version]
+
+    @property
+    def node(self) -> None:
+        return None
 
     def select(self, version: str) -> ProjectTool:
         return replace(self, version=version)
