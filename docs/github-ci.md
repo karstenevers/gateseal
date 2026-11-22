@@ -82,4 +82,4 @@ The bundled policy needs no token. The workflow's default GitHub token can read 
 
 For your own workflow, use the policy URL from the base branch. Scope the credential helper to that exact URL so a pull request cannot redirect the token.
 
-The token is for the policy fetch. The runner also needs unauthenticated read access to gateseal's repository and to each selected hook repository. A selected tool from npm, such as ESLint, also needs nodejs.org and the npm registry.
+The token is for the policy fetch. The runner also needs unauthenticated read access to gateseal's repository and to each selected hook repository. A selected tool from npm, such as ESLint, also needs nodejs.org and the npm registry. A tool that reads the Node project, such as `tsc`, also needs the registry of the project's packages.

@@ -36,6 +36,7 @@ Issues = "https://github.com/karstenevers/gateseal/issues"
 gateseal = "gateseal.cli:main"
 gateseal-check = "gateseal.commit_check:main"
 gateseal-lfs-check = "gateseal.lfs_check:main"
+gateseal-node-packages = "gateseal.node_packages:main"
 
 [dependency-groups]
 dev = [

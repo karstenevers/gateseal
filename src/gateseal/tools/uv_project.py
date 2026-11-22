@@ -104,6 +104,7 @@ class UvProject:
     starts: ClassVar[Starts] = Starts.EXECUTABLE
     remark: ClassVar[str] = "; the repository's uv.lock pins what it imports"
     on_node: ClassVar[bool] = False
+    scans_history: ClassVar[bool] = True
     package: str
 
     def offer(

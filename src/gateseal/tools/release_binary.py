@@ -113,6 +113,7 @@ class ReleaseBinary:
     starts: ClassVar[Starts] = Starts.RECORDED_EXECUTABLE
     remark: ClassVar[str] = ""
     on_node: ClassVar[bool] = False
+    scans_history: ClassVar[bool] = True
     repository: str
     tag: str
     archive: str

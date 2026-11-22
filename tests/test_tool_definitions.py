@@ -1,13 +1,14 @@
 import hashlib
+import json
 import re
 from importlib.resources import files
 
 import pytest
 from conftest import PIN
 from gateseal.diagnostics import GatesealError
-from gateseal.lock import compile_lock
+from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
-from gateseal.policy import load_bundled_policy
+from gateseal.policy import load_bundled_policy, load_policy_tree
 from gateseal.tools import built_in_tools, load_definition
 from gateseal.tools.model import Origin
 from gateseal.validation import canonical
@@ -48,41 +49,41 @@ TYPESCRIPT = {
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "e2437724f11f31f17166dd446b73fedb29ba28521f9aada7bb3cc67d55bed5c0"
+            "36a0b97315592b4983e979b8eeae6a929012b0843c6d4fad71c9383a4ba8496d"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "ba64a7e6aed4dd8bf55b1b1d02b017702dcd0862b08c9adeb18ab07e4dcee31b"
+            "76267b8e014091bc351d776a29a3c900f2f8b688aab275cd9d144e7ee5f4d785"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "a20efbe6dac974e16bb02ac5a358ab1a3926116daa3520b560505b032010c6ca",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "847f6f562b1f24674a9444d31f670747360242546e10043879258529c1eb568f"
+            "eae882c41331f15f7f62d0dcba780339c8655513d0724a21fc1c79defed60885"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "99e27d4bdea6c437a0d923ce152beccf493549251bac2bd5ebadcec105b61b73"
+            "cf03838d6052bd861cc1c5d3c1e2c36a5d8843ebd4f792ae6d4e5b680cd8dfa4"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "06e3d54d09de1630ab168de13933f50328c5f5bbcb485cb72f900938d5b060f7"
+            "18d9757dc9ed2dddfd7a0baf45641149752595ce85edd1e799c9f3bd1e50750b"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "328502e52acbec4f8c66cfca85188a7582d1a21a78e45fe6e0a63664c4018dda"
+            "eae811e889c8e0d6ad4408626dd7d1e37134cf41173b1054c8c6b0a4ef85c367"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -90,7 +91,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "87d654c7248a2f9336e1fa167474416d316c4c45e76ad3f594753f4f8a6b0de2"
+            "e7f87d82efe8eeb283d1cd6597f50cca1a2025bbbabd67c3283d2eacfb258526"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -98,7 +99,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "b2997d3e10a1b68589f6bc116997b80a6babcc56b7da2bc4dd591ea26a73eba4"
+            "b73747b6a25f2241e0ae1a156fd2be74d3e7e9c46fd86b5b5d290b6cd103f2aa"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -106,7 +107,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "dc0d4d99b5d303e1f2bb8fb3b4d1d252fa0fb3b2441ccea17b1523803c76d2c9"
+            "6f616881dcb60781d954942dda056e4434dbb26b1292c338b59671966b453deb"
         ),
         CONFIG: "d027f65dbbee8a8cc0466becddb3e526f84aab9d15df91fcb36e9cd2e2ead797",
         PYRIGHT: "e7b7d2f1eb0b2fc23e760f8dc124c5a4cedb48a02e97ef94d17537c85f00faf7",
@@ -114,9 +115,16 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "76b3861fc2bc2a83a958cb4d258f4e3086a5bff28426885104f7829d5dbbff91"
+            "d09fed776b3a841dcba07ffcd91522eab33d18b18629b2437fcafef76fb64360"
         ),
         CONFIG: "5a4243fbb9a076ee9821ef1f7623fa7b4a98e2ce67fccbcce9e31a1665931bcf",
+        **TYPESCRIPT,
+    },
+    ("hygiene", "typescript", "typescript-types"): {
+        "gateseal.lock": (
+            "fc3bb55bf7aee162a3dd942315181320aa81100be29e9d6bc7d4bb4366309485"
+        ),
+        CONFIG: "bf720f44931a16b7a3b6f97d383cd1ac1a50574f52923ad9d9155d6581f661f6",
         **TYPESCRIPT,
     },
 }
@@ -136,6 +144,7 @@ GOLDEN = {
         "all with an exclude choice",
         "python with types",
         "typescript",
+        "typescript with types",
     ],
 )
 def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
@@ -154,6 +163,42 @@ def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
     digests = {name: entry["sha256"] for name, entry in lock["outputs"].items()}
     digests["gateseal.lock"] = hashlib.sha256(canonical(lock)).hexdigest()
     assert digests == GOLDEN[selection]
+
+
+def without_typescript_types(root):
+    """Return the bundled policy as it was before it offered typescript-types."""
+    for asset in load_bundled_policy().assets:
+        (root / asset.path).parent.mkdir(exist_ok=True)
+        (root / asset.path).write_bytes(asset.content)
+    path = root / "policy.toml"
+    path.write_text(path.read_text().split("\n# typescript-types")[0])
+    locked = json.loads((root / "policy.lock").read_bytes())
+    del locked["components"]["tsc"]
+    (root / "policy.lock").write_bytes(canonical(locked))
+    return load_policy_tree(root)
+
+
+@pytest.mark.parametrize("capability", ["typescript", "python"])
+def test_a_selection_without_typescript_types_changes_only_in_the_policy_digest(
+    tmp_path, capability
+):
+    def compiled(policy):
+        source = BundledSource(policy.release)
+        manifest = render(("hygiene", capability), source)
+        chosen = resolve(parse_manifest(manifest), policy)
+        lock = compile_lock(manifest, source, policy, PIN, chosen)
+        return lock, compile_outputs(chosen, PIN, source)
+
+    bundled, earlier = load_bundled_policy(), without_typescript_types(tmp_path)
+    assert "typescript-types" not in earlier.capabilities
+    (lock, outputs), (earlier_lock, earlier_outputs) = map(compiled, (bundled, earlier))
+    assert outputs == earlier_outputs
+    assert lock["policy"] == earlier_lock["policy"] | {"digest": bundled.content_digest}
+    assert bundled.content_digest != earlier.content_digest
+    fingerprint = ("policy", "inputs_fingerprint")
+    assert {k: v for k, v in lock.items() if k not in fingerprint} == {
+        k: v for k, v in earlier_lock.items() if k not in fingerprint
+    }
 
 
 def definition(name):

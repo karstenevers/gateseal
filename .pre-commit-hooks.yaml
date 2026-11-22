@@ -14,3 +14,11 @@
   pass_filenames: false
   always_run: true
   stages: [pre-push]
+- id: gateseal-node-packages
+  name: Install the Node project's packages from its lockfile
+  description: Install the packages that the lockfile of the repository's Node project pins, without install scripts, before the hooks that read them. A failed install stops the later hooks.
+  entry: gateseal-node-packages
+  language: python
+  pass_filenames: false
+  always_run: true
+  fail_fast: true

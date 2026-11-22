@@ -10,7 +10,13 @@ from pathlib import Path
 import pytest
 from doc_examples import example
 from gateseal import lock
-from gateseal.compiler_release import LFS_HOOK, LFS_HOOK_NAME, REPOSITORY
+from gateseal.compiler_release import (
+    LFS_HOOK,
+    LFS_HOOK_NAME,
+    NODE_PACKAGES_HOOK,
+    NODE_PACKAGES_HOOK_NAME,
+    REPOSITORY,
+)
 from test_lock_configure import CONFIG, preparation
 from test_repository_hooks import LICENSES, MIGRATIONS, configure, refused, repository
 
@@ -97,24 +103,24 @@ def test_stages_is_a_list_of_names(tmp_path, value):
 
 
 @pytest.mark.parametrize(
-    ("table", "message"),
-    [
-        (
-            SLOW.replace("slow-tests]", f"{LFS_HOOK}]"),
-            f"hooks.{LFS_HOOK} has the ID {LFS_HOOK}, which gateseal's own check "
-            "hook has.",
-        ),
-        (
-            SLOW.replace("Run the slow tests", LFS_HOOK_NAME),
-            f"hooks.slow-tests has the name {LFS_HOOK_NAME}, which gateseal's own "
-            "check hook has.",
-        ),
-    ],
-    ids=["id", "name"],
+    ("hook", "name"),
+    [(LFS_HOOK, LFS_HOOK_NAME), (NODE_PACKAGES_HOOK, NODE_PACKAGES_HOOK_NAME)],
+    ids=["git lfs check", "node packages"],
 )
-def test_a_repository_hook_cannot_take_the_git_lfs_checks_place(
-    tmp_path, table, message
+@pytest.mark.parametrize("taken", ["ID", "name"])
+def test_a_repository_hook_cannot_take_the_place_of_a_hook_of_gateseal(
+    tmp_path, hook, name, taken
 ):
+    table, message = {
+        "ID": (
+            SLOW.replace("slow-tests]", f"{hook}]"),
+            f"hooks.{hook} has the ID {hook}, which gateseal's own hook has.",
+        ),
+        "name": (
+            SLOW.replace("Run the slow tests", name),
+            f"hooks.slow-tests has the name {name}, which gateseal's own hook has.",
+        ),
+    }[taken]
     root = repository(tmp_path, table)
     (root / "scripts/slow-tests.sh").write_text("#!/bin/sh\n")
     assert str(refused(root, "duplicate_identifier")) == message

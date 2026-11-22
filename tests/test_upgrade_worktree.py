@@ -20,6 +20,7 @@ from gateseal.policy import load_bundled_policy
 from gateseal.validation import canonical
 from gateseal.worktree import locate_worktree, operation_lock, preparation_directory
 from team_policy import URL, git, publish
+from test_tool_definitions import without_typescript_types
 
 REASON = "Our fixtures need the older rules"
 REVIEW_BY = date(2027, 1, 31)
@@ -240,6 +241,30 @@ def test_a_gateseal_move_takes_this_bundled_policy_only_when_asked(
     result = upgrade.run(worktree, request(BUNDLED_MOVE))
     assert set(result.changed) == changed
     assert tracked(consumer) == current
+
+
+def test_a_bundled_move_adds_no_hook_of_a_capability_left_unselected(
+    consumer, monkeypatch, tmp_path
+):
+    """An older gateseal bundled the policy before it offered typescript-types."""
+    earlier = without_typescript_types(tmp_path / "earlier")
+    with monkeypatch.context() as patched:
+        patched.setattr(lock, "load_bundled_policy", lambda: earlier)
+        worktree = configure(consumer, "hygiene", "python", "typescript")
+    path = consumer / "gateseal.lock"
+    document = json.loads(path.read_bytes())
+    document["gateseal"].update(version="0.1.0", commit="1" * 40)
+    path.write_bytes(canonical(document))
+    current = tracked(consumer)
+    error = refused(worktree, request())
+    assert error.code == "bundled_policy_moves"
+    result = upgrade.run(worktree, request(BUNDLED_MOVE))
+    assert result.changed == ("gateseal.lock",)
+    moved = tracked(consumer)
+    assert moved | {"gateseal.lock": b""} == current | {"gateseal.lock": b""}
+    document = json.loads(moved["gateseal.lock"])
+    assert document["policy"]["digest"] == POLICY.content_digest
+    assert "tsc" not in document["components"]
 
 
 @pytest.mark.parametrize(

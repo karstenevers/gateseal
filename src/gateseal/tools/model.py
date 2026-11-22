@@ -339,13 +339,15 @@ class Source(Protocol):
     kind is the kind's value of the definition's kind field. starts says
     what the kind's hooks start. remark is what status adds about a tool of
     the kind after the kind's name, or nothing. on_node says that the kind's
-    hooks run on the policy's Node, which policy.toml then pins.
+    hooks run on the policy's Node, which policy.toml then pins. scans_history
+    says that a tool of the kind may scan the history in the CI gate.
     """
 
     kind: ClassVar[str]
     starts: ClassVar[Starts]
     remark: ClassVar[str]
     on_node: ClassVar[bool]
+    scans_history: ClassVar[bool]
 
     def offer(
         self,
@@ -625,13 +627,12 @@ def _history(
 ) -> tuple[str, ...]:
     table = fields(value, {"args"}, field)
     history = _arguments(table["args"], f"{field}.args", owned, RANGE)
-    upstream = source.starts is Starts.UPSTREAM_HOOKS
-    if upstream or sum(arg.count(RANGE) for arg in history) != 1:
+    if not source.scans_history:
         raise GatesealError(
-            "invalid_field",
-            f"{field}.args must hold {RANGE} once, and only a tool "
-            "whose hooks start its own executable scans history.",
+            "invalid_field", f"A {source.kind} tool cannot have {field}."
         )
+    if sum(arg.count(RANGE) for arg in history) != 1:
+        raise GatesealError("invalid_field", f"{field}.args must hold {RANGE} once.")
     return history
 
 

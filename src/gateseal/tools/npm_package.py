@@ -62,6 +62,7 @@ class NpmPackage:
     starts: ClassVar[Starts] = Starts.EXECUTABLE
     remark: ClassVar[str] = ""
     on_node: ClassVar[bool] = True
+    scans_history: ClassVar[bool] = True
     package: str
 
     def offer(

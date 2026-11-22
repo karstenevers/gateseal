@@ -302,6 +302,7 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "python-audit",
         "python-dependencies",
         "typescript",
+        "typescript-types",
     )
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
@@ -337,6 +338,7 @@ def test_policy_without_python_offers_no_python(tmp_path):
         "python-dependencies",
         "secrets",
         "typescript",
+        "typescript-types",
     )
     assert "ruff" not in policy.tools
     assert "rules/ruff.toml" not in {asset.path for asset in policy.assets}
