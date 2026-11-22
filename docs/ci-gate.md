@@ -60,6 +60,35 @@ The job ignores the agent's mise settings, the storage folders that the agent se
 
 A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool failure exits 4. See [Commands and results](commands-and-results.md) for JSON results and other errors.
 
+## What a failed gate shows
+
+In GitHub Actions and Azure Pipelines, a failed gate shows what went wrong, so you do not need a local run to find it:
+
+- **The full log, in color.** The job log shows all the output of each failed hook. gateseal removes recognized credentials, such as tokens, from it first. A workflow command in the output, such as `::error`, `##vso[` or `##[group]`, does not run. A local `gateseal gate` still cuts long output at 6,000 characters. Add `--verbose` to see all of it.
+- **Annotations.** Each failed hook adds an error annotation. When the hook reports a file and line, such as Ruff, the annotation is on that line, and GitHub shows it in the pull request's **Files changed** tab. Other failed hooks annotate the run, and so does a secret that a history scan finds, with its file, line and commit. GitHub shows 10 error annotations of a step, so each failed check gets one before any check gets a second.
+- **A run summary.** The summary of the run lists each failed check and the next steps. On Azure Pipelines, it is on the **Extensions** tab of the run.
+- **The changes that hooks made.** When a hook changes a file, the log shows the diff of each changed file:
+
+```text
+fix end of files.........................................................Failed
+- hook id: end-of-file-fixer
+- files were modified by this hook
+
+Fixing notes.txt
+
+Changes that the hooks made:
+diff --git a/notes.txt b/notes.txt
+@@ -1,2 +1,2 @@
+ first line
+-no final newline
+\ No newline at end of file
++no final newline
+```
+
+If the worktree had changes before the hooks ran, the log says so and shows no diff. The gate does not commit a change. Run `gateseal run` in a clone, review the change, and commit it.
+
+A passing gate adds no error annotation. Its warnings, such as the [time budget](#time-budget) warning, still show.
+
 ## Time budget
 
 Each gate reports how long it took. The time includes the hooks, a test run if the gate has one, any install of their environments, and the history scans. The job log also lists the time of each check and of pre-commit's setup, and names the slowest check. A policy can set `time_budget_seconds`, such as `300` for five minutes. A gate over the budget warns. It still exits as its checks decide, because machine speed changes with load and caches.

@@ -1,6 +1,7 @@
 """How a Result reads in the terminal and as JSON."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from gateseal.diagnostics import Note, Result, redact
@@ -67,15 +68,37 @@ def test_an_annotation_replaces_each_warning_and_json_ignores_it():
         ),
         next_steps=("Look.",),
     )
-    assert result.render(False, annotation="[{}]".format).splitlines() == [
-        "Consistent.",
+    assert result.render(False, ci=CI).splitlines() == [
+        "<Consistent.",
         "Policy 1.",
-        "[100%",
+        "Next: Look.>",
+        "[warning 100%",
         "review]",
-        "Next: Look.",
     ]
     assert "Warning: 100%\r\nreview" in result.render(False)
-    assert result.render(True, annotation="[{}]".format) == result.render(True)
+    assert result.render(True, ci=CI) == result.render(True)
+
+
+def test_ci_text_output_quotes_no_empty_text():
+    result = Result("check", notes=(Note("warning", "overdue", "Late."),))
+    assert result.render(False, ci=CI) == "[warning Late.]"
+
+
+@pytest.mark.parametrize(
+    "hidden",
+    ["##vso[task.setvariable variable=x]y", "##[add-mask]y"],
+    ids=["azure", "github legacy"],
+)
+def test_json_escapes_the_bracket_that_starts_a_command(hidden):
+    shown = Result("run", details=f"a {hidden} b").render(True)
+    assert "##vso[" not in shown and "##[" not in shown
+    assert json.loads(shown)["diagnostics"][0]["message"] == f"a {hidden} b"
+
+
+CI = SimpleNamespace(
+    annotation=lambda note: f"[{note.severity} {note.message}]",
+    quote=lambda text: f"<{text}>",
+)
 
 
 def test_entries_stay_out_of_text_output_whatever_their_severity():
@@ -104,3 +127,21 @@ def test_check_times_follow_the_details_whole_and_redacted_and_stay_out_of_json(
         "Next: Look.",
     ]
     assert "Times:" not in result.render(True)
+
+
+def test_in_ci_the_check_times_are_quoted_with_the_text():
+    token = "ghp_" + "a" * 36
+    result = Result(
+        "gate",
+        message="Checks passed.",
+        check_times=("Times:", f"    1.0  hook {token}"),
+        notes=(Note("warning", "over_time_budget", "Slow."),),
+        next_steps=("Look.",),
+    )
+    assert result.render(False, ci=CI).splitlines() == [
+        "<Checks passed.",
+        "Times:",
+        "    1.0  hook [redacted]",
+        "Next: Look.>",
+        "[warning Slow.]",
+    ]

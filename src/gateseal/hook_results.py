@@ -3,6 +3,7 @@
 import re
 from collections.abc import Iterable
 
+from gateseal.diagnostics import COLOR
 from gateseal.tools.model import Hook, OutputFormat
 
 STATUS = re.compile(
@@ -15,9 +16,6 @@ FINDING = re.compile(
 """A concise finding. A team's Betterleaks rule may name itself with any
 characters but white space, such as aws_access_token, 123-token or ns:token."""
 MODIFIED = "- files were modified by this hook"
-# Inherited settings such as PRE_COMMIT_COLOR or FORCE_COLOR can color the
-# output even when it is captured.
-COLOR = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def hook_results(

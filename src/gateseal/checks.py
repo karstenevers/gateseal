@@ -7,14 +7,16 @@ environment, as it does at git commit.
 
 import os
 import re
+import subprocess
 from dataclasses import replace
 
 from gateseal import ci, lock, setup
 from gateseal.check_times import CheckTime, gate_time
 from gateseal.ci import OFFLINE, Scope
 from gateseal.compiler_release import CHECK_HOOK
-from gateseal.diagnostics import Result
-from gateseal.hook_results import COLOR, FINDING, hook_results
+from gateseal.diagnostics import COLOR, Result
+from gateseal.environments import clean_environment
+from gateseal.hook_results import FINDING, hook_results
 from gateseal.managed_files import CONFIG
 from gateseal.processes import Timed, execute, execute_timed, pre_commit_command
 from gateseal.tools import reports
@@ -90,7 +92,9 @@ def run(locked: lock.Locked) -> Result:
     )
 
 
-def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result:
+def gate(
+    worktree: Worktree, locked: lock.Locked, scope: Scope | None, in_ci: bool = False
+) -> Result:
     """Run the ci stage's hooks on scope's files, then each history scan.
 
     pre-commit reads the files from the worktree, so a scope that names a head
@@ -98,7 +102,8 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     a ranged run, which pre-commit would otherwise stash as a commit does,
     finds no unstaged edits. The reports of an earlier run go first, and a
     hook that then ran without a report it reads ends the gate with
-    missing_report.
+    missing_report. in_ci asks pre-commit for color, which a CI log shows,
+    and adds the diff of what the hooks changed after pre-commit's output.
     """
     if scope is None:
         return Result(
@@ -115,25 +120,19 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     if scope.head is not None:
         ci.require_checked_out(worktree, scope.head)
     env = dict(os.environ) | OFFLINE
+    clean = _diff(worktree, "--quiet").returncode == 0 if in_ci else None
     reports.clear(locked.root, locked.selection.hooks)
     pre_commit = execute_timed(
-        pre_commit_command(python, [*hook_run(Stage.CI), *files, "--color", "never"]),
+        pre_commit_command(
+            python,
+            [*hook_run(Stage.CI), *files, "--color", "always" if in_ci else "never"],
+        ),
         locked.root,
         env,
     )
     process = pre_commit.process
     revisions = scope.history
-    scans: list[tuple[ToolDefinition, Timed]] = []
-    for tool in locked.selection.tools:
-        definition, history = tool.definition, tool.definition.history
-        program = tool.program(OFFLINE)
-        if revisions is not None and history is not None and program is not None:
-            scanned = execute_timed(
-                [*program, *(a.replace(RANGE, revisions) for a in history)],
-                locked.root,
-                env,
-            )
-            scans.append((definition, scanned))
+    scans = _scan_history(locked, revisions, env)
     duration, times, over = gate_time(
         pre_commit,
         locked.selection.hooks,
@@ -142,6 +141,8 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
     results = hook_results(details, locked.selection.hooks, "ci")
+    if clean is not None and any(entry.get("modified") for entry in results):
+        details += _changes(worktree) if clean else EDITED
     missing = reports.missing(locked.root, locked.selection.reads, results)
     entries = [duration, *results]
     outcomes: set[str] = set()
@@ -158,6 +159,60 @@ def gate(worktree: Worktree, locked: lock.Locked, scope: Scope | None) -> Result
         scope.reason, process.returncode, outcomes, missing, details, entries
     )
     return replace(result, notes=over, check_times=times)
+
+
+def _scan_history(
+    locked: lock.Locked, revisions: str | None, env: dict[str, str]
+) -> list[tuple[ToolDefinition, Timed]]:
+    """Run and time each history scan of the selected tools on revisions, if any."""
+    scans: list[tuple[ToolDefinition, Timed]] = []
+    for tool in locked.selection.tools:
+        definition, history = tool.definition, tool.definition.history
+        program = tool.program(OFFLINE)
+        if revisions is not None and history is not None and program is not None:
+            scanned = execute_timed(
+                [*program, *(a.replace(RANGE, revisions) for a in history)],
+                locked.root,
+                env,
+            )
+            scans.append((definition, scanned))
+    return scans
+
+
+EDITED = (
+    "\nThe worktree had changes before the hooks ran, so the log shows no diff of "
+    "what the hooks changed.\n"
+)
+"""What a CI gate's log says instead of the diff when a full gate starts with
+changes, which the diff could not tell apart from the hooks' changes."""
+
+
+def _changes(worktree: Worktree) -> str:
+    """Return a header and the colored diff of what the hooks changed, for the log.
+
+    A CI run cannot show the change to its reader any other way.
+    """
+    diff = _diff(worktree, "--color=always")
+    output = (diff.stdout + diff.stderr).decode("utf-8", errors="replace")
+    return "\nChanges that the hooks made:\n" + output
+
+
+def _diff(worktree: Worktree, flag: str) -> subprocess.CompletedProcess[bytes]:
+    """Run git diff of the worktree against the index with flag, as the files
+    are, without a diff driver or a submodule's changes."""
+    return execute(
+        [
+            worktree.git,
+            "diff",
+            "--ignore-submodules",
+            "--no-textconv",
+            "--no-ext-diff",
+            flag,
+        ],
+        worktree.root,
+        clean_environment() | OFFLINE,
+        allow_failure=True,
+    )
 
 
 def _scan_outcome(returncode: int, findings: list[dict[str, object]]) -> str:

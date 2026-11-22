@@ -68,6 +68,12 @@ change the manifest, policy or lock format, and its entry says how to move.
   repair: `git lfs update --force`, then `pre-commit install`, or a line to
   add to a push hook that pre-commit kept. It accepts a push hook of Git's
   configuration that runs `git lfs pre-push`.
+- A failed gate in GitHub Actions or Azure Pipelines shows more. The job log
+  shows all the hook output, in color, and the diff of each file that a hook
+  changed. Each failed hook adds an error annotation, on the file and line
+  when the hook reports them. The run gets a summary of the failed checks and
+  the next steps. In CI, every result shows all its output, as with
+  `--verbose`.
 
 - The CI gate lists the time of each check in its log, and names the
   slowest. The warning of a gate over its time budget names the slowest
@@ -89,6 +95,13 @@ change the manifest, policy or lock format, and its entry says how to move.
   one of them. The policy keeps its label `2026.11-team-tools`, so
   `gateseal upgrade` to this release stops with `bundled_policy_moves` until
   you add `--policy bundled`.
+
+### Security
+
+- gateseal redacts a recognized credential in captured output even when
+  terminal color codes split it or come right before it.
+- In GitHub Actions and Azure Pipelines, a workflow or logging command in
+  captured output, such as a hook's output, no longer runs.
 
 ## [0.2.0] - 2026-11-18
 

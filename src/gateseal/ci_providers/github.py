@@ -12,6 +12,10 @@ workflow that another workflow calls has neither triggers nor concurrency of
 its own: the caller's workflow owns both.
 """
 
+import secrets
+from collections.abc import Mapping
+from pathlib import Path
+
 from gateseal.ci_providers.model import (
     GENERATED,
     IMAGE,
@@ -24,7 +28,7 @@ from gateseal.ci_providers.model import (
     scoped_helper,
     script,
 )
-from gateseal.diagnostics import GatesealError
+from gateseal.diagnostics import Annotation, GatesealError
 from gateseal.validation import sequence, string
 
 WORKFLOW = ".github/workflows/gateseal.yml"
@@ -97,10 +101,45 @@ def runner(value: object) -> tuple[str, ...]:
     return labels
 
 
-def warning(message: str) -> str:
-    """Return the workflow command that GitHub shows as a warning annotation."""
-    escaped = message.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
-    return f"::warning title=gateseal::{escaped}"
+def annotation(note: Annotation) -> str:
+    """Return the workflow command that GitHub shows as an annotation.
+
+    A note with a file annotates that file, at its line and column when it
+    has them, and one without annotates the run.
+    """
+    located = (("file", note.file), ("line", note.line), ("col", note.column))
+    properties = [
+        f"{key}={_escape_property(str(v))}" for key, v in located if v is not None
+    ]
+    properties.append("title=gateseal")
+    return f"::{note.severity} {','.join(properties)}::{_escape_data(note.message)}"
+
+
+def quote(text: str) -> str:
+    """Return text between commands that stop and resume workflow commands.
+
+    The runner takes a line that starts with two colons as a command. The token
+    that resumes them is random, so the text cannot hold it.
+    """
+    token = secrets.token_hex(16)
+    return f"::stop-commands::{token}\n{text}\n::{token}::"
+
+
+def publish_summary(markdown: str, environment: Mapping[str, str]) -> str:
+    """Append markdown to the job's step summary file, if the job names one."""
+    path = environment.get("GITHUB_STEP_SUMMARY")
+    if path:
+        with Path(path).open("a", encoding="utf-8") as file:
+            file.write(markdown)
+    return ""
+
+
+def _escape_data(text: str) -> str:
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(text: str) -> str:
+    return _escape_data(text).replace(":", "%3A").replace(",", "%2C")
 
 
 CREDENTIAL_HELPER = (
