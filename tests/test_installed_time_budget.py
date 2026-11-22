@@ -6,6 +6,8 @@ gate runs past the budget. The warning leaves the exit code, status and code
 as the checks decide.
 """
 
+import re
+
 import pytest
 from conftest import BUNDLED_MINIMUM, on_machine
 from installation import clone, process, success
@@ -22,6 +24,13 @@ TABLE = (
     'files = "\\\\.txt$"\n'
 )
 TOOK = "The gate took "
+HEADING = "Time of each check, in seconds:"
+SLOW = "Sleep, then refuse FAIL"
+WARNING = (
+    r"The gate took \d+\.\d seconds, over the policy's time budget of 1 seconds\. "
+    r"Speed up its slowest checks, or raise time_budget_seconds in the policy\. "
+    r"The slowest check took \d+\.\d seconds: Sleep, then refuse FAIL\."
+)
 
 
 def budget(seconds):
@@ -118,8 +127,20 @@ def test_a_gate_past_its_budget_warns_and_keeps_its_result(
     assert shown.returncode == code, shown.stdout + shown.stderr
     lines = shown.stdout.splitlines()
     [warning] = [line for line in lines if line.startswith(f"Warning: {TOOK}")]
-    assert all(text in warning for text in ("budget of 1 seconds", "time_budget"))
+    assert re.fullmatch(f"Warning: {WARNING}", warning), warning
     assert not [line for line in lines if line.startswith("::warning")]
+    times = lines[lines.index(HEADING) + 1 : lines.index(warning)]
+    *rows, last = times
+    assert re.fullmatch(
+        r" +\d+\.\d  pre-commit setup, such as installing hooks", rows[0]
+    )
+    [slow_row] = [row for row in rows if row.endswith(f"  {SLOW}")]
+    assert float(slow_row.split()[0]) >= SLEEP
+    assert re.fullmatch(
+        rf"The gate took \d+\.\d seconds\. The slowest check took "
+        rf"{slow_row.split()[0]} seconds: {SLOW}\.",
+        last,
+    ), last
 
 
 @pytest.mark.parametrize(
@@ -139,6 +160,21 @@ def test_in_ci_the_warning_is_the_providers_command(
     assert shown.returncode == 0, shown.stdout + shown.stderr
     lines = shown.stdout.splitlines()
     [warning] = [line for line in lines if line.startswith(command)]
-    assert warning.startswith(f"{command}{TOOK}")
-    assert "time_budget_seconds" in warning
+    assert re.fullmatch(re.escape(command) + WARNING, warning), warning
     assert not [line for line in lines if line.startswith("Warning:")]
+
+
+def test_a_gate_without_a_check_to_run_lists_no_time(installed, team, tmp_path):
+    consumer = adopt(installed, tmp_path, team)
+    head = success(["git", "rev-parse", "HEAD"], consumer).stdout.strip()
+    revisions = ["--base", head, "--head", head]
+    shown = process(
+        [installed.command, "--repo", consumer, "gate", *revisions], consumer, team
+    )
+    assert shown.returncode == 0, shown.stdout + shown.stderr
+    message, *statuses, end = shown.stdout.splitlines()
+    assert (message.startswith("Checks passed."), end) == (True, "")
+    assert statuses
+    assert all(
+        re.fullmatch(r".+\.+\(no files to check\)Skipped", s) for s in statuses
+    ), shown.stdout

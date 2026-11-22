@@ -14,8 +14,8 @@ from types import SimpleNamespace
 
 import pytest
 from conftest import TRACKED
-from gateseal import checks, ci, lock, setup
-from gateseal.diagnostics import GatesealError
+from gateseal import checks, ci, lock, processes, setup
+from gateseal.diagnostics import GatesealError, Note
 from gateseal.worktree import locate_worktree, preparation_directory
 from installation import success
 from stand_ins import configure
@@ -202,71 +202,102 @@ def test_a_deleted_ref_runs_nothing(attempt, planned):
     assert result.entries == ()
 
 
-def without_message(entry):
-    return {k: v for k, v in entry.items() if k != "message"}, entry["message"]
+def timed_as(monkeypatch, pre_commit, scan, hooks):
+    """Make the gate see pre-commit, each named hook and a scan take these seconds."""
+
+    def execute_timed(arguments, root, env):
+        timed = processes.execute_timed(arguments, root, env)
+        if "pre_commit" not in arguments:
+            return dataclasses.replace(timed, seconds=scan)
+        lines = tuple(
+            (line, hooks.get(line.split(b".")[0].decode(), seconds))
+            for line, seconds in timed.lines
+        )
+        return dataclasses.replace(timed, seconds=pre_commit, lines=lines)
+
+    monkeypatch.setattr(checks, "execute_timed", execute_timed)
 
 
-def budgeted(planned, budget, elapsed, monkeypatch):
-    """Return the gate's result for a policy budget and a run that took elapsed."""
-    instants = iter([1000.0, 1000.0 + elapsed])
-    monkeypatch.setattr(checks, "monotonic", lambda: next(instants))
-    policy = dataclasses.replace(planned.locked.policy, time_budget_seconds=budget)
-    locked = dataclasses.replace(planned.locked, policy=policy)
-    return checks.gate(planned.worktree, locked, planned.scope)
+SETUP = "pre-commit setup, such as installing hooks"
 
 
 @pytest.mark.parametrize(
-    "budget,elapsed,seconds",
-    [(None, 42.34, 42.3), (300, 42.34, 42.3), (300, 300.04, 300.0)],
-    ids=["no budget", "within", "at the budget once rounded"],
+    "output,status,rows,slowest",
+    [
+        (
+            YAML_PASSED,
+            0,
+            ["4.0  " + SETUP, "1.0  check yaml"],
+            "3.0 seconds: betterleaks history scan",
+        ),
+        (
+            YAML_PASSED + EOF_FAILED,
+            1,
+            ["0.5  " + SETUP, "1.0  check yaml", "3.5  fix end of files"],
+            "3.5 seconds: fix end of files",
+        ),
+    ],
+    ids=["passing", "failing"],
 )
-def test_the_gate_reports_its_time_first(
-    attempt, planned, monkeypatch, budget, elapsed, seconds
+def test_a_gate_lists_the_time_of_each_check_and_names_the_slowest(
+    attempt, planned, monkeypatch, output, status, rows, slowest
 ):
-    attempt.pre_commit.answer(YAML_PASSED, 0)
-    result = budgeted(planned, budget, elapsed, monkeypatch)
-    timed, message = without_message(result.entries[0])
-    assert f"{seconds} seconds" in message
-    assert timed == {"severity": "info", "category": "duration", "seconds": seconds} | (
-        {} if budget is None else {"budget_seconds": budget}
+    attempt.pre_commit.answer(output, status)
+    timed_as(monkeypatch, 5.0, 3.0, {"check yaml": 1.0, "fix end of files": 3.5})
+    result = gate(planned)
+    took = f"The gate took 8.0 seconds. The slowest check took {slowest}."
+    assert result.check_times == (
+        "Time of each check, in seconds:",
+        *(f"    {row}" for row in rows),
+        "    3.0  betterleaks history scan",
+        took,
     )
-    assert result.notes == ()
-    assert (result.code, result.exit_code) == ("checks_passed", 0)
+    assert result.entries[0] == {
+        "severity": "info",
+        "category": "duration",
+        "seconds": 8.0,
+        "message": took,
+    }
+    assert result.exit_code == status
 
 
 @pytest.mark.parametrize(
     "output,status,code",
-    [(YAML_PASSED, 0, "checks_passed"), (EOF_FAILED, 1, "checks_failed")],
+    [(YAML_PASSED, 0, "checks_passed"), (EOF_FAILED + YAML_PASSED, 1, "checks_failed")],
     ids=["passing", "failing"],
 )
 def test_a_gate_over_its_budget_warns_and_ends_as_its_checks_decide(
     attempt, planned, monkeypatch, output, status, code
 ):
     attempt.pre_commit.answer(output, status)
-    result = budgeted(planned, 300, 300.06, monkeypatch)
-    timed, _ = without_message(result.entries[0])
-    assert timed == {
-        "severity": "info",
-        "category": "duration",
-        "seconds": 300.1,
-        "budget_seconds": 300,
-    }
-    [over] = result.notes
-    assert (over.severity, over.category) == ("warning", "over_time_budget")
-    assert all(
-        text in over.message for text in ("300.1", "300 seconds", "time_budget_seconds")
+    timed_as(monkeypatch, 299.0, 1.06, {"check yaml": 250.1})
+    policy = dataclasses.replace(planned.locked.policy, time_budget_seconds=300)
+    locked = dataclasses.replace(planned.locked, policy=policy)
+    result = checks.gate(planned.worktree, locked, planned.scope)
+    assert (result.entries[0]["seconds"], result.entries[0]["budget_seconds"]) == (
+        300.1,
+        300,
     )
+    warning = (
+        "The gate took 300.1 seconds, over the policy's time budget of 300 seconds. "
+        "Speed up its slowest checks, or raise time_budget_seconds in the policy. "
+        "The slowest check took 250.1 seconds: check yaml."
+    )
+    assert result.notes == (Note("warning", "over_time_budget", warning),)
     assert (result.code, result.exit_code) == (code, status)
     assert json.loads(result.render(True))["status"] == ("failed" if status else "ok")
-    assert f"Warning: {over.message}" in result.render(False).splitlines()
+    assert f"Warning: {warning}" in result.render(False).splitlines()
 
 
-def test_the_time_covers_pre_commit_and_the_history_scan(attempt, planned, monkeypatch):
-    def now():
-        return 10.0 * attempt.pre_commit.has_run() + 100.0 * attempt.scanner.has_run()
-
-    monkeypatch.setattr(checks, "monotonic", now)
-    assert gate(planned).entries[0]["seconds"] == 110.0
+def test_a_gate_without_a_check_to_run_reads_as_before(attempt, planned):
+    attempt.pre_commit.answer(
+        "check yaml..............................(no files to check)Skipped\n", 0
+    )
+    result = gate(planned, ci.full_scope())
+    assert result.check_times == ()
+    seconds = result.entries[0]["seconds"]
+    assert result.entries[0]["message"] == f"The gate took {seconds} seconds."
+    assert result.render(False) == f"{result.message}\n{result.details}"
 
 
 def test_a_head_that_is_not_checked_out_stops_before_pre_commit(attempt, planned):

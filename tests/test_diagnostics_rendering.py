@@ -83,3 +83,24 @@ def test_entries_stay_out_of_text_output_whatever_their_severity():
     result = Result("upgrade", message="Upgraded.", entries=(entry,))
     assert result.render(False) == "Upgraded."
     assert entry in json.loads(result.render(True))["diagnostics"]
+
+
+def test_check_times_follow_the_details_whole_and_redacted_and_stay_out_of_json():
+    token = "ghp_" + "a" * 36
+    result = Result(
+        "gate",
+        message="Checks passed.",
+        details="d" * 6001,
+        check_times=("Times:", f"    1.0  hook {token}"),
+        notes=(Note("warning", "over_time_budget", "Slow."),),
+        next_steps=("Look.",),
+    )
+    *_, notice, times, hook, warning, step = result.render(False).splitlines()
+    assert "--verbose" in notice
+    assert [times, hook, warning, step] == [
+        "Times:",
+        "    1.0  hook [redacted]",
+        "Warning: Slow.",
+        "Next: Look.",
+    ]
+    assert "Times:" not in result.render(True)

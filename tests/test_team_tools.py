@@ -25,6 +25,7 @@ from gateseal.policy import (
     load_policy_stream,
     load_policy_tree,
 )
+from gateseal.processes import Timed
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
@@ -288,14 +289,15 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
     authoring.lock(root)
     locked, _ = consumer(load_policy_tree(root), ("hygiene", "secrets"))
 
-    def execute(command, root, env, allow_failure):
+    def execute_timed(command, root, env):
         if command[:2] == ["mise", "--no-config"] and "gitleaks" in command:
             line = f"leak.env:3:1: team-token (A team token) in commit {'a' * 40}\n"
-            return subprocess.CompletedProcess(command, 1, line.encode(), b"")
-        return subprocess.CompletedProcess(command, 0, b"", b"")
+            found = subprocess.CompletedProcess(command, 1, line.encode(), b"")
+            return Timed(found, 0, ())
+        return Timed(subprocess.CompletedProcess(command, 0, b"", b""), 0, ())
 
     monkeypatch.setattr(checks.setup, "require_pre_commit", lambda: "/python")
-    monkeypatch.setattr(checks, "execute", execute)
+    monkeypatch.setattr(checks, "execute_timed", execute_timed)
     result = checks.gate(None, locked, Scope(None, "a..b", None, "Scanned."))
     assert result.code == "checks_failed"
     assert [
