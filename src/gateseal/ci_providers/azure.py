@@ -14,6 +14,8 @@ team's pipeline owns the triggers and an included file declares no resources.
 """
 
 import json
+from collections.abc import Mapping
+from pathlib import Path
 from urllib.parse import unquote
 
 from gateseal.ci_providers.model import (
@@ -28,6 +30,7 @@ from gateseal.ci_providers.model import (
     scoped_helper,
     script,
 )
+from gateseal.diagnostics import COMMAND_START, Annotation
 from gateseal.validation import string
 
 PIPELINE = "azure-pipelines-gateseal.yml"
@@ -72,10 +75,47 @@ def runner(value: object) -> tuple[str, ...]:
     return (string(value, f"ci.{RUNNER_KEY}"),)
 
 
-def warning(message: str) -> str:
-    """Return the logging command that Azure Pipelines shows as a warning."""
-    escaped = message.replace("%", "%AZP25").replace("\r", "%0D").replace("\n", "%0A")
-    return f"##vso[task.logissue type=warning]{escaped}"
+def annotation(note: Annotation) -> str:
+    """Return the logging command that Azure Pipelines shows as an issue.
+
+    A note with a file names that file, at its line and column when it has
+    them, and one without is an issue of the run.
+    """
+    located = (
+        ("sourcepath", note.file),
+        ("linenumber", note.line),
+        ("columnnumber", note.column),
+    )
+    properties = [f"type={note.severity}"]
+    properties += [
+        f"{key}={_escape_property(str(v))}" for key, v in located if v is not None
+    ]
+    return f"##vso[task.logissue {';'.join(properties)}]{_escape_data(note.message)}"
+
+
+def quote(text: str) -> str:
+    """Return text with a space in the start of each logging or formatting
+    command, which the agent finds anywhere in a line."""
+    return COMMAND_START.sub(r"\1 [", text)
+
+
+def publish_summary(markdown: str, environment: Mapping[str, str]) -> str:
+    """Write markdown to the agent's temporary directory, and return the command
+    that uploads it as a summary of the run, or "" when the agent names none."""
+    directory = environment.get("AGENT_TEMPDIRECTORY")
+    if not directory:
+        return ""
+    path = Path(directory) / "gateseal-summary.md"
+    path.write_text(markdown, encoding="utf-8")
+    return f"##vso[task.uploadsummary]{_escape_data(str(path))}"
+
+
+def _escape_data(text: str) -> str:
+    return text.replace("%", "%AZP25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def _escape_property(text: str) -> str:
+    return _escape_data(text).replace(";", "%3B").replace("]", "%5D")
 
 
 TOKENS = {

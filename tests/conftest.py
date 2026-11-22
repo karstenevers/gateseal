@@ -119,7 +119,8 @@ def pytest_configure(config):
     keeps the developer's cache and Pythons. UV_PROJECT_ENVIRONMENT is unset,
     so uv installs each test project in its own .venv. GITHUB_ACTIONS and
     TF_BUILD are unset, so text output prints a warning as Warning: even when a
-    CI provider runs the tests.
+    CI provider runs the tests. GITHUB_STEP_SUMMARY and AGENT_TEMPDIRECTORY are
+    unset too, so a test never writes the summary of the job that runs it.
     """
     root = config.option.basetemp or os.environ.get(
         "PYTEST_DEBUG_TEMPROOT", tempfile.gettempdir()
@@ -139,6 +140,8 @@ def pytest_configure(config):
         "UV_PROJECT_ENVIRONMENT",
         "GITHUB_ACTIONS",
         "TF_BUILD",
+        "GITHUB_STEP_SUMMARY",
+        "AGENT_TEMPDIRECTORY",
     ):
         os.environ.pop(name, None)
     os.environ.update(home_environment(home))

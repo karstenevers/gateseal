@@ -1,9 +1,20 @@
 import json
 import re
-from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Protocol, cast
 
 ENTRY_LIMIT = 200
+
+COLOR = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+"""A terminal color code, or another control sequence of the same form. The gate
+in CI asks pre-commit for color, and inherited settings such as PRE_COMMIT_COLOR
+or FORCE_COLOR can color captured output. The form also takes a color code
+whose parameters colons separate."""
+
+COMMAND_START = re.compile(r"(##(?:vso)?)\[")
+"""The start of an Azure Pipelines logging or formatting command, or of a GitHub
+workflow command in the runner's legacy form, which each finds anywhere in a
+line."""
 
 NEXT_STEPS = {
     "concurrent_change": (
@@ -165,6 +176,25 @@ class GatesealError(Exception):
 
 
 def redact(text: str) -> str:
+    """Return text without credentials, keeping the color of each clean line.
+
+    The patterns match the text without color codes, so a code inside a token
+    cannot hide it. A line that held a credential loses its color codes.
+    Redaction never adds or removes a line break, so the lines pair up.
+    """
+    plain = COLOR.sub("", text)
+    return "\n".join(
+        colored if line == redacted else redacted
+        for colored, line, redacted in zip(
+            text.split("\n"),
+            plain.split("\n"),
+            _redact_plain(plain).split("\n"),
+            strict=True,  # pytestmut: skip[bool.literal] -- no line is added or lost
+        )
+    )
+
+
+def _redact_plain(text: str) -> str:
     text = re.sub(r"(?:https?|ssh)://[^\s<>'\"]+", _safe_url, text)
     text = re.sub(r"(?i)(authorization\s*[:=]\s*)[^\r\n]+", r"\1[redacted]", text)
     return re.sub(
@@ -194,6 +224,30 @@ def _safe_url(match: re.Match[str]) -> str:
 
 
 @dataclass(frozen=True)
+class Annotation:
+    """One message that a CI provider shows on the run, or on a line of a file."""
+
+    severity: str
+    """error or warning."""
+    message: str
+    file: str | None = None
+    line: int | None = None
+    column: int | None = None
+
+
+class CiLog(Protocol):
+    """The log of a CI provider's run, as gateseal's text output reaches it."""
+
+    def annotation(self, note: Annotation, /) -> str:
+        """Return the command that the provider shows as note."""
+        ...
+
+    def quote(self, text: str, /) -> str:
+        """Return text that the provider prints without running a command in it."""
+        ...
+
+
+@dataclass(frozen=True)
 class Note:
     """One diagnostic with its own severity, such as a Version Exception."""
 
@@ -219,18 +273,16 @@ class Result:
     JSON leaves them out, and they are never cut."""
 
     def render(
-        self,
-        as_json: bool,
-        full: bool = False,
-        *,
-        annotation: Callable[[str], str] | None = None,
+        self, as_json: bool, full: bool = False, *, ci: CiLog | None = None
     ) -> str:
-        """Return the result as text or JSON.
+        """Return the result as text or JSON, which holds no color codes.
 
-        annotation turns each warning of text output into the command that a
-        CI provider shows as an annotation of the run.
+        For the log of a CI run, text output turns each warning, and each failed
+        hook or history scan, into an annotation, and quotes the rest. JSON is
+        one line, which Azure Pipelines and GitHub Actions would scan for a
+        command, so it escapes the bracket that starts one.
         """
-        detail = redact(self.details)
+        detail = redact(COLOR.sub("", self.details) if as_json else self.details)
         if not full and len(detail) > 6000:
             detail = (
                 detail[:6000]
@@ -239,17 +291,8 @@ class Result:
         messages = [redact(s) for s in (self.message, detail) if s]
         notes = [Note(n.severity, n.category, redact(n.message)) for n in self.notes]
         if not as_json:
-            lines = [
-                (annotation or "Warning: {}".format)(n.message)
-                if n.severity == "warning"
-                else n.message
-                for n in notes
-            ]
-            times = [redact(line) for line in self.check_times]
-            return "\n".join(
-                [*messages, *times, *lines, *(f"Next: {s}" for s in self.next_steps)]
-            )
-        return json.dumps(
+            return self._text(messages, notes, ci)
+        shown = json.dumps(
             {
                 "schema": 1,
                 "command": self.command,
@@ -277,6 +320,53 @@ class Result:
             },
             ensure_ascii=False,
         )
+        return COMMAND_START.sub(r"\1\\u005b", shown)
+
+    def summary(self) -> str:
+        """Return the result as redacted Markdown for a CI provider's run summary."""
+        failed = [str(owner["message"]) for owner, _ in _failures(self._redacted())]
+        sections = [f"### gateseal {self.command}", redact(self.message)]
+        steps = [redact(step) for step in self.next_steps]
+        for heading, items in (("Failed checks:", failed), ("Next steps:", steps)):
+            if items:
+                sections.append(f"{heading}\n\n" + "\n".join(f"- {i}" for i in items))
+        return "\n\n".join(sections) + "\n"
+
+    def _text(self, messages: list[str], notes: list[Note], ci: CiLog | None) -> str:
+        """Return the text output. In CI, one quote holds all the text, because
+        GitHub prints the two lines of each quote, and the annotations follow."""
+        times = [redact(line) for line in self.check_times]
+        steps = [f"Next: {s}" for s in self.next_steps]
+        if ci is None:
+            lines = [
+                f"Warning: {n.message}" if n.severity == "warning" else n.message
+                for n in notes
+            ]
+            return "\n".join([*messages, *times, *lines, *steps])
+        info = [n.message for n in notes if n.severity != "warning"]
+        warnings = [
+            Annotation("warning", n.message) for n in notes if n.severity == "warning"
+        ]
+        plain = "\n".join([*messages, *times, *info, *steps])
+        return "\n".join(
+            ([ci.quote(plain)] if plain else [])
+            + [ci.annotation(a) for a in [*self._errors(), *warnings]]
+        )
+
+    def _errors(self) -> list[Annotation]:
+        """Return an error annotation for each finding of a failed hook or history
+        scan, or one for the run when the failed hook or scan has no finding."""
+        groups = [
+            [_finding_annotation(f) for f in findings]
+            or [Annotation("error", str(owner["message"]))]
+            for owner, findings in _failures(self._redacted())
+        ]
+        # GitHub keeps 10 error annotations of a step, so each failure gets
+        # one before any failure gets a second.
+        return [group[0] for group in groups] + [a for g in groups for a in g[1:]]
+
+    def _redacted(self) -> list[dict[str, object]]:
+        return [_redacted(entry) for entry in self.entries]
 
     def _status(self) -> str:
         if self.exit_code:
@@ -285,10 +375,7 @@ class Result:
 
     def _entries(self, full: bool) -> list[dict[str, object]]:
         shown = self.entries if full else self.entries[:ENTRY_LIMIT]
-        entries = [
-            {k: redact(v) if isinstance(v, str) else v for k, v in entry.items()}
-            for entry in shown
-        ]
+        entries = [_redacted(entry) for entry in shown]
         if len(shown) < len(self.entries):
             entries.append(
                 {
@@ -299,3 +386,40 @@ class Result:
                 }
             )
         return entries
+
+
+def _failures(
+    entries: list[dict[str, object]],
+) -> list[tuple[dict[str, object], list[dict[str, object]]]]:
+    """Return each failed hook or history scan with the findings that follow it."""
+    groups: list[tuple[dict[str, object], list[dict[str, object]]]] = []
+    for entry in entries:
+        if entry["category"] in ("hook", "history"):
+            groups.append((entry, []))
+        elif entry["category"] == "finding":
+            groups[-1][1].append(entry)
+    return [(owner, found) for owner, found in groups if owner["status"] == "failed"]
+
+
+def _redacted(entry: dict[str, object]) -> dict[str, object]:
+    return {k: redact(v) if isinstance(v, str) else v for k, v in entry.items()}
+
+
+def _finding_annotation(finding: dict[str, object]) -> Annotation:
+    """Return the error annotation of a finding, at its line and column.
+
+    A notebook's finding annotates the file, and its message names the cell and
+    the line in the cell. A history finding annotates the run, because its line
+    is in a commit that the checkout may not hold.
+    """
+    message = f"{finding['tool']} {finding['rule']}: {finding['message']}"
+    file, line = str(finding["file"]), cast(int, finding["line"])
+    if "commit" in finding:
+        return Annotation(
+            "error", f"{message} at {file}:{line} in commit {finding['commit']}"
+        )
+    if "cell" in finding:
+        return Annotation(
+            "error", f"{message} (cell {finding['cell']}, line {line})", file
+        )
+    return Annotation("error", message, file, line, cast(int, finding["column"]))

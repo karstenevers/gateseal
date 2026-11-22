@@ -7,8 +7,8 @@ status after it, so the time of a status line is the time of its hook.
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from gateseal.diagnostics import Note
-from gateseal.hook_results import COLOR, STATUS
+from gateseal.diagnostics import COLOR, Note
+from gateseal.hook_results import STATUS
 from gateseal.processes import Timed
 from gateseal.tools.model import Hook
 

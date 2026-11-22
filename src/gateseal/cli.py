@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from typing import NoReturn, cast
@@ -16,8 +16,8 @@ from gateseal import (
     setup,
     upgrade,
 )
-from gateseal.ci_providers import PROVIDERS
-from gateseal.diagnostics import GatesealError, Result
+from gateseal.ci_providers import PROVIDERS, Provider
+from gateseal.diagnostics import Annotation, GatesealError, Result, redact
 from gateseal.paths import resolved
 from gateseal.worktree import (
     Worktree,
@@ -182,7 +182,7 @@ GATE_SCOPES = {
 with the --before that the event names."""
 
 
-def _operation(arguments: argparse.Namespace) -> Result:
+def _operation(arguments: argparse.Namespace, in_ci: bool) -> Result:
     command = cast(str | None, arguments.command) or "status"
     if command == "policy":
         return _policy(arguments)
@@ -198,7 +198,7 @@ def _operation(arguments: argparse.Namespace) -> Result:
         return health.status(worktree)
     if command == "doctor":
         return health.doctor(worktree)
-    return _locked(command, worktree, arguments)
+    return _locked(command, worktree, arguments, in_ci)
 
 
 def _configure(worktree: Worktree, arguments: argparse.Namespace) -> Result:
@@ -226,7 +226,9 @@ def _configure(worktree: Worktree, arguments: argparse.Namespace) -> Result:
     )
 
 
-def _locked(command: str, worktree: Worktree, arguments: argparse.Namespace) -> Result:
+def _locked(
+    command: str, worktree: Worktree, arguments: argparse.Namespace, in_ci: bool
+) -> Result:
     """Run a command that needs a Lock that agrees with the tracked files."""
     locked = health.load(worktree)
     if command == "check":
@@ -240,7 +242,7 @@ def _locked(command: str, worktree: Worktree, arguments: argparse.Namespace) -> 
         )
     if command == "run":
         return checks.run(locked)
-    return checks.gate(worktree, locked, _scope(worktree, arguments))
+    return checks.gate(worktree, locked, _scope(worktree, arguments), in_ci)
 
 
 def _policy(arguments: argparse.Namespace) -> Result:
@@ -296,13 +298,34 @@ def _scope(worktree: Worktree, arguments: argparse.Namespace) -> ci.Scope | None
     return ci.full_scope()
 
 
-def _annotation(environment: Mapping[str, str]) -> Callable[[str], str] | None:
-    """Return how the CI provider that runs this process shows a warning."""
+def _provider(environment: Mapping[str, str]) -> Provider | None:
+    """Return the CI provider that runs this process, if one does."""
     for provider in PROVIDERS.values():
         variable, value = provider.running
         if environment.get(variable) == value:
-            return provider.warning
+            return provider
     return None
+
+
+def _output(
+    result: Result, as_json: bool, verbose: bool, provider: Provider | None
+) -> str:
+    """Return what main prints: in CI, the full output with the provider's
+    commands, and for a failed text result the line that publishes its summary.
+
+    A summary that cannot be written leaves the result's exit code as it is.
+    """
+    if provider is None:
+        return result.render(as_json, verbose)
+    shown = result.render(as_json, True, ci=provider)
+    if as_json or not result.exit_code:
+        return shown
+    try:
+        published = provider.publish_summary(result.summary(), os.environ)
+    except OSError as exc:
+        message = f"gateseal could not write the run summary: {redact(str(exc))}"
+        published = provider.annotation(Annotation("warning", message))
+    return "\n".join(filter(None, (shown, published)))
 
 
 def _command_name(raw: list[str]) -> str:
@@ -339,11 +362,12 @@ def main(argv: list[str] | None = None) -> int:
     # pytestmut: off[cmp.membership] -- a Result of a parse error has no details
     full = "--verbose" in raw
     # pytestmut: on
+    provider = _provider(os.environ)
     try:
         try:
             arguments = _parser().parse_args(raw)
             as_json, full = bool(arguments.json), bool(arguments.verbose)
-            result = _operation(arguments)
+            result = _operation(arguments, provider is not None)
         except OSError as exc:
             raise GatesealError("filesystem_error", str(exc), 4) from exc
         except KeyboardInterrupt:
@@ -358,5 +382,5 @@ def main(argv: list[str] | None = None) -> int:
             exc.exit_code,
             next_steps=(exc.next_step,) if exc.next_step else (),
         )
-    print(result.render(as_json, full, annotation=_annotation(os.environ)))
+    print(_output(result, as_json, full, provider))
     return result.exit_code

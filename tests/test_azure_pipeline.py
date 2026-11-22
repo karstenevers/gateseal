@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from gate_files import BRANCH, SERVED, credential, gate_file
 from gateseal.ci_providers import azure
+from gateseal.diagnostics import Annotation
 from installation import process
 
 HEAD = "a" * 40
@@ -192,6 +193,6 @@ def test_the_credential_helper_holds_no_reference_that_the_agent_expands():
 
 
 def test_a_warning_is_a_logging_command_with_its_own_escapes():
-    assert azure.warning("100%\r\nover; [budget]") == (
+    assert azure.annotation(Annotation("warning", "100%\r\nover; [budget]")) == (
         "##vso[task.logissue type=warning]100%AZP25%0D%0Aover; [budget]"
     )
