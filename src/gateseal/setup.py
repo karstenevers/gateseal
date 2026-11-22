@@ -11,7 +11,8 @@ under data_root().
 The template holds no push launcher: with one there, Git LFS cannot write its
 own push hook in a new clone, and a push then uploads no Git LFS object. A
 clone gets its push launcher from pre-commit install, which keeps the hook of
-Git LFS and runs it first.
+Git LFS and runs it first. gateseal setup --refresh also writes UPLOAD_HOOK
+beside the push launcher, for Git LFS set up after it.
 """
 
 import contextlib
@@ -28,6 +29,8 @@ from gateseal import __version__
 from gateseal.compiler_release import MINIMUM_UV, PRE_COMMIT
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.environments import tool_environment, uv_environment
+from gateseal.lfs_check import SET_UP
+from gateseal.lfs_check import UPLOAD as STARTS_UPLOAD
 from gateseal.managed_files import CONFIG, read_optional, write_atomic
 from gateseal.processes import MINIMUM_GIT, execute, find_git, find_tool
 from gateseal.tools.model import LAUNCHERS
@@ -40,6 +43,50 @@ PYTHON = "3.14"
 supported uv finds or downloads a patch release of it."""
 
 TEMPLATE_SETTING = "init.templateDir"
+
+UPLOAD_HOOK = "hook.gateseal-lfs-upload"
+"""The push hook of Git's configuration that starts the upload of Git LFS.
+
+The push launcher takes the push hook file of Git LFS, so Git LFS set up after
+the launcher cannot write its hook there. Git starts this hook beside that
+file, on every branch and in every worktree of the clone, whatever
+configuration each holds.
+"""
+
+NO_GIT_LFS = (
+    "gateseal: This clone holds Git LFS objects, but git-lfs is not on PATH, so "
+    "a push uploads none of them.\nNext: Install Git LFS, then push again."
+)
+
+UPLOAD = (
+    (
+        f"{UPLOAD_HOOK}.command",
+        "unset GIT_CONFIG\n"
+        f"git config --get-regexp {shlex.quote(SET_UP)} >/dev/null || exit 0\n"
+        'test -d "$(git rev-parse --git-common-dir)/lfs" ||'
+        " git config lfs.storage >/dev/null || exit 0\n"
+        "command -v git-lfs >/dev/null 2>&1 ||"
+        f" {{ echo {shlex.quote(NO_GIT_LFS)} >&2; exit 1; }}\n"
+        "git lfs pre-push",
+    ),
+    (f"{UPLOAD_HOOK}.event", "pre-push"),
+)
+"""The settings of UPLOAD_HOOK, in the order setup writes them.
+
+Git refuses to start any hook while an event names no command, so the command
+comes first. Git runs the command in a shell, with the push's arguments, and
+adds them to its last line. The upload has a line of its own, which the Git
+LFS check counts.
+
+The command does what the hook of Git LFS does, in the clones where Git LFS
+writes that hook: Git LFS writes it, and the folder of its objects, when its
+filter first runs in a clone. A user's filter of Git LFS applies to every
+clone, so the folder, not the filter, tells such a clone. Where git-lfs is
+gone, the command stops the push, as that hook does. It reads the settings
+that the push reads: GIT_CONFIG makes git config, and no other command, read
+only the file it names. Beside a kept hook of Git LFS, Git LFS starts twice,
+and the second start finds nothing to upload.
+"""
 
 PROBE = (
     "import importlib.metadata, platform; "
@@ -396,7 +443,8 @@ def _refresh(worktree: Worktree, layout: Layout) -> tuple[list[str], tuple[Note,
     and runs it first. A launcher that is current stays as it is. A push
     launcher of an earlier refresh that no configuration asks for any more runs
     no check and keeps Git LFS from writing its push hook, so pre-commit
-    uninstall removes it and puts the kept hook back.
+    uninstall removes it and puts the kept hook back. UPLOAD_HOOK comes and
+    goes with the push launcher.
     """
     pre_commit = [str(layout.python), "-I", "-m", "pre_commit"]
     step = "Fix what pre-commit reports, then run gateseal setup --refresh."
@@ -437,4 +485,40 @@ def _refresh(worktree: Worktree, layout: Layout) -> tuple[list[str], tuple[Note,
         for path in changed
         if path in after and (legacy := path.with_name(path.name + ".legacy")).exists()
     )
-    return [str(path) for path in changed], kept
+    names = [str(path) for path in changed]
+    left = after.get(push)
+    blocks = left is not None and not STARTS_UPLOAD.search(left[0])
+    return names + _converge_upload_hook(worktree, asked, blocks), kept
+
+
+def _converge_upload_hook(worktree: Worktree, asked: bool, blocks: bool) -> list[str]:
+    """Give the clone exactly the settings of UPLOAD, or none when not asked.
+
+    A push hook file that refresh leaves, such as a push launcher that pre-commit
+    install rewrote, keeps Git LFS from writing its own, so blocks keeps
+    UPLOAD_HOOK that the clone has. Return UPLOAD_HOOK when the clone's Git
+    configuration changed.
+    """
+    git = [worktree.git, "config", "--local"]
+    step = "Fix what Git reports, then run gateseal setup --refresh."
+    listed = execute(
+        [*git, "--list", "-z"], worktree.root, tool_environment(), next_step=step
+    ).stdout
+    found = [
+        tuple(entry.split("\n", 1))
+        for entry in map(os.fsdecode, listed.split(b"\0"))
+        if entry.startswith(UPLOAD_HOOK + ".")
+    ]
+    wanted = list(UPLOAD) if asked or (blocks and found) else []
+    if found == wanted:
+        return []
+    if found:
+        execute(
+            [*git, "--remove-section", UPLOAD_HOOK],
+            worktree.root,
+            tool_environment(),
+            next_step=step,
+        )
+    for key, value in wanted:
+        execute([*git, key, value], worktree.root, tool_environment(), next_step=step)
+    return [UPLOAD_HOOK]

@@ -48,4 +48,4 @@ To use your own pre-commit instead, run `pre-commit install` in each clone. If `
 > [!NOTE]
 > Setup puts pre-commit in `~/.local/share/gateseal`, or in `$XDG_DATA_HOME/gateseal` when that is set. It sets Git's global `init.templateDir` so Git copies the hook into new clones. If you already have a template folder or `core.hooksPath`, setup reports a conflict and changes nothing. It warns if mise is missing or too old. An existing hook stays as `pre-commit.legacy` and runs first.
 >
-> To undo setup, run `uvx pre-commit uninstall` in each clone. Then remove the global `init.templateDir` setting and the installation folder, but only if setup created them.
+> To undo setup, run `uvx pre-commit uninstall` in each clone. Where `gateseal setup --refresh` added the hook `gateseal-lfs-upload`, also run `git config --local --remove-section hook.gateseal-lfs-upload`. If the clone uses Git LFS, then run `git lfs update`, so that Git LFS writes its push hook again. Then remove the global `init.templateDir` setting and the installation folder, but only if setup created them.

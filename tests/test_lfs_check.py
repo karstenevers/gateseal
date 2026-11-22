@@ -9,7 +9,7 @@ import shutil
 
 import pytest
 from conftest import git_path
-from gateseal import lfs_check
+from gateseal import lfs_check, setup
 from gateseal.diagnostics import GatesealError
 from installation import success
 from stand_ins import executable
@@ -56,8 +56,8 @@ def test_a_push_without_a_git_lfs_hook_stops_and_names_the_repair(clone):
         "lfs_not_uploaded",
         "This repository tracks files with Git LFS, but no push hook of this "
         "clone starts Git LFS, so a push uploads no LFS object.",
-        "Run git lfs update --force, then pre-commit install or gateseal setup "
-        "--refresh. Then push again.",
+        "Run gateseal setup --refresh, or git lfs update --force and then "
+        "pre-commit install. Then push again.",
     )
 
 
@@ -123,6 +123,13 @@ def test_a_push_hook_of_gits_configuration_that_starts_git_lfs_passes(clone):
     lfs_check.check(GIT, clone)
     success(["git", "config", "hook.lfs.enabled", "false"], clone)
     assert stopped(clone).code == "lfs_not_uploaded"
+
+
+def test_the_upload_hook_that_gateseal_setup_writes_counts(clone):
+    hook(clone, "pre-push", LAUNCHER)
+    for key, value in setup.UPLOAD:
+        success(["git", "config", key, value], clone)
+    lfs_check.check(GIT, clone)
 
 
 def test_another_push_hook_of_gits_configuration_does_not_count(clone):
@@ -258,8 +265,8 @@ def test_the_repair_keeps_a_hook_that_pre_commit_kept(clone):
     hook(clone, "pre-push", LAUNCHER)
     kept = hook(clone, "pre-push.legacy", "#!/bin/sh\necho custom\n")
     assert stopped(clone).next_step == (
-        f'Add the line git lfs pre-push "$@" to the hook {kept} and make that '
-        "file executable. pre-commit runs it first. Then push again."
+        "Run gateseal setup --refresh, or add the line git lfs pre-push "
+        f'"$@" to the hook {kept} and make that file executable. Then push again.'
     )
 
 
@@ -286,8 +293,8 @@ def test_the_hook_prints_the_repair_and_fails(clone, monkeypatch, capsys):
         "",
         "gateseal: This repository tracks files with Git LFS, but no push hook of "
         "this clone starts Git LFS, so a push uploads no LFS object.\n"
-        "Next: Run git lfs update --force, then pre-commit install or gateseal "
-        "setup --refresh. Then push again.\n",
+        "Next: Run gateseal setup --refresh, or git lfs update --force and then "
+        "pre-commit install. Then push again.\n",
     )
     hook(clone, "pre-push", LFS_HOOK)
     assert lfs_check.main() == 0

@@ -52,15 +52,20 @@ If the repository later drops its checks at a push, remove the push hook, becaus
 
 ### Git LFS
 
-Git LFS uploads files from its own push hook. pre-commit keeps that hook as `pre-push.legacy` and runs it first. Uploads continue when Git LFS was set up before `pre-commit install`.
+Git LFS uploads files from its own push hook, and the push hook of pre-commit takes its place. Uploads continue in two cases:
 
-If you set up Git LFS later, `git lfs install` cannot write its hook. A push then stops with this message:
+- Git LFS was set up before `pre-commit install`. pre-commit keeps the hook of Git LFS as `pre-push.legacy` and runs it first.
+- You ran `gateseal setup --refresh`. With the push hook, it adds a hook to the clone's Git configuration that starts Git LFS at each push, on every branch and in every worktree. The hook does nothing where Git LFS is not set up, or where the clone holds no Git LFS object. Where the clone holds Git LFS objects but `git-lfs` is missing, the hook stops the push. In a clone with the push hook, `git lfs install` reports `Hook already exists: pre-push`. Uploads still work, but Git LFS skips its other hooks, which only files that Git LFS locks need. To add them, run `git lfs update --manual` and add each hook that it prints, except `pre-push`.
+
+In both cases, Git LFS uploads before the checks at a push run. A push that a check stops can leave its LFS objects on the remote, but the remote branch does not change.
+
+After a plain `pre-commit install`, Git LFS set up later cannot write its hook. A push then stops with this message:
 
 ```text
 gateseal: This repository tracks files with Git LFS, but no push hook of this clone starts Git LFS, so a push uploads no LFS object.
 ```
 
-To repair the clone, run these commands from its root. Then push again:
+To repair the clone, run `gateseal setup --refresh`. Without gateseal, run these commands from the clone's root. Then push again:
 
 ```sh
 git lfs update --force
@@ -69,9 +74,9 @@ pre-commit install
 
 Those commands replace a push hook that pre-commit kept as `pre-push.legacy`. In a clone with that file, the message names another repair: add the line `git lfs pre-push "$@"` to the file, and make the file executable.
 
-The check also stops a push when the clone tracks no file with Git LFS now, but a commit that the remote lacks holds a Git LFS pointer. It accepts a push hook of Git's configuration that runs `git lfs pre-push`.
+The check also stops a push when the clone tracks no file with Git LFS now, but a commit that the remote lacks holds a Git LFS pointer. It accepts any push hook of Git's configuration that runs `git lfs pre-push`.
 
-The check runs only where the checked-out configuration has checks at a push, but the push hook serves every branch and worktree of the clone. On a branch or in a worktree without such checks, nothing stops the push. If you set up Git LFS after the push hook, run the two commands above there too.
+The check runs only on a branch whose configuration has checks at a push. Until you repair the clone, a push from another branch or worktree uploads no LFS object, and nothing stops it.
 
 ## Add your own hooks
 
