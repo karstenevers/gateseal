@@ -19,11 +19,13 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from gateseal.ci_providers.model import (
+    FETCH,
     GENERATED,
     IMAGE,
     SCHEDULE,
     GateJob,
     Triggers,
+    fetch,
     flow,
     job_home,
     prepare,
@@ -201,6 +203,7 @@ def pipeline(job: GateJob) -> bytes:
         "        fetchDepth: 0",
         "        persistCredentials: false",
         *_step("Set up the locked gateseal, pre-commit and the policy", env, PREPARE),
+        *_step(FETCH, {}, fetch("$AGENT_TEMPDIRECTORY")),
         *_step("Run the gateseal gate", GATE_ENV, GATE),
     ]
     return ("\n".join(lines) + "\n").encode()
@@ -244,11 +247,10 @@ def _pool(runner: tuple[str, ...]) -> list[str]:
 
 
 def _step(name: str, env: dict[str, str], lines: str) -> list[str]:
-    """Return a bash step with its literal script and its environment."""
     return [
         "      - bash: |",
         *script(lines, "          "),
         f"        displayName: {name}",
-        "        env:",
+        *(["        env:"] if env else []),
         *(f"          {key}: {value}" for key, value in env.items()),
     ]

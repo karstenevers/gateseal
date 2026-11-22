@@ -29,12 +29,11 @@ class Step:
 
 @dataclass(frozen=True)
 class GateFile:
-    """One provider's file: its bytes, its document and its three steps."""
-
     data: bytes
     document: dict
     checkout: dict
     prepare: Step
+    fetch: Step
     gate: Step
 
 
@@ -63,17 +62,18 @@ def gate_file(provider, repository=None, branch=BRANCH, pin=PIN, keys=""):
     ]
     document = yaml.safe_load(data)
     if provider == "github":
-        checkout, prepare, gate = document["jobs"]["gateseal"]["steps"]
+        checkout, prepare, fetch, gate = document["jobs"]["gateseal"]["steps"]
         script = "run"
     else:
         [job] = document["jobs"]
-        checkout, prepare, gate = job["steps"]
+        checkout, prepare, fetch, gate = job["steps"]
         script = "bash"
     return GateFile(
         data,
         document,
         checkout,
         Step(prepare[script], prepare["env"]),
+        Step(fetch[script], fetch.get("env", {})),
         Step(gate[script], gate["env"]),
     )
 

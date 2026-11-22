@@ -16,7 +16,6 @@ from gate_runs import (
     gateseal,
     stand_in,
 )
-from gateseal import setup
 
 LONG = "".join(f"check {number:04}.........Passed\n" for number in range(400))
 SECRET_FOUND = (
@@ -58,7 +57,7 @@ def configured(tmp_path_factory):
 
 @pytest.fixture
 def clone(configured, monkeypatch):
-    monkeypatch.setattr(setup, "require_pre_commit", lambda: configured.python)
+    configured.use(monkeypatch)
     yield configured
     configured.reset()
 

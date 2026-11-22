@@ -58,7 +58,10 @@ GLOBAL = "git config --global --list"
 def bash_steps(steps, key, expand):
     """Return each bash step's script and its environment, expanded."""
     return [
-        (step[key], {name: expand(str(value)) for name, value in step["env"].items()})
+        (
+            step[key],
+            {name: expand(str(value)) for name, value in step.get("env", {}).items()},
+        )
         for step in steps
         if key in step
     ]
@@ -206,7 +209,7 @@ def test_two_runs_leave_the_agents_home_and_global_git_configuration(
     document = yaml.safe_load((consumer / PROVIDERS[provider].path).read_bytes())
     agent = AGENTS[provider]
     steps = agent.steps(document, head)
-    assert len(steps) == 2
+    assert len(steps) == 3
     home = agent_home(tmp_path, gateseal_origin)
     before = state(home)
     assert f"insteadof={REPOSITORY}" in before[GLOBAL]

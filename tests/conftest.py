@@ -7,10 +7,12 @@ import stat
 import tempfile
 from pathlib import Path
 
+import mise_cache
 import pytest
 from gateseal import __version__, lock
 from gateseal.compiler_release import REPOSITORY, GatesealPin
 from gateseal.policy import load_bundled_policy
+from gateseal.tools.release_binary import BinaryTool
 from installation import (
     clone,
     install,
@@ -158,10 +160,12 @@ def make_home(home):
 
 
 @pytest.fixture(scope="session", autouse=True)
-def home(tmp_path_factory):
+def home(tmp_path_factory, pytestconfig):
     """Make the home that pytest_configure names, once pytest emptied its root."""
     tmp_path_factory.getbasetemp()
     make_home(Path.home())
+    folder = tmp_path_factory.mktemp("mise cache").resolve()
+    os.environ.update(mise_cache.link(pytestconfig, folder))
 
 
 @contextlib.contextmanager
@@ -224,7 +228,18 @@ def gateseal_origin(tmp_path_factory):
 
 
 @pytest.fixture(scope="session")
-def installed(gateseal_origin, tmp_path_factory):
+def release_archives(tmp_path_factory):
+    reviewed = [
+        tool.select(version)
+        for tool in BUNDLED_TOOLS.values()
+        if isinstance(tool, BinaryTool)
+        for version in tool.versions
+    ]
+    mise_cache.fill(reviewed, tmp_path_factory.mktemp("mise fill"))
+
+
+@pytest.fixture(scope="session")
+def installed(gateseal_origin, release_archives, tmp_path_factory):
     """Install the wheel, and set up a home of its own as gateseal setup does.
 
     The home's Git reaches gateseal's repository at gateseal_origin. Git
@@ -245,6 +260,7 @@ def installed(gateseal_origin, tmp_path_factory):
                 Path.home(),
             )
         installation = install(base)
+        installation.environment["MISE_CACHE_DIR"] = os.environ["MISE_CACHE_DIR"]
         installation.cli(Path.home(), "setup")
     return installation
 

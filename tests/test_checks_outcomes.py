@@ -18,7 +18,7 @@ from gateseal import checks, ci, lock, processes, setup
 from gateseal.diagnostics import GatesealError, Note
 from gateseal.worktree import locate_worktree, preparation_directory
 from installation import success
-from stand_ins import configure
+from stand_ins import INSTALLED, configure
 
 COMMIT = "c" * 40
 YAML_PASSED = "check yaml...............................................Passed\n"
@@ -61,8 +61,7 @@ class Tool:
         self.status = state / "status"
         self.executable = state / name
         self.executable.write_text(
-            "#!/bin/sh\n"
-            f"printf '%s\\n' \"$@\" > '{self.arguments}'\n"
+            "#!/bin/sh\n" + INSTALLED + f"printf '%s\\n' \"$@\" > '{self.arguments}'\n"
             f"cat '{self.output}'\n"
             "echo 'a warning' >&2\n"
             f"exit \"$(cat '{self.status}')\"\n"
@@ -218,7 +217,7 @@ def timed_as(monkeypatch, pre_commit, scan, hooks):
     monkeypatch.setattr(checks, "execute_timed", execute_timed)
 
 
-SETUP = "pre-commit setup, such as installing hooks"
+SETUP = "pre-commit's own work, such as reading its configuration"
 
 
 @pytest.mark.parametrize(

@@ -132,7 +132,7 @@ def test_a_gate_past_its_budget_warns_and_keeps_its_result(
     times = lines[lines.index(HEADING) + 1 : lines.index(warning)]
     *rows, last = times
     assert re.fullmatch(
-        r" +\d+\.\d  pre-commit setup, such as installing hooks", rows[0]
+        r" +\d+\.\d  pre-commit's own work, such as reading its configuration", rows[0]
     )
     [slow_row] = [row for row in rows if row.endswith(f"  {SLOW}")]
     assert float(slow_row.split()[0]) >= SLEEP

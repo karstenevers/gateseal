@@ -38,7 +38,12 @@ def test_one_job_runs_on_the_hosted_linux_image_with_a_time_limit():
     assert job["job"] == "gateseal"
     assert job["pool"] == {"vmImage": "ubuntu-24.04"}
     assert job["timeoutInMinutes"] == 30
-    assert [next(iter(step)) for step in job["steps"]] == ["checkout", "bash", "bash"]
+    assert [next(iter(step)) for step in job["steps"]] == [
+        "checkout",
+        "bash",
+        "bash",
+        "bash",
+    ]
     assert job["steps"][0]["checkout"] == "self"
 
 

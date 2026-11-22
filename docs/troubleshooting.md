@@ -30,9 +30,13 @@ If the repository has checks at a push, install the push hook the same way. Pres
 
 Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit that setup installs. If a commit asks for a newer pre-commit, update your separate installation. Alternatively, run setup with the release recorded in `gateseal.lock`. The Lock records the selected policy and generated files.
 
+## A command reports download_failed
+
+`gateseal fetch` or `gateseal gate` could not download a release binary or build a hook environment. No check ran. Run the command again, or start the CI job again. If the download fails each time, read the output of mise or pre-commit after the first line. See [A failed download](ci-gate.md#a-failed-download).
+
 ## The first commit fails
 
-The first commit downloads hook environments and selected binaries. Check network access. Then retry. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
+The first commit downloads hook environments and selected binaries. Check network access. Then retry. To make these downloads before a commit, run `gateseal fetch`. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
 
 ## A type checker does not read the project's packages
 

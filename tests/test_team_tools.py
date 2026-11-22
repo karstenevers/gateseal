@@ -297,6 +297,7 @@ def test_a_team_history_scan_names_its_origin(tmp_path, upstream, monkeypatch):
         return Timed(subprocess.CompletedProcess(command, 0, b"", b""), 0, ())
 
     monkeypatch.setattr(checks.setup, "require_pre_commit", lambda: "/python")
+    monkeypatch.setattr(checks.fetch, "fetch", lambda locked, python: ())
     monkeypatch.setattr(checks, "execute_timed", execute_timed)
     result = checks.gate(None, locked, Scope(None, "a..b", None, "Scanned."))
     assert result.code == "checks_failed"

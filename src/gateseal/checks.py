@@ -11,7 +11,7 @@ import subprocess
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
-from gateseal import ci, lock, setup
+from gateseal import ci, fetch, lock, setup
 from gateseal.check_times import CheckTime, gate_time
 from gateseal.ci import OFFLINE, Scope
 from gateseal.compiler_release import CHECK_HOOK
@@ -128,6 +128,7 @@ def gate(
     python = setup.require_pre_commit()
     if scope.head is not None:
         ci.require_checked_out(worktree, scope.head)
+    fetch.fetch(locked, python)
     env = dict(os.environ) | OFFLINE
     clean = _diff(worktree, "--quiet").returncode == 0 if in_ci else None
     reports.clear(locked.root, locked.selection.hooks)

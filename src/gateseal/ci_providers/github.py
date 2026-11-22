@@ -17,11 +17,13 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from gateseal.ci_providers.model import (
+    FETCH,
     GENERATED,
     IMAGE,
     SCHEDULE,
     GateJob,
     Triggers,
+    fetch,
     flow,
     job_home,
     prepare,
@@ -69,6 +71,8 @@ GATE_ENV = {
 RUNNING = ("GITHUB_ACTIONS", "true")
 
 RUNNER_KEY = "runs_on"
+
+BRANCH_NOT_DELETED = "${{ !github.event.deleted }}"
 
 CONCURRENCY = [
     "concurrency:",
@@ -182,6 +186,7 @@ def workflow(job: GateJob) -> bytes:
         "          fetch-depth: 0",
         "          persist-credentials: false",
         *_step("Set up the locked gateseal, pre-commit and the policy", env, PREPARE),
+        *_step(FETCH, {}, fetch("$RUNNER_TEMP"), BRANCH_NOT_DELETED),
         *_step("Run the gateseal gate", GATE_ENV, GATE),
     ]
     return ("\n".join(lines) + "\n").encode()
@@ -210,12 +215,14 @@ def _events(triggers: Triggers | None) -> list[str]:
     ]
 
 
-def _step(name: str, env: dict[str, str], lines: str) -> list[str]:
-    """Return a bash step with its environment and its literal script."""
+def _step(
+    name: str, env: dict[str, str], lines: str, condition: str | None = None
+) -> list[str]:
     return [
         f"      - name: {name}",
+        *([f"        if: {condition}"] if condition else []),
         "        shell: bash",
-        "        env:",
+        *(["        env:"] if env else []),
         *(f"          {key}: {value}" for key, value in env.items()),
         "        run: |",
         *script(lines, "          "),

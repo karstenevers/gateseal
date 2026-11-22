@@ -167,12 +167,18 @@ NEXT_STEPS = {
 
 class GatesealError(Exception):
     def __init__(
-        self, code: str, message: str, exit_code: int = 2, next_step: str = ""
+        self,
+        code: str,
+        message: str,
+        exit_code: int = 2,
+        next_step: str = "",
+        details: str = "",
     ) -> None:
         super().__init__(message)
         self.code = code
         self.exit_code = exit_code
         self.next_step = next_step or NEXT_STEPS.get(code, "")
+        self.details = details
 
 
 def redact(text: str) -> str:

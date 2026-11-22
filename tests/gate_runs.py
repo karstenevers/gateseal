@@ -8,14 +8,16 @@ The command line, the policy, the worktree and its Git are real.
 
 import contextlib
 import io
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 from conftest import TRACKED
+from gateseal import setup
 from gateseal.cli import main
 from gateseal.worktree import locate_worktree
 from installation import success
-from stand_ins import configure, executable
+from stand_ins import INSTALLED, configure, executable
 
 EOF_FAILED = (
     "fix end of files.........................................Failed\n"
@@ -49,6 +51,11 @@ class StandIn:
         (self.state / "status").write_text(str(status))
         executable(self.state / "edit", f"#!/bin/sh\n{edit}\n")
 
+    def use(self, monkeypatch):
+        monkeypatch.setattr(setup, "require_pre_commit", lambda: self.python)
+        mise = self.state / "mise bin"
+        monkeypatch.setenv("PATH", os.pathsep.join([str(mise), os.environ["PATH"]]))
+
     def arguments(self):
         return (self.state / "arguments").read_text().splitlines()
 
@@ -67,12 +74,12 @@ def stand_in(directory):
     state = directory / "state"
     python = executable(
         state / "python",
-        "#!/bin/sh\n"
-        f"printf '%s\\n' \"$@\" > '{state / 'arguments'}'\n"
+        "#!/bin/sh\n" + INSTALLED + f"printf '%s\\n' \"$@\" > '{state / 'arguments'}'\n"
         f"cat '{state / 'output'}'\n"
         f"'{state / 'edit'}'\n"
         f"exit \"$(cat '{state / 'status'}')\"\n",
     )
+    executable(state / "mise bin" / "mise", "#!/bin/sh\n" + INSTALLED)
     found = StandIn(root, str(python), state)
     found.answer("")
     return found

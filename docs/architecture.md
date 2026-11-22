@@ -107,7 +107,7 @@ flowchart TD
     uv -- "installs the locked packages<br/>and the pinned tool, starts" --> project["Project tools,<br/>such as Pyright"]
 ```
 
-The first commit hook compares staged generated files with the staged Lock. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI.
+The first commit hook compares staged generated files with the staged Lock. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI. The CI job and `gateseal fetch` make these downloads before the first hook runs.
 
 A policy can request an installed executable check at commit time. The bundled Betterleaks definition enables it. `gateseal run` and the CI gate do not recheck cached executables. The Lock pins direct inputs. It does not freeze every transitive dependency. Ruff's hook installs a version-pinned PyPI package without a locked wheel hash, and so do the hooks of Pyright, coverage.py, pytestmut, deptry, and uv's lockfile check and audit. Pyright and deptry run in the repository's uv project, where the repository's `uv.lock` pins the packages that they read. Tools run with the permissions of the user who starts them. Git, pre-commit, mise, uv, the host, and the policy's authors must be trusted.
 
