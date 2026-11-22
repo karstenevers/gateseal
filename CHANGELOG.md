@@ -85,8 +85,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   push hook of Git LFS, and runs that hook only if it was there first. So
   `gateseal setup --refresh` adds `hook.gateseal-lfs-upload` to the clone's
   Git configuration beside the push launcher, and removes it with that
-  launcher, unless another push hook keeps Git LFS from writing its own. At
-  each push from a clone that holds Git LFS objects, it starts
+  launcher, unless another push hook keeps Git LFS from writing its own.
+  When it removes them in a clone that holds Git LFS objects, it runs
+  `git lfs update`, so that the next push uploads through the push hook of
+  Git LFS. At each push from a clone that holds Git LFS objects, it starts
   `git lfs pre-push`, on every branch and in every worktree, or stops the
   push when `git-lfs` is missing. Git LFS uploads before the checks at a
   push run, so a push that a check stops can leave its LFS objects on the

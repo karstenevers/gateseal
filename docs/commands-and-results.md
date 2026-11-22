@@ -16,7 +16,7 @@ The Manifest is `gateseal.toml`, which selects the policy and checks. The Lock i
 
 | Command | Purpose |
 | --- | --- |
-| `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. With the push launcher, it adds `hook.gateseal-lfs-upload` to the clone's Git configuration, which starts Git LFS at each push. It removes both when no worktree of the clone has a selected hook at a push, but keeps the upload hook while another push hook keeps Git LFS from writing its own. |
+| `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. With the push launcher, it adds `hook.gateseal-lfs-upload` to the clone's Git configuration, which starts Git LFS at each push. It removes both when no worktree of the clone has a selected hook at a push, but keeps the upload hook while another push hook keeps Git LFS from writing its own. When it removes both in a clone that holds Git LFS objects, it runs `git lfs update`, so that Git LFS writes its own push hook. |
 | `configure` | Generate the Lock and files from the Manifest. |
 | `check` | Validate the selected policy and generated files. |
 | `status` | Report readiness without network access. This is the default command. |

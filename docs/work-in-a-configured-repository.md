@@ -59,6 +59,8 @@ Git LFS uploads files from its own push hook, and the push hook of pre-commit ta
 
 In both cases, Git LFS uploads before the checks at a push run. A push that a check stops can leave its LFS objects on the remote, but the remote branch does not change.
 
+If the repository later drops its checks at a push, `gateseal setup --refresh` removes the push hook and the hook that it added to the Git configuration. In a clone that holds Git LFS objects, it then runs `git lfs update`. Git LFS writes its own push hook, so the next push uploads.
+
 After a plain `pre-commit install`, Git LFS set up later cannot write its hook. A push then stops with this message:
 
 ```text
