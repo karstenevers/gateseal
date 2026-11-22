@@ -50,6 +50,26 @@ configuration = "rules/pyright.toml"
 pin = "1.1.414"
 reviewed = ["1.1.414"]
 
+# python-lock checks at each commit that uv.lock matches pyproject.toml, with
+# the uv that the pin names.
+[capabilities.python-lock.tools.uv-lock]
+pin = "0.13.9"
+reviewed = ["0.13.9"]
+
+# python-audit runs only in the gate. It asks a vulnerability service about
+# each locked package, so a new advisory can fail a run without a commit. The
+# rules list the advisories to ignore.
+[capabilities.python-audit.tools.uv-audit]
+configuration = "rules/uv-audit.toml"
+pin = "0.13.9"
+reviewed = ["0.13.9"]
+
+# python-dependencies runs deptry in the repository's uv project. It finds
+# unused, missing and transitive dependencies.
+[capabilities.python-dependencies.tools.deptry]
+pin = "0.25.1"
+reviewed = ["0.25.1"]
+
 [capabilities.secrets.tools.betterleaks]
 configuration = "rules/betterleaks.toml"
 pin = "1.10.1"

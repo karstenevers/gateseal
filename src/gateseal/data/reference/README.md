@@ -25,6 +25,10 @@ this README and every other file.
 - `rules/crap.toml` holds only `limit`, the highest CRAP score that a
   function may have. configure copies it to `.gateseal/crap.toml`, which the
   CRAP hook reads.
+- `rules/uv-audit.toml` lists the advisories that the audit ignores, under
+  `[audit]` as `ignore`. Give each one's reason in a comment. configure copies
+  it to `.gateseal/uv-audit.toml`, and uv reads only this file, so a
+  repository cannot ignore an advisory.
 - `gateseal policy add <tool> <version>` reviews a new version, and
   `gateseal policy pin <tool> <version>` makes a reviewed version the pin.
   Both edit only their own lines of `policy.toml` and keep its comments.

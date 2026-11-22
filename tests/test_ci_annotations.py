@@ -137,6 +137,16 @@ def test_each_failed_hook_and_history_scan_is_annotated_and_history_on_the_run(
     assert annotations(result, provider) == expected
 
 
+def test_a_stopped_hook_is_annotated_and_listed_like_a_failed_one():
+    result = gate(hook("stopped", "uv audit: Stopped with exit code 2"), code=4)
+    assert annotations(result, "github") == [
+        "::error title=gateseal::uv audit: Stopped with exit code 2"
+    ]
+    assert "Failed checks:\n\n- uv audit: Stopped with exit code 2\n" in (
+        result.summary()
+    )
+
+
 def test_each_failed_hook_gets_its_first_annotation_before_any_second_one():
     result = gate(
         FAILED_HOOK,

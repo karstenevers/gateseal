@@ -112,18 +112,20 @@ def upstream(installed, tmp_path):
     """
     root = tmp_path / "upstream"
     settings = {}
-    crap = BUNDLED_TOOLS["crap"].definition.source.repository
-    for url, tool in ((HOOKS, "pre-commit-hooks"), (RUFF, "ruff"), (crap, "crap")):
+    for tool in ("pre-commit-hooks", "ruff", "crap", "uv-lock"):
+        source = BUNDLED_TOOLS[tool].definition.source
+        url = source.repository
         repository = root / url.rsplit("/", 1)[1]
         repository.mkdir(parents=True)
         git(repository, "init", "-q", "--initial-branch=main")
-        for tag in (f"v{version}" for version in BUNDLED_TOOLS[tool].versions):
+        versions = BUNDLED_TOOLS[tool].versions
+        for tag in (source.tag.replace("{version}", version) for version in versions):
             git(repository, "commit", "-q", "--allow-empty", "-m", tag)
             git(repository, "tag", *(["-a", "-m", tag] if tag != "v6.0.0" else []), tag)
         settings[f"url.{repository.as_uri()}.insteadOf"] = url
     for version in SECRETS.versions:
         release(root, version)
-    for tool in ("coverage", "pyright", "pytestmut"):
+    for tool in ("coverage", "pyright", "pytestmut", "deptry"):
         for version in BUNDLED_TOOLS[tool].versions:
             page = root / f"pypi.org/pypi/{tool}/{version}/json"
             page.parent.mkdir(parents=True)
@@ -162,6 +164,7 @@ def started(installed, tmp_path):
         "rules/crap.toml",
         "rules/pyright.toml",
         "rules/ruff.toml",
+        "rules/uv-audit.toml",
     ]
     return directory
 
@@ -199,6 +202,10 @@ def test_lock_resolves_every_reviewed_version_from_upstream(
     crap = BUNDLED_TOOLS["crap"].definition.source.repository
     revision = upstream.commit(crap, "v0.1.0")
     assert components["crap"]["versions"]["0.1.0"] == {"revision": revision}
+    uv = BUNDLED_TOOLS["uv-lock"].definition.source.repository
+    revision = upstream.commit(uv, "0.13.9")
+    for tool in ("uv-lock", "uv-audit"):
+        assert components[tool]["versions"]["0.13.9"] == {"revision": revision}
     platforms = components["betterleaks"]["versions"]["1.9.0"]["platforms"]
     name = "betterleaks_1.9.0_darwin_arm64.tar.gz"
     assert platforms["macos-arm64"] == {

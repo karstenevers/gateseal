@@ -222,7 +222,10 @@ class Hook:
     name a hook by its id, and pre-commit's status line by its name. args
     follow the program that runs the hook, never through a shell. reads and
     writes name the reports that the hook takes from an earlier hook and
-    leaves for a later one, each at its report_path.
+    leaves for a later one, each at its report_path. finding_exit_codes
+    holds the exit codes with which the tool reports a finding; any other
+    failure means the tool stopped before it could check. When it is empty,
+    every failure is a finding.
     """
 
     tool: str
@@ -234,6 +237,7 @@ class Hook:
     output: OutputFormat
     reads: tuple[str, ...] = ()
     writes: tuple[str, ...] = ()
+    finding_exit_codes: frozenset[int] = frozenset()
 
     def base_entry(
         self, exclude: str | None, stages: frozenset[Stage], scope: Scope
@@ -521,13 +525,25 @@ def _reports(value: object, field: str) -> tuple[str, ...]:
     return names
 
 
+def _exit_codes(value: object, field: str) -> frozenset[int]:
+    """Return the exit codes that field lists: at least one, each 1 to 255 once."""
+    items = sequence(value, field)
+    codes = frozenset(c for c in items if type(c) is int and 1 <= c <= 255)
+    if not items or len(codes) != len(items):
+        raise GatesealError(
+            "invalid_field",
+            f"{field} lists at least one exit code from 1 to 255, each once.",
+        )
+    return codes
+
+
 def _hook(
     tool: str, origin: Origin, hook_id: str, value: object, owned: Mapping[str, str]
 ) -> Hook:
     field = f"tools.{tool}.hooks.{hook_id}"
     table = mapping(value, field)
     output = closed(table.get("output"), OutputFormat, f"{field}.output")
-    optional = {"args", "types_or", "reads", "writes"}
+    optional = {"args", "types_or", "reads", "writes", "finding_exit_codes"}
     table = fields(table, {"name", "output"} | (optional & set(table)), field)
     if not NAME.fullmatch(hook_id):
         raise GatesealError("invalid_field", f"{field} needs a lowercase id.")
@@ -551,6 +567,11 @@ def _hook(
         output,
         reads,
         writes,
+        (
+            _exit_codes(table["finding_exit_codes"], f"{field}.finding_exit_codes")
+            if "finding_exit_codes" in table
+            else frozenset()
+        ),
     )
 
 

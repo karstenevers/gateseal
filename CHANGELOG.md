@@ -50,6 +50,20 @@ change the manifest, policy or lock format, and its entry says how to move.
   pytestmut 0.1.0 on the lines that a push or a ranged gate changes, and fails
   on any mutant that no test kills. Each starts only when a Python file
   changed. A repository that selects none of them gets no new check.
+- Python dependency checks, as three opt-in capabilities of the bundled
+  policy. `python-lock` runs `uv lock --check` with uv 0.13.9 at each commit,
+  in `gateseal run` and in the CI gate, and a stale `uv.lock` stops the commit
+  with a message that names `uv lock`. `python-dependencies` runs deptry
+  0.25.1 in the uv project and names each unused, missing or transitive
+  dependency. `python-audit` runs `uv audit` with uv 0.13.9 in the CI gate
+  only. It asks `api.osv.dev` about each locked package, so a new advisory can
+  fail a weekly run without a commit. The policy's `rules/uv-audit.toml` lists
+  the ignored advisories, and a repository cannot add one. A repository that
+  selects none of them gets no new check.
+- `finding_exit_codes` in a hook of a tool definition: the exit codes with
+  which the tool reports a finding. A hook that fails with another exit code
+  is `stopped`, and `gateseal run` and `gateseal gate` report `tool_failed`
+  and exit 4. An audit that cannot reach its service fails the gate this way.
 - The push stage. A tool definition or a repository hook with
   `stages = ["push", "ci"]` runs at `git push` and in the CI gate, and not at
   commit or in `gateseal run`. A repository hook takes the new `stages` field.
@@ -87,9 +101,13 @@ change the manifest, policy or lock format, and its entry says how to move.
 - The CI job keeps its home folder and everything it installs in the job's
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
-- The bundled policy offers a hook with the ID and name `pyright`. A Manifest
-  with a repository hook of that ID or name stops with `duplicate_identifier`,
-  also when it does not select `python-types`. Rename the repository hook.
+- The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
+  `uv-audit` and `deptry`, and the names `pyright`, `uv lock check`,
+  `uv audit` and `deptry`. A Manifest with a repository hook of such an ID or
+  name stops with `duplicate_identifier`, also when it does not select the
+  hook's capability. Rename the repository hook.
+- Two tools of a policy may take hooks from the same hook repository. Their
+  hook IDs, hook names and outputs stay distinct.
 - The bundled policy pins Ruff 0.17.5 and Betterleaks 1.10.1. It still reviews
   Ruff 0.17.1 and Betterleaks 1.9.0 and 1.8.0, so a Version Exception can keep
   one of them. The policy keeps its label `2026.11-team-tools`, so

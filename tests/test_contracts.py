@@ -297,6 +297,9 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "python-crap",
         "python-mutation",
         "python-types",
+        "python-lock",
+        "python-audit",
+        "python-dependencies",
     )
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
@@ -304,6 +307,7 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "rules/ruff.toml",
         "rules/crap.toml",
         "rules/pyright.toml",
+        "rules/uv-audit.toml",
         "policy.lock",
     ]
     assert policy.content_digest != bundled.content_digest
@@ -324,6 +328,9 @@ def test_policy_without_python_offers_no_python(tmp_path):
         "python-crap",
         "python-mutation",
         "python-types",
+        "python-lock",
+        "python-audit",
+        "python-dependencies",
         "secrets",
     )
     assert "ruff" not in policy.tools

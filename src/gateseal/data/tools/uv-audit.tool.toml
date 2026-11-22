@@ -1,0 +1,26 @@
+# The audit sends the locked packages and their versions to the vulnerability
+# service, so its answer can change without a commit. It runs only in the
+# gate. --config-file makes uv read only the policy's file, so a repository's
+# own audit settings cannot ignore an advisory. uv audit exits 1 for a
+# vulnerability and 2 when it cannot check, such as when the service cannot
+# be reached.
+kind = "pre-commit-repository"
+stages = ["ci"]
+scope = "project"
+
+[source]
+repository = "https://github.com/astral-sh/uv-pre-commit"
+tag = "{version}"
+
+[configuration]
+format = "toml"
+
+[hooks.uv-audit]
+name = "uv audit"
+args = [
+  "--frozen", "--config-file", "{configuration}",
+  "--service-url", "https://api.osv.dev",
+  "--preview-features", "audit-command",
+]
+output = "plain"
+finding_exit_codes = [1]

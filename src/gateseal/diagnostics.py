@@ -391,14 +391,21 @@ class Result:
 def _failures(
     entries: list[dict[str, object]],
 ) -> list[tuple[dict[str, object], list[dict[str, object]]]]:
-    """Return each failed hook or history scan with the findings that follow it."""
+    """Return each failed hook or history scan with the findings that follow it.
+
+    A stopped hook failed too, without a finding.
+    """
     groups: list[tuple[dict[str, object], list[dict[str, object]]]] = []
     for entry in entries:
         if entry["category"] in ("hook", "history"):
             groups.append((entry, []))
         elif entry["category"] == "finding":
             groups[-1][1].append(entry)
-    return [(owner, found) for owner, found in groups if owner["status"] == "failed"]
+    return [
+        (owner, found)
+        for owner, found in groups
+        if owner["status"] in ("failed", "stopped")
+    ]
 
 
 def _redacted(entry: dict[str, object]) -> dict[str, object]:

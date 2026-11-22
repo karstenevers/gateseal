@@ -368,14 +368,11 @@ def test_a_tool_neither_gateseal_nor_the_policy_defines_is_unknown(tmp_path):
 @pytest.mark.parametrize(
     "old,new,claim",
     [
-        (YAMLLINT, HOOKS, "hook repository"),
         ("[hooks.yamllint]", "[hooks.check-yaml]", "hook ID"),
         ('name = "yamllint check"', 'name = "check yaml"', "hook name"),
     ],
 )
-def test_a_policys_tools_claim_distinct_hooks_and_repositories(
-    tmp_path, old, new, claim
-):
+def test_a_policys_tools_claim_distinct_hooks(tmp_path, old, new, claim):
     definition = hook_tool(YAMLLINT, "yamllint")
     assert old in definition
     root = team(tmp_path, files={"tools/yamllint.toml": definition.replace(old, new)})

@@ -56,6 +56,7 @@ nav:
   - Manage checks:
       - Adjust a setup: adjust-a-setup.md
       - Check Python tests: python-tests.md
+      - Check Python dependencies: python-dependencies.md
       - The CI gate: ci-gate.md
       - GitHub CI: github-ci.md
       - Azure Pipelines: azure-pipelines.md

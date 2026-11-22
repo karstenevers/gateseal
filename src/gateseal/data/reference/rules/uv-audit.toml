@@ -1,0 +1,6 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# uv audit reads only this file, never the repository's own uv settings. To
+# ignore an advisory, list its ID, such as a GHSA, PYSEC or CVE ID, and give
+# the reason in a comment beside it.
+[audit]
+ignore = []

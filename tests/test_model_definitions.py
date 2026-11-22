@@ -82,6 +82,37 @@ def test_a_hook_has_a_lowercase_id():
     )
 
 
+FINDINGS = 'output = "concise"\n'
+
+
+def test_a_hook_reads_the_exit_codes_of_its_findings():
+    edited = TOOL.replace(FINDINGS, FINDINGS + "finding_exit_codes = [1, 255]\n")
+    definition = load_definition("gitleaks", edited.encode(), Origin.TEAM)
+    assert definition.hooks["gitleaks"].finding_exit_codes == {1, 255}
+    plain = load_definition("gitleaks", TOOL.encode(), Origin.TEAM)
+    assert plain.hooks["gitleaks"].finding_exit_codes == frozenset()
+
+
+@pytest.mark.parametrize(
+    "codes",
+    ["[]", "[0]", "[256]", "[-1]", "[1, 1]", '["1"]', "[true]", "[1.0]", "1"],
+    ids=[
+        "empty",
+        "zero",
+        "too high",
+        "negative",
+        "twice",
+        "text",
+        "boolean",
+        "float",
+        "not a list",
+    ],
+)
+def test_finding_exit_codes_are_one_or_more_codes_from_1_to_255(codes):
+    message = refusal(FINDINGS, f"{FINDINGS}finding_exit_codes = {codes}\n")
+    assert "tools.gitleaks.hooks.gitleaks.finding_exit_codes" in message.split()
+
+
 @pytest.mark.parametrize(
     "old,new,named",
     [

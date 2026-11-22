@@ -48,7 +48,8 @@ def require_distinct(definitions: Iterable[ToolDefinition], subject: str) -> Non
     """Require distinct hook IDs, hook names and owned outputs across definitions.
 
     The Lock and run's results name hooks by ID, pre-commit's status lines by
-    name, and each owned output has one writer.
+    name, and each owned output has one writer. Two tools may take different
+    hooks from one hook repository, each at its own pin.
     subject names the definitions, such as the policy's tools, in the failure.
     """
     claims: dict[tuple[str, str], str] = {}
@@ -56,8 +57,6 @@ def require_distinct(definitions: Iterable[ToolDefinition], subject: str) -> Non
         claimed = [("hook ID", hook.id) for hook in definition.hooks.values()]
         claimed += [("hook name", hook.name) for hook in definition.hooks.values()]
         claimed += [("output", path) for path in definition.owned]
-        if isinstance(definition.source, pre_commit_repository.PreCommitRepository):
-            claimed.append(("hook repository", definition.source.repository))
         for claim in claimed:
             owner = claims.setdefault(claim, definition.name)
             if owner != definition.name:
@@ -65,7 +64,7 @@ def require_distinct(definitions: Iterable[ToolDefinition], subject: str) -> Non
                     "duplicate_identifier",
                     f"{owner} and {definition.name} both claim the {claim[0]} "
                     f"{claim[1]!r}, but {subject} need distinct hook IDs, hook "
-                    "names, outputs and hook repositories.",
+                    "names and outputs.",
                 )
 
 

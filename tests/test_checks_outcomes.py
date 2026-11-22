@@ -424,3 +424,77 @@ def test_run_reports_pre_commit_stopping(attempt, planned):
     assert "status 3" in result.message
     assert result.next_steps == ("gateseal doctor",)
     assert result.details == "An unexpected error\na warning\n"
+
+
+AUDIT = "uv audit.................................................Failed\n"
+AUDIT_FOUND = AUDIT + "- hook id: uv-audit\n- exit code: 1\n\nidna 3.6 is vulnerable\n"
+AUDIT_STOPPED = AUDIT + "- hook id: uv-audit\n- exit code: 2\n\nRequest failed\n"
+AUDIT_FOUND_QUOTING = AUDIT_FOUND + "- exit code: 2\n"
+"""A finding whose output holds a line like pre-commit's own exit code line."""
+STOPPED = "fix what stopped it"
+
+
+@pytest.fixture(scope="module")
+def audited(tmp_path_factory):
+    """A clone that selects the audit, whose hook lists the exit code of a finding."""
+    root = tmp_path_factory.mktemp("audit") / "clone"
+    success(["git", "init", "--quiet", "--initial-branch=main", root], root.parent)
+    worktree = locate_worktree(root)
+    configure(worktree, ("hygiene", "python-audit"))
+    locked = lock.load(worktree.root, preparation_directory(worktree))
+    return SimpleNamespace(worktree=worktree, locked=locked)
+
+
+def hook_entry(result, hook):
+    [entry] = [e for e in result.entries if e.get("hook") == hook]
+    return entry
+
+
+@pytest.mark.parametrize("command", ["gate", "run"])
+@pytest.mark.parametrize("code", [2, -9])
+def test_a_hook_that_stops_with_another_exit_code_is_a_tool_failure(
+    attempt, audited, command, code
+):
+    stopped = AUDIT_STOPPED.replace("exit code: 2", f"exit code: {code}")
+    attempt.pre_commit.answer(YAML_PASSED + stopped, 1)
+    result = (
+        checks.gate(audited.worktree, audited.locked, ci.full_scope())
+        if command == "gate"
+        else checks.run(audited.locked)
+    )
+    assert (result.code, result.exit_code) == ("tool_failed", 4)
+    assert f"The uv-audit hook stopped with exit code {code}." in result.message
+    steps_name(result, (STOPPED,))
+    assert "network access" in result.next_steps[0]
+    entry = hook_entry(result, "uv-audit")
+    assert (entry["severity"], entry["status"], entry["exit_code"]) == (
+        "error",
+        "stopped",
+        code,
+    )
+    assert entry["message"] == f"uv audit: Stopped with exit code {code}"
+
+
+@pytest.mark.parametrize("output", [AUDIT_FOUND, AUDIT_FOUND_QUOTING])
+@pytest.mark.parametrize("command", ["gate", "run"])
+def test_a_hook_that_exits_with_a_finding_code_fails_the_checks(
+    attempt, audited, command, output
+):
+    attempt.pre_commit.answer(YAML_PASSED + output, 1)
+    result = (
+        checks.gate(audited.worktree, audited.locked, ci.full_scope())
+        if command == "gate"
+        else checks.run(audited.locked)
+    )
+    assert (result.code, result.exit_code) == ("checks_failed", 1)
+    entry = hook_entry(result, "uv-audit")
+    assert (entry["status"], "exit_code" in entry) == ("failed", False)
+
+
+def test_a_hook_without_finding_codes_fails_the_checks_on_any_exit_code(
+    attempt, planned
+):
+    attempt.pre_commit.answer(EOF_FAILED.replace("exit code: 1", "exit code: 2"), 1)
+    result = gate(planned)
+    assert (result.code, result.exit_code) == ("checks_failed", 1)
+    assert hook_entry(result, "end-of-file-fixer")["status"] == "failed"

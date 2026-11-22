@@ -19,4 +19,4 @@ See [Configure a repository](docs/configure-a-repository.md) for the complete st
 - pre-commit runs hooks, mise installs selected release binaries, uv runs selected tools in the repository's project, and CI runs the gate.
 - The Lock pins direct inputs; it does not freeze every transitive dependency.
 
-The bundled policy includes hygiene, Ruff, Pyright, Python tests with coverage, CRAP scores and mutation tests, and Betterleaks. GitHub Actions and Azure Pipelines are supported. Scheduled discovery of new releases with upgrade pull requests and Windows are planned. See [How gateseal works](docs/architecture.md) for costs and limits.
+The bundled policy includes hygiene, Ruff, Pyright, Python tests with coverage, CRAP scores and mutation tests, Python dependency checks with a lockfile check, deptry and a vulnerability audit, and Betterleaks. GitHub Actions and Azure Pipelines are supported. Scheduled discovery of new releases with upgrade pull requests and Windows are planned. See [How gateseal works](docs/architecture.md) for costs and limits.
