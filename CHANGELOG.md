@@ -34,6 +34,11 @@ change the manifest, policy or lock format, and its entry says how to move.
 - The `project` scope of a tool definition. Its hooks get no file names and
   check the whole project. A hook runs at every commit, or, when it lists
   `types_or`, only when a file of those types changed.
+- `scope = "project"` in a repository hook. The script gets no file names and
+  runs once, so a code generator no longer runs several times at once on a
+  long list of files. With `files`, it runs only when a file that it checks
+  matches, such as a staged file at a commit. Without `files`, it runs every
+  time.
 - Reports. A hook of a tool definition lists in `writes` each file that it
   leaves for a later hook, and in `reads` each one that it takes. A report is
   `.gateseal/reports/<name>`, and an argument names it as `{<name>}`. A policy

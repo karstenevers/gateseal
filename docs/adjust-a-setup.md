@@ -24,6 +24,14 @@ stages = ["push", "ci"]
 
 The script then receives the paths that the push changes. It still runs in CI. Each clone needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push).
 
+A script that checks or rebuilds the whole project, such as a code generator, should run once and receive no paths. Add this line:
+
+```toml
+scope = "project"
+```
+
+It then runs once when a checked file matches `files`: a staged file at a commit, a changed file in a CI gate run on a range, or any tracked file in `gateseal run` and in a CI run that checks all files. See [project hooks](policy-contract.md#repository-hooks).
+
 ## Skip an optional hook
 
 A policy may allow a repository to skip selected hooks. For example, if the policy marks `check-yaml` optional, add:

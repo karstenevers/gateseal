@@ -3,7 +3,8 @@
 A Repository Maintainer adds a hook that runs a file of the repository. It runs
 after every policy hook, at a commit, in gateseal run and in the CI gate, so a
 commit and CI keep running one generated configuration. Its stages can move it
-to a push, or to the gate alone. It only adds a check: its ID may name no hook
+to a push, or to the gate alone, and its scope can run it once for the whole
+project instead of on the changed files. It only adds a check: its ID may name no hook
 of the policy, and gateseal installs nothing for it.
 """
 
@@ -31,7 +32,7 @@ from gateseal.tools.model import (
 )
 from gateseal.validation import mapping, sequence, string
 
-FIELDS = frozenset({"name", "run", "args", "files", "stages"})
+FIELDS = frozenset({"name", "run", "args", "files", "stages", "scope"})
 
 RUN = re.compile(r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
 """A file's path from the repository root, in portable characters only, so the
@@ -44,7 +45,8 @@ class RepositoryHook:
 
     run is the file it starts, relative to the repository root, with args
     before the file names. files is pre-commit's pattern of the files that
-    start it, or None for every file. stages is one of STAGE_SETS' sets.
+    start it, or None for every file. stages is one of STAGE_SETS' sets. A
+    PROJECT scope passes no file names and runs the file once.
     """
 
     id: str
@@ -53,6 +55,7 @@ class RepositoryHook:
     args: tuple[str, ...]
     files: str | None
     stages: frozenset[Stage]
+    scope: Scope
 
     @property
     def hook(self) -> Hook:
@@ -68,12 +71,18 @@ class RepositoryHook:
         )
 
     def note(self) -> Note:
-        files = "every file" if self.files is None else f"files matching {self.files}"
         command = shlex.join([self.run, *self.args])
+        if self.scope is Scope.FILES:
+            files = (
+                "every file" if self.files is None else f"files matching {self.files}"
+            )
+            runs = f"on {files}"
+        elif self.files is None:
+            runs = "once for the project at every run"
+        else:
+            runs = f"once for the project when a checked file matches {self.files}"
         return Note(
-            "info",
-            "repository_hook",
-            f"Repository hook {self.id}: {command}, on {files}.",
+            "info", "repository_hook", f"Repository hook {self.id}: {command}, {runs}."
         )
 
 
@@ -92,7 +101,7 @@ def _hook(hook_id: str, value: object) -> RepositoryHook:
         raise GatesealError(
             "invalid_field",
             f"{field} has {', '.join(extra)}, which a repository hook does not take. "
-            "It takes name, run, args, files and stages.",
+            "It takes name, run, args, files, stages and scope.",
         )
     missing = sorted({"name", "run"} - set(table))
     if missing:
@@ -120,6 +129,7 @@ def _hook(hook_id: str, value: object) -> RepositoryHook:
         ),
         _files(table["files"], f"{field}.files") if "files" in table else None,
         _stages(table["stages"], f"{field}.stages") if "stages" in table else AT_COMMIT,
+        _scope(table["scope"], f"{field}.scope") if "scope" in table else Scope.FILES,
     )
 
 
@@ -147,6 +157,15 @@ def _stages(value: object, field: str) -> frozenset[Stage]:
             f"{field} must be {', '.join(accepted[:-1])} or {accepted[-1]}.",
         )
     return stages
+
+
+def _scope(value: object, field: str) -> Scope:
+    try:
+        return Scope(string(value, field))
+    except ValueError:
+        raise GatesealError(
+            "invalid_field", f'{field} must be "files" or "project".'
+        ) from None
 
 
 def require_own_ids(
@@ -197,12 +216,19 @@ def repository_entry(hooks: tuple[RepositoryHook, ...]) -> dict[str, object]:
     """Render hooks as the native configuration's last repository.
 
     pre-commit starts run from the repository root with args and the file
-    names, through the file's own interpreter line, in each of its stages.
+    names, through the file's own interpreter line, in each of its stages. A
+    PROJECT hook gets no file names, so pre-commit starts it once. Its files
+    pattern, not file types, decides whether it starts.
     """
     return {
         "repo": "local",
         "hooks": [
-            hook.hook.base_entry(None, hook.stages, Scope.FILES)
+            hook.hook.base_entry(None, hook.stages, hook.scope)
+            | (
+                {"always_run": hook.files is None}
+                if hook.scope is Scope.PROJECT
+                else {}
+            )
             | {
                 "language": "unsupported_script",
                 "entry": shlex.join([hook.run, *hook.args]),

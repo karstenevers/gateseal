@@ -129,7 +129,7 @@ def test_a_changed_hooks_table_needs_configure(tmp_path):
         (
             MIGRATIONS + 'entry = "check"\n',
             "hooks.check-migrations has entry, which a repository hook does not "
-            "take. It takes name, run, args, files and stages.",
+            "take. It takes name, run, args, files, stages and scope.",
         ),
         (
             MIGRATIONS.replace('"^migrations/"', '"(migrations"'),
