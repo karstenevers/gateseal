@@ -295,13 +295,19 @@ def test_git_lfs_set_up_before_the_push_launcher_uploads_at_a_push(installed, tr
     assert len(uploaded(tracking)) == 1
 
 
-def older_configuration(installed, pushing, branch):
-    """Commit on a new branch the configuration from before the push hook."""
-    pushing.git("switch", "--quiet", "-c", branch)
+def drop_push_hook(installed, pushing):
+    """Commit the configuration from before the push hook."""
     manifest = pushing.clone / "gateseal.toml"
     manifest.write_text(manifest.read_text().replace(TABLE, ""))
     installed.cli(pushing.clone, "configure")
     pushing.git("commit", "--quiet", "-a", "-m", "Drop the push hook")
+    return pushing.git("rev-parse", "HEAD")
+
+
+def older_configuration(installed, pushing, branch):
+    """Commit on a new branch the configuration from before the push hook."""
+    pushing.git("switch", "--quiet", "-c", branch)
+    drop_push_hook(installed, pushing)
 
 
 def no_configuration(installed, pushing, branch):
@@ -341,6 +347,24 @@ def test_git_lfs_set_up_late_uploads_from_a_linked_worktree_without_push_checks(
     assert LFS_CHECK not in shown, shown
     assert linked.pushed("plain") == after
     assert len(uploaded(linked)) == 1
+
+
+@needs_lfs
+def test_git_lfs_set_up_late_uploads_after_a_refresh_removes_the_push_launcher(
+    installed, tracking
+):
+    """The refresh removes the upload hook too, and the push comes before the
+    next run of the Git LFS filter, which would write its push hook."""
+    set_up_git_lfs_late(tracking)
+    add_blob(tracking)
+    after = drop_push_hook(installed, tracking)
+    refreshed = installed.cli(tracking.clone, "setup", "--refresh")
+    assert refreshed["changed"] == [str(tracking.launcher), "hook.gateseal-lfs-upload"]
+    code, shown = tracking.push("main")
+    assert code == 0, shown
+    assert tracking.pushed() == after
+    assert len(uploaded(tracking)) == 1
+    assert installed.cli(tracking.clone, "setup", "--refresh")["changed"] == []
 
 
 @pytest.fixture
