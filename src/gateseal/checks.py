@@ -8,6 +8,7 @@ environment, as it does at git commit.
 import os
 import re
 import subprocess
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 
 from gateseal import ci, lock, setup
@@ -40,6 +41,12 @@ MISSING_REPORT = (
 )
 """The next step of a gate whose hook ran without a report that it reads."""
 
+STOPPED_HOOK = (
+    "Read the output of each stopped hook and fix what stopped it, such as "
+    "network access to its service."
+)
+"""The next step of a run whose hook stopped with an exit code of no finding."""
+
 
 def run(locked: lock.Locked) -> Result:
     """Run the hooks of a commit on every file.
@@ -61,32 +68,34 @@ def run(locked: lock.Locked) -> Result:
     )
     details = (process.stdout + process.stderr).decode("utf-8", errors="replace")
     entries = tuple(hook_results(details, locked.selection.hooks, "run"))
+    failure = _tool_failure(process.returncode, entries)
+    if failure is not None:
+        message, step = failure
+        return Result(
+            "run",
+            "tool_failed",
+            message,
+            4,
+            next_steps=(step,),
+            details=details,
+            entries=entries,
+        )
     if process.returncode == 0:
         return Result(
             "run", "checks_passed", "Checks passed.", details=details, entries=entries
         )
-    if process.returncode == 1:
-        steps: list[str] = []
-        if any(entry["category"] == "finding" for entry in entries):
-            steps.append("Fix each finding at its file and line.")
-        if any(entry.get("modified") for entry in entries):
-            steps.append("Review the files that hooks changed with git diff.")
-        steps.append("Stage the fixes, then run gateseal run again.")
-        return Result(
-            "run",
-            "checks_failed",
-            "Checks failed or modified files.",
-            1,
-            next_steps=tuple(steps),
-            details=details,
-            entries=entries,
-        )
+    steps: list[str] = []
+    if any(entry["category"] == "finding" for entry in entries):
+        steps.append("Fix each finding at its file and line.")
+    if any(entry.get("modified") for entry in entries):
+        steps.append("Review the files that hooks changed with git diff.")
+    steps.append("Stage the fixes, then run gateseal run again.")
     return Result(
         "run",
-        "tool_failed",
-        f"pre-commit stopped with status {process.returncode}.",
-        4,
-        next_steps=("gateseal doctor",),
+        "checks_failed",
+        "Checks failed or modified files.",
+        1,
+        next_steps=tuple(steps),
         details=details,
         entries=entries,
     )
@@ -250,18 +259,17 @@ def _gate_result(
     entries: list[dict[str, object]],
 ) -> Result:
     """Return the gate's result: a stopped tool first, then a missing report."""
-    if returncode not in (0, 1) or "stopped" in outcomes:
-        stopped = (
-            f"pre-commit stopped with status {returncode}."
-            if returncode not in (0, 1)
-            else "A history scan stopped without a finding."
-        )
+    failure = _tool_failure(returncode, entries)
+    if failure is None and "stopped" in outcomes:
+        failure = "A history scan stopped without a finding.", "gateseal doctor"
+    if failure is not None:
+        message, step = failure
         return Result(
             "gate",
             "tool_failed",
-            f"{stopped} {reason}",
+            f"{message} {reason}",
             4,
-            next_steps=("gateseal doctor",),
+            next_steps=(step,),
             details=details,
             entries=tuple(entries),
         )
@@ -304,6 +312,27 @@ def _gate_result(
         details=details,
         entries=tuple(entries),
     )
+
+
+def _tool_failure(
+    returncode: int, entries: Iterable[Mapping[str, object]]
+) -> tuple[str, str] | None:
+    """Return why pre-commit or a hook stopped without checking, and the next step.
+
+    A hook that stopped with an exit code of no finding counts when pre-commit
+    exits 1, as it does for any failed hook. Any other status but 0 is
+    pre-commit's own failure. Return None when neither stopped.
+    """
+    stopped = " ".join(
+        f"The {entry['hook']} hook stopped with exit code {entry['exit_code']}."
+        for entry in entries
+        if entry["category"] == "hook" and entry["status"] == "stopped"
+    )
+    if returncode == 1 and stopped:
+        return stopped, STOPPED_HOOK
+    if returncode not in (0, 1):
+        return f"pre-commit stopped with status {returncode}.", "gateseal doctor"
+    return None
 
 
 def _history_findings(tool: ToolDefinition, output: str) -> list[dict[str, object]]:

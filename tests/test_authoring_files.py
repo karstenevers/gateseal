@@ -18,6 +18,7 @@ BUNDLED = (
     "rules/crap.toml",
     "rules/pyright.toml",
     "rules/ruff.toml",
+    "rules/uv-audit.toml",
     "README.md",
 )
 

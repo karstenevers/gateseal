@@ -33,7 +33,8 @@ WHEN: Mapping[frozenset[Stage], str] = {
 """When the hooks of a tool run, by its stages, as a message says it."""
 
 RAN = ("passed", "failed")
-"""The statuses of a hook that pre-commit started."""
+"""The statuses of a hook that ran to a result. A stopped hook makes the gate a
+tool failure before it looks for a missing report."""
 
 IGNORE = report_path(".gitignore")
 """The owned output with which Git ignores every report, itself excepted."""

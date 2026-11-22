@@ -16,6 +16,8 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 Step 4 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 4 runs the repository's tests when the change has a Python file.
 
+With the [dependency audit](python-dependencies.md#the-audit), step 4 asks a vulnerability service about each locked package. The service gives live data, not data that the policy pins. So a new advisory can fail a run, such as the weekly run, without any commit.
+
 ## What the gate checks
 
 For a pull request on GitHub, the gate finds the merge base of the pull request and its target branch. Azure Pipelines builds the merge of the pull request into its target branch, so the gate there compares that merge commit with the target branch. The gate gives the range to pre-commit as `--from-ref` and `--to-ref`, so the hooks check only the changed files. A hook with the `project` scope, such as Pyright, gets no filenames. It checks the whole project whenever the gate checks files. A project hook that lists `types_or`, such as the test checks, starts only when a changed file has one of those types.
@@ -41,6 +43,7 @@ A hosted machine meets them. A runner or agent of your own needs:
 - Linux on x86-64 with glibc.
 - bash, curl, tar, sha256sum, and Git 2.54.0 or later.
 - Network access to GitHub for uv, mise, gateseal and the hook repositories.
+- Network access to `api.osv.dev` if the repository selects `python-audit`.
 
 On another system or architecture, the first step stops and names this requirement.
 
@@ -58,14 +61,14 @@ The job ignores the agent's mise settings, the storage folders that the agent se
 
 ## Results
 
-A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool failure exits 4. See [Commands and results](commands-and-results.md) for JSON results and other errors.
+A passing gate exits 0. A finding or a hook that changes a file exits 1. A tool failure exits 4. A hook that stops before it can check, such as an audit that cannot reach its service, is a tool failure. See [Commands and results](commands-and-results.md) for JSON results and other errors.
 
 ## What a failed gate shows
 
 In GitHub Actions and Azure Pipelines, a failed gate shows what went wrong, so you do not need a local run to find it:
 
 - **The full log, in color.** The job log shows all the output of each failed hook. gateseal removes recognized credentials, such as tokens, from it first. A workflow command in the output, such as `::error`, `##vso[` or `##[group]`, does not run. A local `gateseal gate` still cuts long output at 6,000 characters. Add `--verbose` to see all of it.
-- **Annotations.** Each failed hook adds an error annotation. When the hook reports a file and line, such as Ruff, the annotation is on that line, and GitHub shows it in the pull request's **Files changed** tab. Other failed hooks annotate the run, and so does a secret that a history scan finds, with its file, line and commit. GitHub shows 10 error annotations of a step, so each failed check gets one before any check gets a second.
+- **Annotations.** Each failed or stopped hook adds an error annotation. When the hook reports a file and line, such as Ruff, the annotation is on that line, and GitHub shows it in the pull request's **Files changed** tab. Other failed hooks annotate the run, and so does a secret that a history scan finds, with its file, line and commit. GitHub shows 10 error annotations of a step, so each failed check gets one before any check gets a second.
 - **A run summary.** The summary of the run lists each failed check and the next steps. On Azure Pipelines, it is on the **Extensions** tab of the run.
 - **The changes that hooks made.** When a hook changes a file, the log shows the diff of each changed file:
 

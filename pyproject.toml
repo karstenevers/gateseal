@@ -90,7 +90,7 @@ known-third-party = ["gateseal"]
 testpaths = ["tests"]
 markers = [
     "integration: real installed wheel, uv, Git and pre-commit; set for every test that uses the installed fixture",
-    "network: actual private network artifact acquisition",
+    "network: real network services, such as private artifact acquisition or the vulnerability service",
 ]
 
 [tool.coverage.run]

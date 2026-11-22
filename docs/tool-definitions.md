@@ -10,7 +10,7 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, and `betterleaks`. A team definition cannot reuse those names or the reserved names `pre-commit` and `python`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, and `betterleaks`. A team definition cannot reuse those names or the reserved names `pre-commit` and `python`.
 
 ## Shared fields
 
@@ -39,7 +39,19 @@ Use the push stage for a tool that is too slow for each commit. Each clone then 
 
 ## Hooks
 
-Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, and `output`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+
+By default, every failure of a hook is a failed check, which exits 1. Some tools also fail when they cannot check, such as when they cannot reach a service. List the exit codes with which the tool reports a finding in `finding_exit_codes`, such as `[1]`. When the hook fails with another exit code, the hook is `stopped`, and `gateseal run` and the CI gate report `tool_failed` and exit 4. The list holds one or more distinct integers from 1 to 255. For example, the bundled `uv-audit` hook, shortened:
+
+```toml
+[hooks.uv-audit]
+name = "uv audit"
+args = ["--frozen", "--config-file", "{configuration}"]
+output = "plain"
+finding_exit_codes = [1]
+```
+
+Two tools can take different hooks from the same hook repository, as `uv-lock` and `uv-audit` do. Hook IDs and names stay distinct across the policy's tools.
 
 ## Reports
 
@@ -85,7 +97,7 @@ A `uv-project` source has a `package`: the tool's name on PyPI, with any extras 
 - The tool runs on the project's Python. Its first run installs the project's packages into `.venv`, the project's environment. In a uv workspace, it installs the packages of every member. uv installs each package's dependencies and its default dependency groups, which is `dev` unless `tool.uv.default-groups` names others. It installs no extra and no other group. So put what checked code imports in a default group.
 - That Python finds the tool's own dependencies before the project's packages. So make an analyzer read the project's environment by name. The bundled Pyright rules set `venvPath` and `venv`, and the [mypy example](add-a-tool.md#add-mypy-a-tool-that-imports-the-project) passes `--python-executable`. A setting that moves the environment, such as `UV_PROJECT_ENVIRONMENT`, needs the same path there.
 - `check_at_commit` is invalid for this kind.
-- A tool that imports the project's packages itself needs a uv cache whose path holds no space. With a space, uv starts the program outside the project. This was seen with uv 0.13.6 and 0.13.9 on Linux.
+- A tool that imports the project's packages itself needs a uv cache whose path holds no space. With a space, uv starts the program outside the project. This was seen with uv 0.13.6 and 0.13.9 on Linux. The bundled deptry definition avoids it: its program is `python`, and its arguments start with `-m deptry`.
 
 The repository needs `pyproject.toml` and `uv.lock` at its root, and `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. A commit through pre-commit alone has no such check: without a project, uv starts the tool outside one. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
 

@@ -1,0 +1,19 @@
+# deptry compares the imports of the project with the dependencies in
+# pyproject.toml. It reads the installed packages to map each one to the
+# modules it provides. The repository's [tool.deptry] settings apply.
+# python -m starts it in the project's environment also when the uv cache path
+# holds a space, where uv starts a console script outside the project.
+kind = "uv-project"
+stages = ["commit", "run", "ci"]
+scope = "project"
+
+[source]
+package = "deptry"
+
+[executable]
+name = "python"
+
+[hooks.deptry]
+name = "deptry"
+args = ["-m", "deptry", "--no-ansi", "."]
+output = "concise"

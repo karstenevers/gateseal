@@ -27,10 +27,8 @@ def add_mypy(data, locked=True):
     (data / "tools/mypy.toml").write_text(DEFINITION)
     policy = data / "policy.toml"
     text = policy.read_text()
-    start, end = (
-        text.index("[capabilities.python-types."),
-        text.index("[capabilities.secrets."),
-    )
+    start = text.index("[capabilities.python-types.")
+    end = text.index("\n\n", start) + 2
     policy.write_text(text[:start] + TABLE + "\n" + text[end:])
     lock = json.loads((data / "policy.lock").read_bytes())
     del lock["components"]["pyright"]

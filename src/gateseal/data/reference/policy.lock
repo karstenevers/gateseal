@@ -69,6 +69,13 @@
         }
       }
     },
+    "deptry": {
+      "versions": {
+        "0.25.1": {
+          "package": "deptry"
+        }
+      }
+    },
     "pre-commit-hooks": {
       "versions": {
         "5.0.0": {
@@ -100,6 +107,20 @@
         },
         "0.17.5": {
           "revision": "ef6cf06c079dd6b299dfc720b0f14400c9d168e1"
+        }
+      }
+    },
+    "uv-audit": {
+      "versions": {
+        "0.13.9": {
+          "revision": "00eaed0068329eb6ca6bcb8de7b46c372d8d1c19"
+        }
+      }
+    },
+    "uv-lock": {
+      "versions": {
+        "0.13.9": {
+          "revision": "00eaed0068329eb6ca6bcb8de7b46c372d8d1c19"
         }
       }
     }

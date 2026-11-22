@@ -1,0 +1,16 @@
+# The hook repository's uv-lock hook installs the uv that its tag names, so
+# the policy pins uv. --check fails when uv.lock does not match
+# pyproject.toml, and its message names uv lock. It reads no installed
+# package, so it runs at every commit.
+kind = "pre-commit-repository"
+stages = ["commit", "run", "ci"]
+scope = "project"
+
+[source]
+repository = "https://github.com/astral-sh/uv-pre-commit"
+tag = "{version}"
+
+[hooks.uv-lock]
+name = "uv lock check"
+args = ["--check"]
+output = "plain"
