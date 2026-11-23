@@ -576,13 +576,18 @@ def test_upgrade_names_each_lock_record_by_its_tool():
     }
 
 
-def test_a_team_choice_cannot_make_its_configuration_load_another(tmp_path, upstream):
+@pytest.mark.parametrize("table", ["", "[extend]\nuseDefault = true\n"])
+def test_a_team_choice_cannot_make_its_configuration_load_another(
+    tmp_path, upstream, table
+):
+    """Also not beside the extend table that a rule file may hold."""
     choice = '[choices.base]\nkey = "extend"\n\n[choices.base.since]\nx = "8.0.0"\n'
-    root = team(tmp_path, files={"tools/gitleaks.toml": GITLEAKS_TOOL + choice})
+    tool = {"tools/gitleaks.toml": GITLEAKS_TOOL + choice}
+    root = team(tmp_path, files=tool | {"rules/gitleaks.toml": GITLEAKS_RULES + table})
     with pytest.raises(GatesealError) as failure:
         authoring.lock(root)
     assert failure.value.code == "invalid_field"
-    assert "a key other than extend" in str(failure.value)
+    assert "a key other than extend and plugins" in str(failure.value)
     assert not (root / "policy.lock").exists()
 
 

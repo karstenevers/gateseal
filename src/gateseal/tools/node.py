@@ -6,24 +6,17 @@ checks each archive that the Policy Lock lacks, and records the archives
 under node. The Lock records the Node once, in native_artifacts.node, in the
 record shape of a release binary.
 
-A hook runs mise with --no-config, which installs the archive by URL and
-SHA-256, then START: npm installs the exact packages once, without install
-scripts, into a folder of the user's cache folder that the machine type, the
-Node and the pins name, and the pinned Node starts the program. So no Node
-on PATH, no Node project of the repository and no other package supplies the
-Node, a package or the program.
-
-Unlike a release binary, a hook on Node gets the caller's whole environment,
-because npm needs the caller's proxy and CA settings, and npm reads the
-user's own .npmrc. What the listed packages depend on is not pinned, and npm
-records no integrity hash that a hook could enforce.
+gateseal policy lock also records npm's lockfile of each tool from npm. A
+hook runs mise with --no-config, which installs the archive by URL and
+SHA-256, then START.
 """
 
 from __future__ import annotations
 
+import json
 import re
 import shlex
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from gateseal.diagnostics import GatesealError
@@ -42,15 +35,7 @@ from gateseal.tools.model import (
     changed_upstream,
     lock_failure,
 )
-from gateseal.validation import (
-    canonical,
-    digest,
-    fields,
-    mapping,
-    nested,
-    sha,
-    string,
-)
+from gateseal.validation import canonical, digest, fields, mapping, nested, sha, string
 
 NAME = "node"
 """The policy.toml field that pins Node, its Policy Lock record and its Lock entry."""
@@ -73,110 +58,93 @@ Its keys are platforms.TARGETS' values.
 EXECUTABLE = "bin/node"
 """The program in Node's install, as the Lock records it for each platform."""
 
-REGISTRY = "https://registry.npmjs.org"
-"""Where gateseal policy lock asks whether a package's release exists."""
-
-NPM_INSTALL = (
-    "npm",
-    "install",
-    "--no-save",
-    "--no-package-lock",
-    "--ignore-scripts",
-    "--bin-links",
-    "--install-strategy=hoisted",
-    "--no-dry-run",
-    "--no-package-lock-only",
-    "--no-global",
-    "--location=project",
-    "--no-workspaces",
-    "--include=optional",
-    "--include=peer",
-    "--no-audit",
-    "--no-fund",
-    "--no-update-notifier",
-    "--no-usage",
-    "--no-timing",
-    "--logs-max=0",
+NPM = (
+    "npm_in() {{ "
+    "grep -E '^[[:space:]]*(proxy|https-proxy|noproxy(\\[])?|cafile|registry|//[^=]+)"
+    "[[:space:]]*=' "
+    '"${{NPM_CONFIG_USERCONFIG:-${{npm_config_userconfig:-$HOME/.npmrc}}}}" '
+    '> "$1/.npmrc" 2>/dev/null; folder=$(cd "$1" && pwd -P) || return; shift; '
+    "env $(env | cut -d= -f1 | grep -iE '^npm_config_' | sed 's/^/-u /' "
+    "| grep -viE ' npm_config_(proxy|https_proxy|noproxy|cafile|registry)$') "
+    '"$node/node" "$node/npm" "$@" --prefix "$folder" '
+    '--userconfig "$folder/.npmrc" --globalconfig /dev/null --cache "$folder/.npm" '
+    "--ignore-scripts --no-audit --no-update-notifier --logs-max=0; }}; "
 )
-"""Install packages into the folder that --prefix names, and write nothing else.
+"""The shell function npm_in FOLDER ARGS: npm ARGS on the package.json in FOLDER.
 
-An option on the command line wins over the user's npm settings and over
-each npm_config_ variable. --bin-links and --install-strategy=hoisted give
-the layout that START and a loader read. The options from --no-dry-run to
---include=peer stop a user setting from making an install that is empty, in
-another place or without a package, or that fails.
+npm reads only the user's proxy, CA and registry, from .npmrc and npm_config_
+variables, and a registry's own .npmrc lines such as its token. env drops the
+other variables, also those whose names a shell cannot unset. npm gets FOLDER's
+real path: through a symlink, such as macOS's /var, npm writes broken lockfile paths.
 """
 
 REQUIRE_NODE = (
-    "node=$(mise --no-config where {install} 2>/dev/null) && node=$node/bin && "
-    '[ -x "$node/node" ] || {{ echo "mise has no install of Node {node}, '
-    'the pinned Node. Turn the auto-install of mise on." >&2; exit 127; }}; '
-    "PATH=$node:$PATH; "
+    "node=$(mise --no-config where {install} 2>/dev/null) || "
+    '{{ echo "mise has no install of Node {node}, the pinned Node. '
+    'Turn the auto-install of mise on." >&2; exit 127; }}; '
+    "node=$node/bin; PATH=$node:$PATH; "
 )
-"""Put the bin folder of the pinned install in node and first on PATH, or stop."""
+"""Put the pinned Node's bin folder in node and first on PATH, or stop."""
 
-START = REQUIRE_NODE + (
-    "case ${{XDG_CACHE_HOME-}} in /*) cache=$XDG_CACHE_HOME ;; "
-    "*) cache=$HOME/.cache ;; esac; "
-    "dir=$cache/gateseal/npm/$(uname -s)-$(uname -m)/{folder}; "
-    'has() {{ case $(readlink "$1/node_modules/.bin/$0" 2>/dev/null) in '
-    '../{package}/*) [ -x "$1/node_modules/.bin/$0" ] ;; *) false ;; esac; }}; '
-    '[ -e "$dir" ] || {{ '
-    'mkdir -p "${{dir%/*}}" && new=$(mktemp -d "$dir.XXXXXX") || exit 127; '
-    "(unset npm_config_workspace npm_config_workspaces "
-    "NPM_CONFIG_WORKSPACE NPM_CONFIG_WORKSPACES; "
-    '"$node"/{npm} --prefix "$new" --cache "$new/.npm" '
-    '--logs-dir "$new/.npm/_logs" '
-    "{packages} >/dev/null) || "
-    '{{ rm -rf "$new"; exit 127; }}; '
-    'rm -rf "$new/.npm"; '
-    'has "$new" || {{ rm -rf "$new"; '
-    'echo "npm installed no program $0 of {package}." >&2; exit 127; }}; '
-    '"$node/node" -e "fs.renameSync(process.argv[1], process.argv[2])" '
-    '"$new" "$dir" '
-    '2>/dev/null || [ -e "$dir" ] || '
-    '{{ rm -rf "$new"; echo "cannot write $dir" >&2; exit 127; }}; '
-    'rm -rf "$new"; }}; '
-    'has "$dir" || {{ echo "No program $0 of {package} in $dir. '
-    'Delete the folder to install again." >&2; exit 127; }}; '
-    "bin=$dir/node_modules/.bin; "
-    'PATH="$node:$bin:$PATH" exec "$node/node" "$bin/$0" "$@"'
+FINISH = (
+    "const [dir, digest, final] = process.argv.slice(1); "
+    "const stop = (problem) => { console.error(problem); process.exit(1); }; "
+    'const read = (name) => fs.readFileSync(path.join(dir, name), "utf8"); '
+    'const lock = read("package-lock.json").replace(/\\r\\n/g, "\\n"); '
+    'const hash = require("crypto").createHash("sha256").update(lock).digest("hex"); '
+    'if (hash !== digest) stop("The lockfile is not the one that the hook names."); '
+    "if (!final) process.exit(); "
+    'const { packages } = JSON.parse(read("node_modules/.package-lock.json")); '
+    'const npm = path.join(process.execPath, "../../lib/node_modules/npm"); '
+    'const checks = require(path.join(npm, "node_modules/npm-install-checks")); '
+    "for (const [name, entry] of Object.entries(JSON.parse(lock).packages)) { "
+    "try { checks.checkPlatform(entry); } catch { continue; } "
+    "if ((entry.os || entry.cpu || entry.libc) && !packages[name]) "
+    "stop(`npm installed no ${name}.`); } "
+    "try { fs.renameSync(dir, final); } catch {}"
 )
-"""The shell script of a hook: install the packages once, then start $0.
+"""node -e FINISH NEW DIGEST [DIR]: check the install NEW, and rename it to DIR.
 
-It runs only on the Node that mise installed from the Lock's archive, which
-mise where names, and stops at each use without one, as with mise's
-auto-install off. So a report that names the Node of a hook is true.
-
-Without the install folder, npm installs into a new folder beside it, with
-its downloads and logs inside, and only a complete install that has the
-program gets the final name, by one rename. So a half install is never used,
-and two first uses at one time leave one install. The caller's workspace
-selection, such as the one of npm run -w, is unset, because npm then fails
-outside a workspace, also with --no-workspaces.
-
-The program is the one that the first package links into node_modules/.bin.
-When the script cannot start it, it stops with status 127, so the tool's
-own exit codes, such as that of a finding, keep their meaning. The script
-repairs no final folder, because another hook may run from it. The pinned
-Node starts the program as its script, so its first line chooses no
-interpreter, and no node_modules/.bin of the repository reaches its PATH.
+NEW's lockfile, with LF line ends, must have the SHA-256 DIGEST. With DIR, npm's
+record of the install must list each package made for this platform: npm ci exits
+0 without one that it cannot download or whose hash differs. A rename fails only
+when another first use took DIR.
 """
+
+START = (
+    REQUIRE_NODE
+    + NPM
+    + (
+        "case ${{XDG_CACHE_HOME-}} in /*) cache=$XDG_CACHE_HOME ;; "
+        "*) cache=$HOME/.cache ;; esac; "
+        "dir=$cache/gateseal/npm/$(uname -s)-$(uname -m)/{folder}; "
+        '[ -e "$dir" ] || {{ finish={finish}; '
+        'mkdir -p "${{dir%/*}}" && new=$(mktemp -d "$dir.XXXXXX") || exit 127; '
+        '{lockfile} > "$new/package-lock.json" && '
+        '"$node/node" -e "$finish" "$new" {digest} && '
+        'printf %s {manifest} > "$new/package.json" && '
+        '(npm_in "$new" ci >/dev/null) && rm -rf "$new/.npm" "$new/.npmrc" && '
+        '"$node/node" -e "$finish" "$new" {digest} "$dir" || {{ rm -rf "$new"; '
+        'echo "npm cannot install the locked packages of $0." >&2; exit 127; }}; '
+        'rm -rf "$new"; }}; '
+        "PATH=$node:$dir/node_modules/.bin:$PATH "
+        'exec "$node/node" "$dir/"{program} "$@"'
+    )
+)
+"""The shell script of a hook: install the locked packages once, then start $0.
+
+Without the install folder, npm ci installs the lockfile into a new folder
+beside it, which FINISH names, so no half install is used. When npm cannot
+install, the script stops with status 127, so the tool's own exit codes keep
+their meaning. The pinned Node starts the program by its path, so neither its
+first line nor a node_modules/.bin chooses what runs.
+"""
+
+INTEGRITY = re.compile(r"sha(?:1|256|384|512)-[A-Za-z0-9+/]+={0,2}")
+"""An npm integrity hash, which npm checks: a Subresource Integrity digest."""
 
 PACKAGE = re.compile(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*")
-"""An npm package's name, scoped or not.
-
-It holds no @ but the scope's, so name@version is unambiguous, and no
-character that a hook's entry would quote.
-"""
-
-
-@dataclass(frozen=True)
-class Package:
-    """One npm package at an exact version."""
-
-    name: str
-    version: str
+"""An npm package's name, scoped or not, so node_modules/<name> is its folder."""
 
 
 def package_name(value: object, field: str) -> str:
@@ -191,39 +159,55 @@ def package_name(value: object, field: str) -> str:
     return text
 
 
-def install_folder(node: str, packages: Sequence[Package]) -> str:
-    """Return the folder of one install, relative to a machine type's folder.
+@dataclass(frozen=True)
+class Tree:
+    """npm's lockfile of one install and its program."""
 
-    Its name holds the Node's version and a digest of the install command,
-    so a change of the Node, of a pin or of NPM_INSTALL gives a new folder.
-    START puts it under the folder of the operating system and processor.
+    lockfile: bytes
+    program: str
+
+    @property
+    def dependencies(self) -> dict[str, str]:
+        return json.loads(self.lockfile)["packages"][""]["dependencies"]
+
+
+def read_tree(
+    lockfile: object,
+    dependencies: Mapping[str, str],
+    package: str,
+    executable: str,
+    subject: str,
+) -> Tree:
+    """Return the Tree of npm's lockfile from a Policy Lock record of subject.
+
+    A lockfile of other dependencies is stale. Each package needs an
+    integrity hash, which npm checks, unless its parent bundles it.
     """
-    words = [*NPM_INSTALL, *_specs(packages)]
-    return f"node-{node}/{sha(canonical(words))[:16]}"
-
-
-def _specs(packages: Sequence[Package]) -> list[str]:
-    return [f"{package.name}@{package.version}" for package in packages]
-
-
-def launch(
-    node: str, install: str, packages: Sequence[Package], executable: str
-) -> tuple[str, ...]:
-    """Return the words that install packages once on Node node and start executable.
-
-    install is the name that mise_install_name gives the Node's install. The
-    packages keep the caller's order, so equal lists give equal bytes.
-    executable is a bare program name that the first package installs.
-    """
-    script = START.format(
-        folder=install_folder(node, packages),
-        node=node,
-        install=shlex.quote(install),
-        npm=shlex.join(NPM_INSTALL),
-        packages=shlex.join(_specs(packages)),
-        package=packages[0].name,
-    )
-    return ("/bin/sh", "-c", script, executable)
+    found = mapping(lockfile, f"{subject}'s lockfile")
+    packages = mapping(found.get("packages"), f"{subject}'s lockfile packages")
+    locked = nested(packages, "", "dependencies")
+    if locked != dependencies:
+        raise lock_failure(
+            "policy_lock_stale",
+            f"policy.lock locks {json.dumps(locked)} for "
+            f"{subject}, but its definition and policy.toml give "
+            f"{json.dumps(dependencies, sort_keys=True)}.",
+        )
+    for path, entry in packages.items():
+        hashed = INTEGRITY.fullmatch(str(nested(entry, "integrity")))
+        if path and not nested(entry, "inBundle") and not hashed:
+            raise GatesealError(
+                "invalid_field",
+                f"policy.lock locks {path} for {subject} without an integrity hash.",
+            )
+    program = nested(packages, f"node_modules/{package}", "bin", executable)
+    if not isinstance(program, str):
+        raise GatesealError(
+            "upstream_executable_missing",
+            f"The npm package {package} of {subject} links no program {executable}.",
+            next_step=f"Set the executable name to a program that {package} links.",
+        )
+    return Tree(canonical(found), f"node_modules/{package}/{program}")
 
 
 @dataclass(frozen=True)
@@ -246,19 +230,40 @@ class Node:
         """Return the words that start any program on this Node, such as npm."""
         return (*MISE, mise_request(NAME, self.version, self.platforms), "--")
 
-    def launch(self, packages: Sequence[Package], executable: str) -> tuple[str, ...]:
-        """Return the command that installs packages once and starts executable."""
-        install = mise_install_name(NAME, self.version, self.platforms)
-        return (*self.prefix, *launch(self.version, install, packages, executable))
+    @property
+    def install(self) -> str:
+        """Return the name of the install that mise where finds."""
+        return shlex.quote(mise_install_name(NAME, self.version, self.platforms))
+
+    def launch(self, tree: Tree, path: str | None, executable: str) -> tuple[str, ...]:
+        """Return the command that installs tree once and starts executable.
+
+        path is the owned output that holds the tree's lockfile, or None for a
+        command that holds the lockfile itself.
+        """
+        quoted = shlex.quote(path or tree.lockfile.decode())
+        script = START.format(
+            folder=f"node-{self.version}/{sha(NPM.encode() + tree.lockfile)[:16]}",
+            node=self.version,
+            install=self.install,
+            lockfile=f"cat {quoted}" if path else f"printf %s {quoted}",
+            manifest=shlex.quote(json.dumps({"dependencies": tree.dependencies})),
+            program=shlex.quote(tree.program),
+            finish=shlex.quote(FINISH),
+            digest=sha(tree.lockfile),
+        )
+        return (*self.prefix, "/bin/sh", "-c", script, executable)
+
+    def write_lockfile(self) -> tuple[str, ...]:
+        """Return the command that locks the package.json of the folder that it gets."""
+        script = (REQUIRE_NODE + NPM).format(install=self.install, node=self.version)
+        script += 'npm_in "$1" install --package-lock-only >/dev/null'
+        return (*self.prefix, "/bin/sh", "-c", script, "npm")
 
     def included(self, program: str) -> tuple[str, ...]:
-        """Return the command that starts program of Node's distribution, such as npm.
-
-        It starts program by its path in the pinned install, as START starts npm.
-        """
-        install = mise_install_name(NAME, self.version, self.platforms)
-        script = REQUIRE_NODE.format(install=shlex.quote(install), node=self.version)
-        script += 'exec "$node/$0" "$@"'
+        """Return the command that runs program of Node's distribution, such as npm."""
+        script = REQUIRE_NODE.format(install=self.install, node=self.version)
+        script += 'exec "$node/node" "$node/$0" "$@"'
         return (*self.prefix, "/bin/sh", "-c", script, program)
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:
@@ -381,32 +386,3 @@ def _kept(
         return mapping(found["platforms"], NAME)
     except GatesealError:
         raise changed_upstream(NAME, version, source, recorded, record) from None
-
-
-def require_released(
-    packages: Sequence[Package],
-    known: Mapping[str, object],
-    upstream: Upstream,
-    tool: str,
-    version: str,
-) -> None:
-    """Require the npm registry to have each package that known lacks.
-
-    known maps a package's name to the version that the Policy Lock already
-    records for it, so only a new pair costs a request. A scoped name goes as
-    @scope%2fname, one path segment. A missing release fails with
-    MissingUpstream for tool version.
-    """
-    for package in packages:
-        if known.get(package.name) == package.version:
-            continue
-        name = package.name.replace("/", "%2f")
-        if upstream.download(f"{REGISTRY}/{name}/{package.version}") is None:
-            raise MissingUpstream(
-                "upstream_release_missing",
-                f"The npm registry has no release {package.version} of "
-                f"{package.name}, which {tool} {version} installs.",
-                tool,
-                version,
-                f"{package.name} {package.version}",
-            )

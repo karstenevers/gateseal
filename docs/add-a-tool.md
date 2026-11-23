@@ -263,7 +263,7 @@ Every tool from npm runs on the Node that `node` pins at the top of `policy/poli
 node = "24.22.3"
 ```
 
-Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command records the SHA-256 of each Node archive from nodejs.org. It also checks that the npm registry has Prettier 3.10.1.
+Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command records the SHA-256 of each Node archive from nodejs.org. It also runs npm on that Node to lock Prettier 3.10.1: npm's lockfile records Prettier and each package that it needs, with its integrity hash.
 
 A repository that adopts the release selects the tool with `--capability docs`. Each commit then formats the staged Markdown files:
 
@@ -307,7 +307,7 @@ pin = "7.0.2"
 reviewed = ["7.0.2"]
 ```
 
-The tool runs on the Node that `node` pins, as [the Prettier example](#format-markdown-with-prettier-from-npm) shows. Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command checks that the npm registry has TypeScript 7.0.2.
+The tool runs on the Node that `node` pins, as [the Prettier example](#format-markdown-with-prettier-from-npm) shows. Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command runs npm on that Node to lock TypeScript 7.0.2: npm's lockfile records TypeScript and each package that it needs, with its integrity hash.
 
 A repository that adopts the release selects the tool with `--capability app-types`. It needs `package.json` and one lockfile at its root, `package-lock.json` or `pnpm-lock.yaml`. Each push then runs two hooks:
 

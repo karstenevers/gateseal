@@ -3,19 +3,18 @@
 Its typescript-types capability runs the Built-in Tool tsc, at a push and in
 the gate, and its vue-types capability a team-defined vue-tsc at a commit and
 in the gate. docs runs node_policy's Prettier, an npm-package tool that reads
-no project. A fake upstream serves nodejs.org, the npm registry and the
-policy's other tools, where gateseal policy lock would reach the network.
+no project. A fake upstream serves nodejs.org, npm and the policy's other
+tools, where gateseal policy lock would reach the network.
 """
 
 import shlex
 
 import pytest
 from gateseal import authoring, lock
-from gateseal.tools.node import Node, Package
+from gateseal.tools.node import Node
+from gateseal.tools.package_managers import PNPM
 from node_policy import (
     DEFINITION,
-    PACKAGES,
-    PRETTIER,
     RULES,
     TABLE,
     VERSION,
@@ -74,23 +73,14 @@ reviewed = ["{VUE_TSC}"]
 
 def install_arguments(node: Node) -> list[str]:
     """Return the arguments of gateseal's install hook on node: npm's, then pnpm's."""
-    pnpm = node.launch([Package("pnpm", "10.28.0")], "pnpm")
+    pnpm = node.launch(PNPM.tree, None, "pnpm")
     return [f"npm={shlex.join(node.included('npm'))}", f"pnpm={shlex.join(pnpm)}"]
 
 
 def upstream():
     """Return a fake upstream with every release that the team policy names."""
     hooks = TeamUpstream()
-    fake = Releases(hooks.files | node_files(), hooks.tags)
-    npm = {
-        "prettier": PRETTIER,
-        **PACKAGES,
-        "typescript": TYPESCRIPT,
-        "vue-tsc": VUE_TSC,
-    }
-    for name, version in npm.items():
-        fake.publish(name, version)
-    return fake
+    return Releases(hooks.files | node_files(), hooks.tags)
 
 
 @pytest.fixture

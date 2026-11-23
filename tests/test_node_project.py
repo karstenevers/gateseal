@@ -18,8 +18,7 @@ from gateseal.policy import load_policy_tree
 from gateseal.processes import Timed
 from gateseal.tools import load_definition
 from gateseal.tools.model import Origin
-from gateseal.tools.node import Package
-from node_policy import VERSION, released
+from node_policy import VERSION, lockfile
 from node_project_policy import (
     POLICY,
     TYPESCRIPT,
@@ -37,8 +36,7 @@ from test_lock_configure import preparation, refused, tracked
 from test_npm_package import GENERATED
 from test_team_tools import consumer
 
-RECORD = {"package": "typescript", "packages": {}}
-COMPILER = [Package("typescript", TYPESCRIPT)]
+COMPILER = {"typescript": TYPESCRIPT}
 
 
 def configuration(locked):
@@ -78,27 +76,29 @@ def test_policy_lock_records_the_package_of_tsc(tmp_path, registry):  # noqa: F8
     root = typed(tmp_path)
     assert authoring.lock(root).code == "locked"
     components = json.loads((root / "policy.lock").read_bytes())["components"]
-    assert components["tsc"] == {"versions": {TYPESCRIPT: RECORD}}
-    assert released("typescript", TYPESCRIPT) in registry.downloaded
-    registry.downloaded.clear()
+    assert components["tsc"] == {
+        "versions": {TYPESCRIPT: {"lockfile": lockfile(COMPILER)}}
+    }
+    assert COMPILER in registry.resolved
+    resolved = len(registry.resolved)
     assert authoring.lock(root).changed == ()
-    assert not [url for url in registry.downloaded if "registry" in url]
+    assert len(registry.resolved) == resolved
 
 
 def test_a_typescript_release_the_registry_lacks_stops_the_lock(
     tmp_path,
     registry,  # noqa: F811
 ):
-    del registry.files[released("typescript", TYPESCRIPT)]
+    registry.missing.add(f"typescript@{TYPESCRIPT}")
     root = typed(tmp_path)
     failure = refused(authoring.lock, root)
     assert failure.code == "upstream_release_missing"
     assert str(failure) == (
-        f"The npm registry has no release {TYPESCRIPT} of typescript, which tsc "
-        f"{TYPESCRIPT} installs."
+        f"npm cannot resolve the packages of tsc {TYPESCRIPT}: No matching version "
+        f"found for typescript@{TYPESCRIPT}."
     )
     assert failure.next_step == (
-        f"Check that typescript {TYPESCRIPT} is released, or remove it from "
+        f"Check that tsc {TYPESCRIPT} is released, or remove it from "
         "policy.toml. Then run gateseal policy lock."
     )
     assert not (root / "policy.lock").exists()
@@ -117,7 +117,14 @@ def test_a_consumer_compiles_tsc_on_the_node_and_labels_it(tmp_path, registry): 
         "exclude": GENERATED,
         "language": "unsupported",
         "entry": shlex.join(
-            [*node.launch(COMPILER, "tsc"), "--noEmit", "--project", "tsconfig.json"]
+            [
+                *node.launch(
+                    policy.tools["tsc"].tree, ".gateseal/tsc.package-lock.json", "tsc"
+                ),
+                "--noEmit",
+                "--project",
+                "tsconfig.json",
+            ]
         ),
         "require_serial": True,
     }

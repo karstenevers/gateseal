@@ -18,13 +18,11 @@ from gateseal.tools.node import (
     ARCHIVES,
     Node,
     NodeArchive,
-    Package,
-    install_folder,
-    launch,
+    Tree,
     lock_node,
     package_name,
     read_node,
-    require_released,
+    read_tree,
 )
 from gateseal.tools.release_binary import checked_programs
 from gateseal.validation import canonical
@@ -37,11 +35,13 @@ from node_policy import (
     VERSION,
     Releases,
     docs,
+    lockfile,
     node_files,
     node_record,
     releases,  # noqa: F401
 )
 from node_policy import POLICY as DOCS
+from stand_ins import executable
 from test_lock_configure import refused
 from test_team_tools import POLICY, consumer, hook_tool, team, upstream  # noqa: F401
 
@@ -164,34 +164,150 @@ def test_a_record_reads_back_as_the_node_that_starts_programs():
     assert node.prefix == ("mise", "--no-config", "exec", request, "--")
 
 
-def test_launch_starts_the_executable_on_the_node_that_mise_installed():
+ESLINT = {"eslint": "10.15.0", "@typescript-eslint/parser": "8.73.0"}
+
+
+def test_a_tree_starts_the_program_by_its_path_in_the_package():
+    record = lockfile(ESLINT)
+    tree = read_tree(record, ESLINT, "eslint", "eslint", "eslint 10.15.0")
+    assert tree == Tree(canonical(record), "node_modules/eslint/bin/cli.js")
+
+
+def test_launch_installs_the_tree_on_the_node_that_mise_installed():
     node = read_node(VERSION, node_record())
-    packages = (
-        Package("eslint", "10.15.0"),
-        Package("@typescript-eslint/parser", "8.73.0"),
-    )
+    tree = read_tree(lockfile(ESLINT), ESLINT, "eslint", "eslint", "eslint 10.15.0")
     request = node.prefix[3]
     install = f"{request.partition('[')[0]}@{VERSION}"
     assert re.fullmatch(r"http:node-[0-9a-f]{12}@24\.22\.3", install)
-    assert request.endswith(f"]@{VERSION}")
-    script = launch(VERSION, install, packages, "eslint")
+    command = node.launch(tree, ".gateseal/eslint.package-lock.json", "eslint")
+    assert command[: len(node.prefix)] == node.prefix
+    script = command[len(node.prefix) :]
     assert script[:2] == ("/bin/sh", "-c") and script[3:] == ("eslint",)
     assert f"mise --no-config where {install} " in script[2]
-    assert "eslint@10.15.0 @typescript-eslint/parser@8.73.0" in script[2]
-    assert node.launch(packages, "eslint") == (*node.prefix, *script)
+    assert "cat .gateseal/eslint.package-lock.json >" in script[2]
+    assert '"$dir/"node_modules/eslint/bin/cli.js "$@"' in script[2]
 
 
-def test_each_node_and_each_set_of_pins_has_its_own_install_folder():
-    packages = (
-        Package("eslint", "10.15.0"),
-        Package("@typescript-eslint/parser", "8.73.0"),
+def folder(version, dependencies):
+    node = Node(version, read_node(VERSION, node_record()).platforms)
+    tree = read_tree(lockfile(dependencies), dependencies, "eslint", "eslint", "x")
+    script = node.launch(tree, "lock", "eslint")[-2]
+    return re.search(r"/(node-[^;]*); ", script)[1]
+
+
+def test_each_node_and_each_lockfile_has_its_own_install_folder():
+    assert re.fullmatch(r"node-24\.22\.3/[0-9a-f]{16}", folder(VERSION, ESLINT))
+    assert folder("24.22.2", ESLINT) == folder(VERSION, ESLINT).replace(
+        VERSION, "24.22.2"
     )
-    folder = install_folder("24.22.3", packages)
-    assert folder.startswith("node-24.22.3/")
-    assert install_folder("24.22.3", list(packages)) == folder
-    assert install_folder("24.22.2", packages) != folder
-    other = (Package("eslint", "10.15.1"), packages[1])
-    assert install_folder("24.22.3", other) != folder
+    other = ESLINT | {"eslint": "10.15.1"}
+    assert folder(VERSION, other).split("/")[1] != folder(VERSION, ESLINT).split("/")[1]
+
+
+MISE = """#!/bin/sh
+case $2 in
+version) cat "$FAKE/version" 2>/dev/null || echo "2026.10.19 linux-x64" ;;
+where) echo "$FAKE/node" ;;
+exec) shift 4; exec "$@" ;;
+esac
+"""
+"""mise --no-config version, where INSTALL, and exec REQUEST -- PROGRAM ARGS.
+Beside a file version, it reports the version that the file holds."""
+
+NPM_LOCK = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE/arguments"
+[ ! -e "$FAKE/report" ] || { cat "$FAKE/report" >&2; exit 1; }
+printf '{"name": "x", "lockfileVersion": 3, "packages": {"": %s}}' \\
+  "$(cat "$4/package.json")" > "$4/package-lock.json"
+"""
+"""npm install --package-lock-only --prefix FOLDER ...: it locks FOLDER's
+package.json, or prints the file report and fails beside it."""
+
+
+def lock_on_node(tmp_path, monkeypatch, report=None):
+    """Lock Prettier 3.10.1 with a stand-in mise and npm, and return the fakes."""
+    fake = tmp_path / "fake"
+    executable(fake / "bin/mise", MISE)
+    executable(fake / "node/bin/node", '#!/bin/sh\nexec /bin/sh "$@"\n')
+    executable(fake / "node/bin/npm", NPM_LOCK)
+    if report is not None:
+        (fake / "report").write_text(report)
+    monkeypatch.setenv("PATH", f"{fake / 'bin'}:/usr/bin:/bin")
+    monkeypatch.setenv("FAKE", str(fake))
+    (tmp_path / "scratch").mkdir()
+    npm = authoring.Releases("git", tmp_path / "scratch", "gateseal policy lock")
+    npm.node = read_node(VERSION, node_record())
+    return lambda: npm.lockfile({"prettier": "3.10.1"}, "prettier", "3.10.1"), fake
+
+
+def test_lock_runs_npm_on_the_pinned_node_from_an_empty_configuration(
+    tmp_path, monkeypatch
+):
+    lock, fake = lock_on_node(tmp_path, monkeypatch)
+    assert lock() == {
+        "lockfileVersion": 3,
+        "packages": {"": {"dependencies": {"prettier": "3.10.1"}}},
+    }
+    arguments = (fake / "arguments").read_text().splitlines()
+    folder = arguments[3]
+    assert folder.startswith(f"{tmp_path / 'scratch'}/")
+    assert arguments == [
+        "install",
+        "--package-lock-only",
+        "--prefix",
+        folder,
+        "--userconfig",
+        f"{folder}/.npmrc",
+        "--globalconfig",
+        "/dev/null",
+        "--cache",
+        f"{folder}/.npm",
+        "--ignore-scripts",
+        "--no-audit",
+        "--no-update-notifier",
+        "--logs-max=0",
+    ]
+
+
+def test_npm_gets_the_real_path_of_a_folder_behind_a_symlink(tmp_path, monkeypatch):
+    lock, fake = lock_on_node(tmp_path, monkeypatch)
+    (tmp_path / "scratch").rename(tmp_path / "real scratch")
+    (tmp_path / "scratch").symlink_to(tmp_path / "real scratch")
+    lock()
+    folder = (fake / "arguments").read_text().splitlines()[3]
+    assert folder.startswith(f"{tmp_path / 'real scratch'}/")
+
+
+@pytest.mark.parametrize(
+    ("report", "code"),
+    [
+        ("npm error code E404", "upstream_release_missing"),
+        ("npm error code ETARGET", "upstream_release_missing"),
+        ("npm error code ECONNREFUSED", "upstream_unavailable"),
+    ],
+)
+def test_a_failed_npm_names_the_tool_version_and_npm_s_report(
+    tmp_path, monkeypatch, report, code
+):
+    lock, _ = lock_on_node(tmp_path, monkeypatch, f"{report}\n")
+    failure = refused(lock)
+    assert failure.code == code
+    assert isinstance(failure, MissingUpstream) == (code != "upstream_unavailable")
+    assert (
+        str(failure) == f"npm cannot resolve the packages of prettier 3.10.1: {report}"
+    )
+    if code == "upstream_unavailable":
+        assert failure.exit_code == 4
+        assert failure.next_step == (
+            "Check that npm reaches its registry, then rerun gateseal policy lock."
+        )
+
+
+def test_lock_needs_a_mise_that_installs_node_by_url(tmp_path, monkeypatch):
+    lock, fake = lock_on_node(tmp_path, monkeypatch)
+    (fake / "version").write_text("2026.10.18 linux-x64\n")
+    assert refused(lock).code == "mise_version_mismatch"
+    assert not (fake / "arguments").exists()
 
 
 def test_the_lock_records_node_as_mise_installs_it_and_checks_no_program():
@@ -279,41 +395,6 @@ def test_a_package_name_holds_nothing_npm_or_a_hook_entry_would_read_otherwise(n
     failure = refused(package_name, name, "tools.x.source.package")
     assert failure.code == "invalid_field"
     assert str(failure).startswith("tools.x.source.package must be")
-
-
-def test_the_registry_is_asked_only_for_a_package_the_lock_lacks():
-    registry = "https://registry.npmjs.org/"
-    served = Releases(
-        {registry + "eslint/10.15.0": b"{}", registry + "@scope%2fplugin/1.0.0": b"{}"}
-    )
-    packages = (
-        Package("typescript", "6.0.3"),
-        Package("eslint", "10.15.0"),
-        Package("@scope/plugin", "1.0.0"),
-    )
-    require_released(packages, {"typescript": "6.0.3"}, served, "eslint", "10.15.0")
-    assert served.downloaded == [
-        registry + "eslint/10.15.0",
-        registry + "@scope%2fplugin/1.0.0",
-    ]
-    failure = refused(
-        require_released,
-        packages,
-        {"typescript": "6.0.2"},
-        served,
-        "eslint",
-        "10.15.0",
-    )
-    assert isinstance(failure, MissingUpstream)
-    assert (failure.code, failure.name, failure.version) == (
-        "upstream_release_missing",
-        "eslint",
-        "10.15.0",
-    )
-    assert str(failure) == (
-        "The npm registry has no release 6.0.3 of typescript, which eslint 10.15.0 "
-        "installs."
-    )
 
 
 def test_a_policy_without_a_tool_on_node_pins_no_node(tmp_path, upstream):  # noqa: F811

@@ -51,7 +51,8 @@ this README and every other file.
 - `gateseal policy lock` writes `policy.lock`. It reads each reviewed
   version's commit from its release tag and each archive's SHA-256 from the
   release's checksum file, and downloads each new archive to check it. It
-  asks the npm registry whether each npm package's release exists.
+  runs npm on the policy's Node to record each npm tool's lockfile: every
+  package that npm installs, with its integrity hash.
   `gateseal policy add` writes it the same way. Run lock after you add or
   remove a reviewed version by hand, and never edit `policy.lock` by hand.
 - `gateseal policy check` proves offline that `policy.lock` agrees with

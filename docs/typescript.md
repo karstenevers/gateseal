@@ -15,12 +15,13 @@ pre-commit install
 
 In a configured repository, add `"typescript"` to `capabilities` in `gateseal.toml` and run `gateseal configure` instead.
 
-Besides the Manifest, the Lock and `.pre-commit-config.yaml`, configure writes four files under `.gateseal/`:
+Besides the Manifest, the Lock and `.pre-commit-config.yaml`, configure writes six files under `.gateseal/`:
 
 - `eslint.json`, the ESLint rules.
 - `eslint-loader.mjs`, the file that gives the rules to ESLint.
 - `eslint-suppressions.json`, an empty list that the hook gives to ESLint in place of the repository's own `eslint-suppressions.json`.
 - `prettier.toml`, the Prettier options.
+- `eslint.package-lock.json` and `prettier.package-lock.json`, npm's lockfile of each tool, which `policy.lock` records and the hooks install exactly.
 
 Review the files and commit them together, as [Configure a repository](configure-a-repository.md) shows. To see the versions that the hooks run, run `gateseal status`. Its output includes lines like this:
 
@@ -108,19 +109,17 @@ exclude = []
 - `packages` pins the packages that every reviewed ESLint version installs beside it. A parser or a plugin that `rules/eslint.toml` names must be listed here.
 - `gateseal policy add eslint <version> policy` reviews a new ESLint version. The same command works for Prettier.
 
-After you edit `node` or `packages`, run `gateseal policy lock policy`. It records the SHA-256 of each Node archive and checks that the npm registry has each package. See [Policy format](policy-format.md#policy-lock).
+After you edit `node` or `packages`, run `gateseal policy lock policy`. It records the SHA-256 of each Node archive, and npm's lockfile of each tool: every package that npm installs, with its integrity hash. See [Policy format](policy-format.md#policy-lock).
 
 ## Limits
 
-- npm does not pin the packages that the pinned packages depend on, and it enforces no integrity hash. Your own npm settings, such as `~/.npmrc`, choose the registry.
 - ESLint and Prettier skip each file in a `node_modules` folder, also a staged one, as both do without gateseal.
 - The hooks get `.ts` and `.tsx` files only. ESLint skips a name in upper case, such as `Widget.TS`, as TypeScript does. pre-commit gives `.mts` and `.cts` files no TypeScript type, so they are not checked.
 - No rule needs type information, and this capability runs no type check. `typescript-types` runs one at each push.
 - `gateseal run --json` and `gateseal gate --json` list no ESLint finding by file and line. The hook's entry says that it failed, and the text output shows ESLint's report.
 - The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. The ESLint format refuses `extends`, so a preset cannot load. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`. Pin Prettier 3 or later. Prettier 2 has more options that load code from the repository, such as `pluginSearchDirs` and a parser that it does not know, and a rule file can set them.
-- The hooks pass your whole environment to npm, so npm uses your proxy and CA settings. A release binary, such as Betterleaks, gets only a few variables, such as `HOME` and `PATH`.
-- A `workspace` setting in your own `.npmrc` stops the first use of a hook, as it stops npm in each folder outside that workspace. With `--preserve-symlinks-main` in `NODE_OPTIONS`, no program that npm installs starts, and so no hook on Node.
-- A commit that an npm script starts, such as `npm run commit`, gets the npm settings of that script. npm gives a script the settings of the project's `.npmrc` as `npm_config_` variables, and the first use of a hook passes them to npm. Such a script runs the repository's code already. To keep the project's settings out, run `git commit` yourself.
+- npm reads only the proxy, CA and registry settings of your `.npmrc`: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as its token. Your `npm_config_` variables can set the first five. A scoped registry, such as `@team:registry`, does not apply.
+- A commit that an npm script starts, such as `npm run commit`, gets the proxy, CA and registry settings of that script, such as those of the project's `.npmrc`. To keep them out, run `git commit` yourself.
 
 ## Type checks at push
 
@@ -155,7 +154,7 @@ Each developer needs pre-commit and mise, as for `typescript`. Node, npm, pnpm a
 The install is different for each package manager:
 
 - **npm.** `npm ci --dry-run` checks that `package-lock.json` matches the versions in `package.json`. `npm ls --package-lock-only` checks that it matches the source of each dependency, such as a tarball. Then `npm install --no-save` installs only what changed. npm is the one of the pinned Node's install, never an npm on `PATH`. Without that install, the hook stops.
-- **pnpm.** `pnpm install --frozen-lockfile` does both in one step. gateseal installs pnpm 10.28.0 once on the pinned Node and starts it from that install, outside the repository. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
+- **pnpm.** `pnpm install --frozen-lockfile` does both in one step. gateseal installs pnpm 10.28.0 once on the pinned Node, checked against its integrity hash, and starts it from that install, outside the repository. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
 
 The hook sets its options on the command line, so a setting in `.npmrc` or `pnpm-workspace.yaml` cannot leave out the lockfile, the development dependencies or the install itself, and cannot move the install out of the project. Registry, proxy and login settings still apply. See [the commands that the hook runs](tool-definitions.md#tools-that-read-the-node-project). No install script of a package runs. A lockfile that does not match `package.json` stops the push. The checks after the install do not run then, so the push shows one error. Run `npm install` or `pnpm install`, commit the lockfile, and push again.
 

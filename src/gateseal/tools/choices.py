@@ -20,7 +20,11 @@ KEY = re.compile(r"[a-z][a-z0-9-]*")
 EXTEND = "extend"
 """The key that can make a configuration load another one. A policy
 configuration may set it only as a table that starts from a tool's built-in
-rules, and no choice may set it."""
+rules."""
+
+LOADING = (EXTEND, "plugins")
+"""The keys that no choice may set: each loads a file or a package in some
+tool, such as Prettier's and mypy's plugins."""
 
 VALUE = re.compile(r"[a-z0-9]+")
 """A value a choice accepts, which renders as a TOML string without escaping."""
@@ -82,15 +86,15 @@ def parse_choices(value: object, field: str) -> dict[str, Choice]:
         if (
             not NAME.fullmatch(name)
             or not KEY.fullmatch(key)
-            or key == EXTEND
+            or key in LOADING
             or not since
             or not all(map(VALUE.fullmatch, since))
         ):
             raise GatesealError(
                 "invalid_field",
-                f"{field}.{name} needs a lowercase name and a key other than "
-                f"{EXTEND}, and a since table that maps lowercase values to stable "
-                "releases.",
+                f"{field}.{name} needs a lowercase name, a key other than "
+                f"{' and '.join(LOADING)}, and a since table that maps lowercase "
+                "values to stable releases.",
             )
         found[name] = Choice(key, since)
     if len({choice.key for choice in found.values()}) != len(found):

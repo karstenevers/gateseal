@@ -16,30 +16,23 @@ format = "eslint"
 
 # The one loader of every policy. ESLint starts it through --config, so a
 # repository's own ESLint configuration never runs. It resolves the parser and
-# each plugin from the folder whose node_modules/.bin holds the program that
-# the hook started, the root of the hook's install. So it loads the packages at
+# each plugin from the folder whose node_modules holds the ESLint that the
+# hook started, the root of the hook's install. So it loads the packages at
 # the versions that the policy pins, never a copy that ESLint itself depends
-# on, and never the repository's node_modules. It refuses a package that Node
-# finds outside that install, such as one in a folder above it or on
-# NODE_PATH, when the install lost its own. It reads the data whose name it
+# on, and never the repository's node_modules. It reads the data whose name it
 # shares: <name>.json beside <name>-loader.mjs.
 [files.loader]
 extension = "mjs"
 content = '''
 // gateseal owns this file; gateseal configure writes it.
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const root = process.argv[1].replace(/node_modules\/\.bin\/[^\/]+$/, "");
+const root = process.argv[1].replace(/node_modules\/eslint\/.*$/, "");
 const tool = createRequire(root);
-const installed = realpathSync(`${root}node_modules`);
 const load = async (name) => {
-  const entry = tool.resolve(name);
-  if (!entry.startsWith(`${installed}/${name}/`)) {
-    throw new Error(`The install ${installed} holds no package ${name}.`);
-  }
-  const module = await import(pathToFileURL(entry).href);
+  const module = await import(pathToFileURL(tool.resolve(name)).href);
   return module.default ?? module;
 };
 const file = fileURLToPath(import.meta.url).replace(/-loader\.mjs$/, ".json");

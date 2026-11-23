@@ -124,24 +124,25 @@ Release binaries run through `mise --no-config exec --deny-env`. A hook of any o
 
 An `npm-package` source has a `package`: the tool's name on the npm registry, without a version. Examples are `prettier` and `@biomejs/biome`. Set `executable.name` to the program that the package installs. The program must be a JavaScript file, because the hook starts the pinned Node with it. `check_at_commit` is invalid for this kind.
 
-The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). Each hook runs one command, in this form:
+The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). `gateseal policy lock` runs npm on that Node to lock them, so it needs mise and the npm registry. Each hook runs one command, in this form:
 
 ```text
 mise --no-config exec <Node request> -- /bin/sh -c '<script>' <program> <args>
 ```
 
-The script installs the packages once into a folder of your cache folder, then starts the program on the pinned Node. When it cannot install or start the program, the hook exits 127, so list no 127 in `finding_exit_codes`.
+The script installs the tool's lockfile, which `gateseal policy lock` records, once into a folder of your cache folder. Then it starts the program on the pinned Node. When it finds no pinned Node or cannot install the packages, the hook exits 127, so list no 127 in `finding_exit_codes`.
 
 The kind guarantees these things, whatever a definition says:
 
 - The hook runs the pinned Node, whatever Node is on `PATH` or in the repository's `node_modules`. If mise's auto-install is off and the pinned Node is missing, the hook stops. Two repositories with different pins each run their own Node on one machine.
-- npm installs exactly the listed versions. `gateseal policy lock` checks that the npm registry has each one.
-- Each machine type, each Node version and each set of pins has its own install. A repository with another Node pin never runs your packages on its Node.
+- npm installs exactly the tree that `policy.lock` records: the listed versions and every package that they depend on, each checked against its integrity hash. A changed hash or a missing package stops the hook, also in an optional package that names the machine's platform, such as the compiler binary of TypeScript 7, which npm alone would leave out.
+- npm reads none of your npm settings but these: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as `//registry.example/:_authToken`. It takes all of them from your `.npmrc`, and the first five also from `npm_config_` variables.
+- Each machine type, each Node version and each lockfile has its own install. A repository with another Node pin never runs your packages on its Node.
 - The program is the one of the tool's own package, never a program of the same name from another package.
 - No install script of a package runs.
 - The hook never gets a file that gateseal writes. Its `exclude` pattern covers `.gateseal/`, `.pre-commit-config.yaml`, `gateseal.toml`, `gateseal.lock` and the file of each CI provider. A capability's `exclude` choice adds its paths. A tool with the `project` scope gets no file names and reads the working tree itself, so its own arguments must keep it away from these files.
 
-The first use of a hook downloads Node and the packages, which needs network access. So does the first use after a change of a pin. Later uses call no npm and ask the registry nothing. gateseal does not remove an old install. To free the space, delete `gateseal/npm` in your cache folder. The next use of each hook installs again. A hook trusts an install that it finds in the cache folder, as pre-commit trusts its own folder there. So keep the cache folder outside each repository whose files you do not trust. The kind does not pin what the listed packages depend on, and passes the caller's environment to npm. See [the limits](typescript.md#limits).
+The first use of a hook downloads Node and the packages, which needs network access. So does the first use after a change of a pin. Later uses call no npm and ask the registry nothing. gateseal does not remove an old install. To free the space, delete `gateseal/npm` in your cache folder. The next use of each hook installs again. A hook trusts an install that it finds in the cache folder, as pre-commit trusts its own folder there. So keep the cache folder outside each repository whose files you do not trust. See [the limits](typescript.md#limits).
 
 A gateseal release without the `npm-package` kind or the `eslint` format below gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has them.
 
@@ -152,7 +153,7 @@ A `node-project` tool is an `npm-package` tool that also reads the packages of t
 The repository needs `package.json` and exactly one of `package-lock.json` and `pnpm-lock.yaml` at its root. gateseal's own hook `gateseal-node-packages` runs before the tool's hooks, in each stage that runs such a tool. It installs what the lockfile pins into `node_modules`:
 
 - **npm.** `npm ci --dry-run` checks that the lockfile matches the versions in `package.json`. `npm ls --package-lock-only` checks that it matches the source of each dependency, such as a tarball. Then `npm install --no-save` installs only what changed. The hook runs the npm of the pinned Node's install, with that install's folder first on `PATH`. Without that install, the hook stops with status 1.
-- **pnpm.** `pnpm install --frozen-lockfile` does both. gateseal installs pnpm 10.28.0 once on the pinned Node and starts it from that install, as it starts an `npm-package` tool. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
+- **pnpm.** `pnpm install --frozen-lockfile` does both. gateseal installs pnpm 10.28.0 once on the pinned Node, checked against its integrity hash, and starts it from that install, as it starts an `npm-package` tool. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
 
 The hook runs these commands:
 
@@ -201,8 +202,8 @@ A definition with `configuration.format = "eslint"` takes ESLint's data from a T
 
 Any other key gives `invalid_field`, such as `extends`, `languageOptions` or `settings`. So no key loads another file, names a preset, or gives type information. A value that JSON cannot hold, such as a TOML date or an infinite number, gives `invalid_field` too. A definition of this format takes no choices.
 
-The JSON file is data, not an ESLint configuration. The built-in `eslint` definition adds a loader as the fixed file `files.loader`, written as `.gateseal/eslint-loader.mjs`. Its hook passes the loader with `--config {loader}`, so ESLint runs no configuration file of the repository. The definition also adds an empty list of suppressions as the fixed file `files.suppressions`, written as `.gateseal/eslint-suppressions.json`, and its hook passes `--suppressions-location {suppressions}`. So ESLint does not read the repository's own `eslint-suppressions.json`, which would accept each finding that it lists. This option needs ESLint 9.24.0 or later. The loader reads the JSON file beside it. It loads the parser and the plugins from the root of the hook's install, where each pinned package is, never from a copy that ESLint itself depends on and never from the repository's `node_modules`. If the install lost a package and Node finds one in another place, such as a folder above the install or `NODE_PATH`, the loader stops. It finds each package as `require` does, so a package that offers its entry only to `import` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. A team definition of this format needs the same loader under the key `loader`, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml).
+The JSON file is data, not an ESLint configuration. The built-in `eslint` definition adds a loader as the fixed file `files.loader`, written as `.gateseal/eslint-loader.mjs`. Its hook passes the loader with `--config {loader}`, so ESLint runs no configuration file of the repository. The definition also adds an empty list of suppressions as the fixed file `files.suppressions`, written as `.gateseal/eslint-suppressions.json`, and its hook passes `--suppressions-location {suppressions}`. So ESLint does not read the repository's own `eslint-suppressions.json`, which would accept each finding that it lists. This option needs ESLint 9.24.0 or later. The loader reads the JSON file beside it. It loads the parser and the plugins from the root of the hook's install, where each pinned package is, never from a copy that ESLint itself depends on and never from the repository's `node_modules`. It finds each package as `require` does, so a package that offers its entry only to `import` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. A team definition of this format needs the same loader under the key `loader`, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml).
 
 ## Choices
 
-A choice names a top-level configuration `key` and a `since` map. The map gives each accepted value and the earliest tool release that supports it. Values use lowercase letters and digits. Expose the choice and its default in `[capabilities.<name>.choices]` in `policy.toml`. The reserved key `extend` is invalid.
+A choice names a top-level configuration `key` and a `since` map. The map gives each accepted value and the earliest tool release that supports it. Values use lowercase letters and digits. Expose the choice and its default in `[capabilities.<name>.choices]` in `policy.toml`. The reserved keys `extend` and `plugins` are invalid, because each loads a file or a package in some tool.

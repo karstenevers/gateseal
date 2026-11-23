@@ -2,10 +2,11 @@
 
 Every test drives the installed command. Offline, the hook repositories are
 local Git repositories that their GitHub URLs reach through
-url.<base>.insteadOf, and a urllib opener that the driver installs serves
-Betterleaks' release files and PyPI's release pages from a directory, so
-gateseal policy lock and add run their own code against fixtures. The network
-tests resolve versions from the real upstream.
+url.<base>.insteadOf, a urllib opener that the driver installs serves
+Betterleaks' release files and PyPI's release pages from a directory, and the
+driver's npm answers with the lockfiles of npm.json, so gateseal policy lock
+and add run their own code against fixtures. The network tests resolve
+versions from the real upstream.
 """
 
 import hashlib
@@ -20,7 +21,7 @@ from archives import tar_gz
 from conftest import BUNDLED_TOOLS, newer_release, reviewed_line, with_git_config
 from gateseal.policy import bundled_root
 from installation import clone, process, success
-from node_policy import node_files, released
+from node_policy import node_files
 
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
@@ -34,9 +35,11 @@ NEWER = newer_release("betterleaks")
 NEWER_RUFF = newer_release("ruff")
 
 OFFLINE = """
-import email.message, io, os, sys, urllib.error, urllib.request, urllib.response
+import email.message, io, json, os, sys, urllib.error, urllib.request, urllib.response
 from pathlib import Path
+from gateseal import authoring
 from gateseal.cli import main
+from gateseal.tools.model import MissingUpstream
 
 root = Path(sys.argv[1])
 SERVED = (
@@ -70,7 +73,16 @@ class Fixtures(urllib.request.BaseHandler):
         return response
 
 
+def lockfile(self, dependencies, tool, version):
+    lockfiles = json.loads((root / "npm.json").read_bytes())
+    found = lockfiles.get(json.dumps(dependencies, sort_keys=True))
+    if found is None:
+        raise MissingUpstream("upstream_release_missing", "offline", tool, version)
+    return found
+
+
 urllib.request.install_opener(urllib.request.build_opener(Fixtures))
+authoring.Releases.lockfile = lockfile
 raise SystemExit(main(sys.argv[2:]))
 """
 
@@ -97,19 +109,22 @@ def release(root, version, platforms=("linux_x64", "darwin_arm64")):
     return directory
 
 
-def serve_npm_tools(root):
-    """Publish a fake release of the bundled Node and of each npm package it runs."""
+def serve_node(root):
+    """Publish a fake release of the bundled Node, and npm's bundled lockfiles."""
     locked = json.loads((bundled_root() / "policy.lock").read_bytes())
-    files = node_files(locked["node"]["version"])
-    for component in locked["components"].values():
-        for version, record in component["versions"].items():
-            if "packages" in record:
-                packages = {record["package"]: version} | record["packages"]
-                files |= {released(*package): b"{}" for package in packages.items()}
-    for url, data in files.items():
+    for url, data in node_files(locked["node"]["version"]).items():
         path = root / url.removeprefix("https://")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+    lockfiles = {
+        json.dumps(
+            record["lockfile"]["packages"][""]["dependencies"], sort_keys=True
+        ): record["lockfile"]
+        for component in locked["components"].values()
+        for record in component["versions"].values()
+        if "lockfile" in record
+    }
+    (root / "npm.json").write_text(json.dumps(lockfiles))
 
 
 @dataclass
@@ -151,7 +166,7 @@ def upstream(installed, tmp_path):
             page = root / f"pypi.org/pypi/{tool}/{version}/json"
             page.parent.mkdir(parents=True)
             page.write_bytes(b"{}")
-    serve_npm_tools(root)
+    serve_node(root)
     environment = {
         key: value
         for key, value in installed.environment.items()
