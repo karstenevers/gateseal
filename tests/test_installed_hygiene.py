@@ -150,7 +150,7 @@ def test_unmanaged_config_is_preserved(installed, consumer):
 
 
 def checks(result):
-    """Return each check's status from a status or doctor result."""
+    """Return each check's status from a status result."""
     return {
         entry["check"]: entry["status"]
         for entry in result["diagnostics"]
@@ -159,17 +159,16 @@ def checks(result):
 
 
 def test_a_plain_commit_runs_the_hooks_and_every_check_passes(installed, prepared):
-    for command in ("status", "doctor"):
-        result = installed.cli(prepared, command)
-        assert result["code"] == "healthy"
-        assert checks(result) == {
-            "lock": "passed",
-            "pre-commit": "passed",
-            "launcher": "passed",
-            "push-launcher": "skipped",
-            "mise": "skipped",
-        }
-        assert result["next_steps"] == []
+    result = installed.cli(prepared, "status")
+    assert result["code"] == "healthy"
+    assert checks(result) == {
+        "lock": "passed",
+        "pre-commit": "passed",
+        "launcher": "passed",
+        "push-launcher": "skipped",
+        "mise": "skipped",
+    }
+    assert result["next_steps"] == []
     assert installed.cli(prepared, "run")["code"] == "checks_passed"
     commit_hygiene(prepared)
 
@@ -184,20 +183,19 @@ def test_a_fresh_clone_commits_without_a_gateseal_command(installed, tmp_path):
     assert installed.cli(second, "status")["code"] == "healthy"
 
 
-def test_doctor_names_a_missing_launcher_and_warns_about_a_hooks_path(
+def test_status_names_a_missing_launcher_and_warns_about_a_hooks_path(
     installed, adopted
 ):
     hook = adopted / ".git/hooks/pre-commit"
     hook.unlink()
-    missing = installed.cli(adopted, "doctor", code=3)
+    missing = installed.cli(adopted, "status", code=3)
     assert missing["code"] == "unhealthy"
     assert checks(missing)["launcher"] == "failed"
     assert missing["next_steps"] == ["gateseal setup --refresh"]
-    assert installed.cli(adopted, "status")["next_steps"] == missing["next_steps"]
     assert installed.cli(adopted, "setup", "--refresh")["changed"] == [str(hook)]
-    assert installed.cli(adopted, "doctor")["code"] == "healthy"
+    assert installed.cli(adopted, "status")["code"] == "healthy"
     success(["git", "config", "core.hooksPath", "custom-hooks"], adopted)
-    warned = installed.cli(adopted, "doctor")
+    warned = installed.cli(adopted, "status")
     assert warned["code"] == "healthy"
     [warning] = [e for e in warned["diagnostics"] if e["severity"] == "warning"]
     assert warning["category"] == "custom_hooks_path"

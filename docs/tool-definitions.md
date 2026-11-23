@@ -80,7 +80,7 @@ writes = ["coverage.json"]
 - A repository with a hook that writes a report gets the generated `.gateseal/reports/.gitignore`, so Git ignores every report.
 - `gateseal gate` deletes the reports of an earlier run before it starts the hooks. If a hook ran without a report that it reads, the gate exits 2 with `missing_report`. When the writing hook failed, the gate fails as a failed check instead. A commit or push through pre-commit alone does neither. So a tool that adds to a report of an earlier run, such as coverage.py with parallel data files, needs a hook that deletes it first.
 - Give a reading hook the `types_or` of the hook that writes its report. Otherwise it can run when the writing hook does not.
-- `gateseal check`, `status` and `doctor` name each report and the hook that writes it.
+- `gateseal check` and `status` name each report and the hook that writes it.
 
 ## Sources and executables
 

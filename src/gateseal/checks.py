@@ -300,7 +300,7 @@ def _gate_result(
     """Return the gate's result: a stopped tool first, then a missing report."""
     failure = _tool_failure(returncode, entries)
     if failure is None and "stopped" in outcomes:
-        failure = "A history scan stopped without a finding.", "gateseal doctor"
+        failure = "A history scan stopped without a finding.", "gateseal status"
     if failure is not None:
         message, step = failure
         return Result(
@@ -370,7 +370,7 @@ def _tool_failure(
     if returncode == 1 and stopped:
         return stopped, STOPPED_HOOK
     if returncode not in (0, 1):
-        return f"pre-commit stopped with status {returncode}.", "gateseal doctor"
+        return f"pre-commit stopped with status {returncode}.", "gateseal status"
     return None
 
 

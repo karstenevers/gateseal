@@ -521,14 +521,14 @@ AGAIN = (
 
 
 def report_notes(root, **files):
-    """Return what check and doctor say about the reports of both capabilities."""
+    """Return what check and status say about the reports of both capabilities."""
     locked = configured(root, load_policy(reader(**files)), "scores", "tests")
     found = [note for note in describe(locked) if note.category == "report"]
     assert all(note.severity == "info" for note in found)
     return [note.message for note in found]
 
 
-def test_check_and_doctor_name_each_report_a_hook_reads_and_its_writer(tmp_path):
+def test_check_and_status_name_each_report_a_hook_reads_and_its_writer(tmp_path):
     assert report_notes(tmp_path) == [
         f"Hook measure-json reads {DATA}, which measure-run writes before it "
         f"{AT_PUSH}.",

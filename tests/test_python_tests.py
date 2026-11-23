@@ -230,8 +230,8 @@ def test_the_adoption_writes_the_ignore_file_and_check_names_the_report(
     )
     check = installed.cli(module_shop.clone, "check")
     assert NOTE in [d["message"] for d in check["diagnostics"]]
-    doctor = installed.cli(module_shop.clone, "doctor")
-    assert NOTE in [d["message"] for d in doctor["diagnostics"]]
+    status = installed.cli(module_shop.clone, "status")
+    assert NOTE in [d["message"] for d in status["diagnostics"]]
     coverage = BUNDLED_TOOLS["coverage"].pin
     assert (
         f"--with coverage=={coverage} -- coverage run --branch"

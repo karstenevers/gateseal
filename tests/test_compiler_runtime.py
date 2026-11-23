@@ -140,9 +140,7 @@ def test_compiler_refuses_hooks_its_pre_commit_cannot_run(old_runtime, consumer)
 
 
 @pytest.mark.integration
-def test_status_and_doctor_name_the_locked_gateseal(
-    installed, gateseal_origin, prepared
-):
+def test_status_names_the_locked_gateseal(installed, gateseal_origin, prepared):
     tag = f"v{__version__}^{{commit}}"
     commit = success(["git", "rev-parse", tag], gateseal_origin).stdout.strip()
     note = (
@@ -152,10 +150,10 @@ def test_status_and_doctor_name_the_locked_gateseal(
     status = installed.cli(prepared, "status")
     notes = [d for d in status["diagnostics"] if d["category"] == "gateseal"]
     assert notes == [{"severity": "info", "category": "gateseal", "message": note}]
-    doctor = process(
-        [installed.command, "--repo", prepared, "doctor"],
+    shown = process(
+        [installed.command, "--repo", prepared, "status"],
         prepared,
         installed.environment,
     )
-    assert doctor.returncode == 0, doctor.stdout + doctor.stderr
-    assert note in doctor.stdout.splitlines()
+    assert shown.returncode == 0, shown.stdout + shown.stderr
+    assert note in shown.stdout.splitlines()

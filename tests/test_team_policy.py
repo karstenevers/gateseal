@@ -79,7 +79,7 @@ def stored_policies(root):
 
 
 def lock_check(result):
-    """Return the Lock check of a status or doctor result."""
+    """Return the Lock check of a status result."""
     return next(d for d in result["diagnostics"] if d.get("check") == "lock")
 
 
@@ -151,20 +151,19 @@ def test_adoption_records_the_credential_free_identity(team, adopted):
     assert str(team[0]) not in json.dumps(lock)
 
 
-def test_status_and_doctor_show_choices_and_exceptions(installed, adopted):
+def test_status_shows_choices_and_exceptions(installed, adopted):
     consumer, env = adopted
     before, stored = tracked(consumer), stored_policies(consumer)
-    for command in ("status", "doctor"):
-        result = installed.cli(consumer, command, env=env)
-        found = categories(result)
-        assert found["overdue_exception"]["severity"] == "warning"
-        assert (
-            "pre-commit-hooks 5.0.0 (policy pin 6.0.0)"
-            in (found["overdue_exception"]["message"])
-        )
-        assert found["policy_choice"]["message"] == "Choice hygiene.exclude: vendor."
-        assert "checked at adoption" in found["policy"]["message"]
-        assert any("review_by" in step for step in result["next_steps"])
+    result = installed.cli(consumer, "status", env=env)
+    found = categories(result)
+    assert found["overdue_exception"]["severity"] == "warning"
+    assert (
+        "pre-commit-hooks 5.0.0 (policy pin 6.0.0)"
+        in (found["overdue_exception"]["message"])
+    )
+    assert found["policy_choice"]["message"] == "Choice hygiene.exclude: vendor."
+    assert "checked at adoption" in found["policy"]["message"]
+    assert any("review_by" in step for step in result["next_steps"])
     assert tracked(consumer) == before and stored_policies(consumer) == stored
 
 
@@ -196,7 +195,7 @@ def test_moved_tag_is_descriptive_after_adoption(installed, team, adopted, tmp_p
         assert installed.cli(consumer, "configure", env=env)["changed"] == []
         fresh = tmp_path / "fresh"
         success(["git", "clone", consumer, fresh], tmp_path)
-        status = installed.cli(fresh, "status", env=env)
+        status = installed.cli(fresh, "status", env=env, code=3)
         assert status["code"] == "unhealthy"
         assert lock_check(status)["status"] == "failed"
         assert status["next_steps"] == ["gateseal check"]
@@ -212,7 +211,7 @@ def test_moved_tag_is_descriptive_after_adoption(installed, team, adopted, tmp_p
         git(origin, "tag", "-f", "-a", "-m", "v1", "v1", first)
 
 
-def test_status_reads_no_policy_and_doctor_fetches_it(
+def test_status_reads_no_policy_and_check_fetches_it(
     installed, team, consumer, tmp_path
 ):
     env = environment(installed, team[0])
@@ -222,11 +221,12 @@ def test_status_reads_no_policy_and_doctor_fetches_it(
     fresh = tmp_path / "fresh"
     success(["git", "clone", consumer, fresh], tmp_path)
     before = tracked(fresh)
-    status = installed.cli(fresh, "status")
+    status = installed.cli(fresh, "status", code=3)
     assert status["code"] == "unhealthy"
     assert "is not stored" in lock_check(status)["message"]
+    assert status["next_steps"] == ["gateseal check"]
     assert stored_policies(fresh) == []
-    assert installed.cli(fresh, "doctor", env=env)["code"] == "healthy"
+    assert installed.cli(fresh, "check", env=env)["code"] == "consistent"
     assert len(stored_policies(fresh)) == 1
     assert installed.cli(fresh, "status")["code"] == "healthy"
     assert tracked(fresh) == before
@@ -245,11 +245,10 @@ def test_another_releases_lock_is_named_before_any_fetch(installed, adopted, tmp
         "Run gateseal 0.1.1 with uvx gateseal@0.1.1, or run gateseal upgrade to "
         f"move gateseal.lock to gateseal {__version__}."
     )
-    for command, code in (("status", 0), ("doctor", 3)):
-        unhealthy = installed.cli(fresh, command, env=env, code=code)
-        assert lock_check(unhealthy)["status"] == "failed"
-        assert lock_check(unhealthy)["message"].startswith(needed)
-        assert unhealthy["next_steps"] == [step]
+    unhealthy = installed.cli(fresh, "status", env=env, code=3)
+    assert lock_check(unhealthy)["status"] == "failed"
+    assert lock_check(unhealthy)["message"].startswith(needed)
+    assert unhealthy["next_steps"] == [step]
     for command in ("check", "run", "gate"):
         refused = installed.cli(fresh, command, env=env, code=2)
         assert refused["code"] == "selected_compiler_required"
@@ -274,7 +273,7 @@ def test_malformed_lock_is_named_before_its_policy_is_read(
     lock.write_text(json.dumps(document))
     refused = installed.cli(fresh, "check", env=env, code=2)
     assert refused["code"] == "invalid_field"
-    unhealthy = installed.cli(fresh, "doctor", env=env, code=3)
+    unhealthy = installed.cli(fresh, "status", env=env, code=3)
     assert lock_check(unhealthy)["message"] == refused["diagnostics"][0]["message"]
     assert stored_policies(fresh) == []
 
@@ -285,7 +284,7 @@ def test_damaged_store_is_reported_and_repaired(installed, adopted):
     original = entry.read_bytes()
     entry.write_bytes(original.replace(b"trailing-whitespace", b"trailing-whitespacE"))
     try:
-        status = installed.cli(consumer, "status", env=env)
+        status = installed.cli(consumer, "status", env=env, code=3)
         assert status["code"] == "unhealthy"
         assert "changed" in lock_check(status)["message"]
         assert status["next_steps"] == ["gateseal check"]

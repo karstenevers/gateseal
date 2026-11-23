@@ -406,7 +406,7 @@ def test_run_gate_and_reports_name_each_tool_and_its_node(installed, adopted):
             assert hooks[hook]["stage"] == stage_name
             assert hooks[hook]["node"] == NODE
         assert "node" not in hooks["check-yaml"]
-    for command in ("status", "doctor", "check"):
+    for command in ("status", "check"):
         shown = notes(installed.cli(consumer, command, env=env))
         for tool, version in (("eslint", "10.15.0"), ("prettier", "3.10.1")):
             note = (

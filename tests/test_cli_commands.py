@@ -124,7 +124,7 @@ def test_before_configure_status_points_to_configure_and_check_fails(unconfigure
 
 
 def checks(result):
-    """Return each check's status from a status or doctor result."""
+    """Return each check's status from a status result."""
     return {
         entry["check"]: entry["status"]
         for entry in result["diagnostics"]
@@ -132,16 +132,9 @@ def checks(result):
     }
 
 
-@pytest.mark.parametrize("command,exit_code", [("status", 0), ("doctor", 3)])
-def test_status_and_doctor_report_the_same_checks_before_setup(
-    adopted, command, exit_code
-):
-    code, result = gateseal(adopted, command)
-    assert (code, result["command"], result["code"]) == (
-        exit_code,
-        command,
-        "unhealthy",
-    )
+def test_status_fails_the_checks_before_setup(adopted):
+    code, result = gateseal(adopted, "status")
+    assert (code, result["command"], result["code"]) == (3, "status", "unhealthy")
     assert message(result) == "2 of 5 checks failed."
     assert checks(result) == {
         "lock": "passed",
@@ -265,7 +258,7 @@ def test_status_of_an_unfetched_policy_names_check_without_fetching(unfetched):
     import tomllib
 
     code, result = gateseal(unfetched, "status")
-    assert (code, result["command"], result["code"]) == (0, "status", "unhealthy")
+    assert (code, result["command"], result["code"]) == (3, "status", "unhealthy")
     assert checks(result)["lock"] == "failed"
     manifest = tomllib.loads((unfetched / "gateseal.toml").read_text())
     [lock] = [e for e in result["diagnostics"] if e.get("check") == "lock"]
@@ -274,20 +267,17 @@ def test_status_of_an_unfetched_policy_names_check_without_fetching(unfetched):
     assert stored(unfetched) == []
 
 
-def test_doctor_fetches_the_locked_policy_and_warns_about_a_hooks_path(unfetched):
+def test_status_warns_about_a_hooks_path_without_fetching_the_policy(unfetched):
     success(["git", "config", "core.hooksPath", "custom-hooks"], unfetched)
-    code, result = gateseal(unfetched, "doctor")
-    assert (code, result["command"], result["code"]) == (3, "doctor", "unhealthy")
-    assert checks(result)["lock"] == "passed"
-    assert len(stored(unfetched)) == 1
+    code, result = gateseal(unfetched, "status")
+    assert (code, result["command"], result["code"]) == (3, "status", "unhealthy")
+    assert checks(result)["lock"] == "failed"
+    assert stored(unfetched) == []
     [warning] = [e for e in result["diagnostics"] if e["severity"] == "warning"]
     assert warning["category"] == "custom_hooks_path"
     assert all(v in warning["message"] for v in ("core.hooksPath", "custom-hooks"))
-    assert result["next_steps"] == [
-        "gateseal setup",
-        "gateseal setup --refresh",
-        "Remove the core.hooksPath setting.",
-    ]
+    assert result["next_steps"][0] == "gateseal check"
+    assert result["next_steps"][-1] == "Remove the core.hooksPath setting."
 
 
 def test_run_fetches_the_locked_policy_before_it_starts_pre_commit(unfetched):

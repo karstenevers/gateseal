@@ -50,7 +50,7 @@ def test_a_policy_without_a_hook_repository_checks_commits(installed, tmp_path):
         "v1",
         env=env,
     )
-    assert installed.cli(root, "doctor", env=env)["code"] == "healthy"
+    assert installed.cli(root, "status", env=env)["code"] == "healthy"
     (root / "notes.txt").write_bytes(b"original\n")
     success(["git", "add", "-A"], root)
     commit = process(["git", "commit", "-m", "Adopt the policy"], root, env)

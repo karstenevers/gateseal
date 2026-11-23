@@ -73,7 +73,7 @@ def _parser() -> Parser:
         prog="gateseal",
         description="Compile reviewed repository checks and run them.",
         epilog="Examples: gateseal status; gateseal configure --help; "
-        "gateseal doctor --json",
+        "gateseal check --json",
     )
     _options(parser, True)
     parser.add_argument("--version", action="version", version=__version__)
@@ -96,8 +96,7 @@ def _parser() -> Parser:
         "gateseal gate --merge MERGE_SHA; gateseal gate --after AFTER_SHA; "
         "gateseal gate --before BEFORE_SHA --after AFTER_SHA --json",
         "setup": "gateseal setup; gateseal setup --refresh; gateseal setup --json",
-        "status": "gateseal status --json",
-        "doctor": "gateseal doctor --verbose",
+        "status": "gateseal status --json; gateseal status --verbose",
     }
     for command, example in examples.items():
         child = commands.add_parser(command, epilog="Examples: " + example)
@@ -198,8 +197,6 @@ def _operation(arguments: argparse.Namespace, in_ci: bool) -> Result:
         return _upgrade(worktree, arguments)
     if command == "status":
         return health.status(worktree)
-    if command == "doctor":
-        return health.doctor(worktree)
     return _locked(command, worktree, arguments, in_ci)
 
 
@@ -347,7 +344,6 @@ def _command_name(raw: list[str]) -> str:
                 "fetch",
                 "gate",
                 "status",
-                "doctor",
                 "setup",
                 "policy",
             }

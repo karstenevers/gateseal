@@ -154,17 +154,16 @@ def tool_notes(result):
     return [d["message"] for d in result["diagnostics"] if d["category"] == "tool"]
 
 
-def test_status_and_doctor_label_gitleaks_team_defined(installed, guarded):
+def test_status_labels_gitleaks_team_defined(installed, guarded):
     consumer, env = guarded
-    for command in ("status", "doctor"):
-        assert tool_notes(installed.cli(consumer, command, env=env)) == [
-            "Tool pre-commit-hooks 6.0.0 for hygiene: built-in, pre-commit-repository.",
-            f"Tool betterleaks {BUNDLED_TOOLS['betterleaks'].pin} for secrets: "
-            "built-in, release-binary.",
-            "Tool gitleaks 8.30.0 for secrets: team-defined, release-binary; it "
-            "carries the tool-specific guarantees only as far as its "
-            "definition's arguments declare them.",
-        ]
+    assert tool_notes(installed.cli(consumer, "status", env=env)) == [
+        "Tool pre-commit-hooks 6.0.0 for hygiene: built-in, pre-commit-repository.",
+        f"Tool betterleaks {BUNDLED_TOOLS['betterleaks'].pin} for secrets: "
+        "built-in, release-binary.",
+        "Tool gitleaks 8.30.0 for secrets: team-defined, release-binary; it "
+        "carries the tool-specific guarantees only as far as its "
+        "definition's arguments declare them.",
+    ]
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
     entries = [h.get("entry", "") for repo in config["repos"] for h in repo["hooks"]]
     assert any(" -- gitleaks dir --config " in entry for entry in entries)

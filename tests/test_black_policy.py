@@ -60,16 +60,13 @@ def commit(consumer, env, name, content):
     return result, result.stdout + result.stderr
 
 
-def test_status_and_doctor_name_the_alternative(installed, formatted_with_black):
+def test_status_names_the_alternative(installed, formatted_with_black):
     consumer, env = formatted_with_black
-    for command in ("status", "doctor"):
-        result = installed.cli(consumer, command, env=env)
-        choices = [
-            d["message"]
-            for d in result["diagnostics"]
-            if d["category"] == "policy_choice"
-        ]
-        assert "Choice python.formatter: black." in choices
+    result = installed.cli(consumer, "status", env=env)
+    choices = [
+        d["message"] for d in result["diagnostics"] if d["category"] == "policy_choice"
+    ]
+    assert "Choice python.formatter: black." in choices
     lock = json.loads((consumer / "gateseal.lock").read_bytes())
     assert lock["components"]["black"]["revision"] == REVISION
     assert lock["components"]["ruff"]["hook_ids"] == ["ruff-check"]

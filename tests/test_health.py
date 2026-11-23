@@ -1,4 +1,4 @@
-"""gateseal status and gateseal doctor report the same five checks.
+"""gateseal status reports five checks and warns about settings that skip them.
 
 The pre-commit that gateseal setup installs needs a download, so a stand-in
 answers for it. The clone, its launcher, the Lock and the mise on the PATH are
@@ -78,9 +78,8 @@ def warnings(result):
     return [e for e in result["diagnostics"] if e["severity"] == "warning"]
 
 
-@pytest.mark.parametrize("command", ["status", "doctor"])
-def test_a_set_up_clone_is_healthy(hygiene, command):
-    code, result = gateseal(hygiene, command)
+def test_a_set_up_clone_is_healthy(hygiene):
+    code, result = gateseal(hygiene, "status")
     assert (code, result["code"]) == (0, "healthy")
     assert result["diagnostics"][0]["message"] == "Every check passed."
     hook = git_path(hygiene, "hooks/pre-commit")
@@ -127,11 +126,10 @@ def test_a_launcher_that_git_would_not_run_fails_its_check(hygiene, change, prob
     hook = git_path(hygiene, "hooks/pre-commit")
     change(hook)
     code, result = gateseal(hygiene, "status")
-    assert (code, result["code"]) == (0, "unhealthy")
+    assert (code, result["code"]) == (3, "unhealthy")
     assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
     assert check(result, "launcher") == ("error", "failed", f"{hook} {problem}")
     assert result["next_steps"] == REFRESH
-    assert gateseal(hygiene, "doctor")[0] == 3
 
 
 def test_a_clone_is_unhealthy_before_setup_wrote_its_launcher(hygiene):
@@ -144,14 +142,13 @@ def test_a_clone_is_unhealthy_before_setup_wrote_its_launcher(hygiene):
 
 
 def test_mise_passes_for_a_release_binary(secrets, machine):
-    for command in ("status", "doctor"):
-        code, result = gateseal(secrets, command)
-        assert (code, result["code"]) == (0, "healthy")
-        assert check(result, "mise") == (
-            "info",
-            "passed",
-            f"{machine / 'mise'} is mise 2026.10.19 or later.",
-        )
+    code, result = gateseal(secrets, "status")
+    assert (code, result["code"]) == (0, "healthy")
+    assert check(result, "mise") == (
+        "info",
+        "passed",
+        f"{machine / 'mise'} is mise 2026.10.19 or later.",
+    )
 
 
 NEED = (
@@ -175,7 +172,7 @@ def test_an_old_missing_or_broken_mise_fails_its_check(secrets, machine, mise, m
     (machine / "mise").unlink()
     if mise:
         executable(machine / "mise", mise)
-    code, result = gateseal(secrets, "doctor")
+    code, result = gateseal(secrets, "status")
     assert (code, result["code"]) == (3, "unhealthy")
     assert check(result, "mise") == ("error", "failed", message)
     assert result["next_steps"] == INSTALL_MISE
@@ -187,7 +184,7 @@ def test_mise_is_not_checked_while_the_lock_does_not_load(
     (machine / "mise").unlink()
     monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
     (secrets / "gateseal.lock").unlink()
-    code, result = gateseal(secrets, "doctor")
+    code, result = gateseal(secrets, "status")
     assert (code, result["code"]) == (3, "unhealthy")
     assert check(result, "lock")[:2] == ("error", "failed")
     assert check(result, "mise") == (
@@ -211,10 +208,10 @@ def test_mise_is_not_checked_while_the_lock_does_not_load(
         ),
     ],
 )
-def test_doctor_warns_when_mise_would_not_install(secrets, monkeypatch, values, named):
+def test_status_warns_when_mise_would_not_install(secrets, monkeypatch, values, named):
     for name, value in values.items():
         monkeypatch.setenv(name, value)
-    code, result = gateseal(secrets, "doctor")
+    code, result = gateseal(secrets, "status")
     assert (code, result["code"]) == (0, "healthy")
     [warning] = warnings(result)
     assert warning["category"] == "mise_auto_install_off"
@@ -224,16 +221,15 @@ def test_doctor_warns_when_mise_would_not_install(secrets, monkeypatch, values, 
         "its tool."
     )
     assert result["next_steps"] == [f"Unset {named}."]
-    assert warnings(gateseal(secrets, "status")[1]) == []
 
 
-def test_doctor_names_both_effects_for_a_release_binary_and_a_tool_on_node(
+def test_status_names_both_effects_for_a_release_binary_and_a_tool_on_node(
     machine, tmp_path, monkeypatch
 ):
     executable(machine / "mise", "#!/bin/sh\necho 2026.10.19 linux-x64\n")
     root = clone(tmp_path, "hygiene", "secrets", "typescript")
     monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
-    [warning] = warnings(gateseal(root, "doctor")[1])
+    [warning] = warnings(gateseal(root, "status")[1])
     assert warning["message"] == (
         "mise's install at first use is off through MISE_AUTO_INSTALL, so a hook "
         "starts an executable of the same name from the PATH when mise has not "
@@ -242,18 +238,18 @@ def test_doctor_names_both_effects_for_a_release_binary_and_a_tool_on_node(
     )
 
 
-def test_doctor_does_not_warn_while_mise_installs(secrets, monkeypatch):
-    assert warnings(gateseal(secrets, "doctor")[1]) == []
+def test_status_does_not_warn_while_mise_installs(secrets, monkeypatch):
+    assert warnings(gateseal(secrets, "status")[1]) == []
     monkeypatch.setenv("MISE_AUTO_INSTALL", "1")
     monkeypatch.setenv("MISE_EXEC_AUTO_INSTALL", "true")
-    assert warnings(gateseal(secrets, "doctor")[1]) == []
+    assert warnings(gateseal(secrets, "status")[1]) == []
     monkeypatch.setenv("MISE_AUTO_INSTALL", "yes")
-    assert warnings(gateseal(secrets, "doctor")[1]) == []
+    assert warnings(gateseal(secrets, "status")[1]) == []
 
 
-def test_doctor_does_not_warn_without_a_release_binary(hygiene, monkeypatch):
+def test_status_does_not_warn_without_a_release_binary(hygiene, monkeypatch):
     monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
-    code, result = gateseal(hygiene, "doctor")
+    code, result = gateseal(hygiene, "status")
     assert (code, warnings(result)) == (0, [])
 
 
@@ -283,10 +279,9 @@ def pushing(machine, tmp_path):
     return root, executable(git_path(root, "hooks/pre-push"), PUSH)
 
 
-@pytest.mark.parametrize("command", ["status", "doctor"])
-def test_a_clone_with_a_push_hook_and_its_launcher_is_healthy(pushing, command):
+def test_a_clone_with_a_push_hook_and_its_launcher_is_healthy(pushing):
     root, hook = pushing
-    code, result = gateseal(root, command)
+    code, result = gateseal(root, "status")
     assert (code, result["code"]) == (0, "healthy")
     assert check(result, "push-launcher") == (
         "info",
@@ -316,12 +311,11 @@ def test_a_push_launcher_that_git_would_not_run_fails_its_check(
     root, hook = pushing
     change(hook)
     code, result = gateseal(root, "status")
-    assert (code, result["code"]) == (0, "unhealthy")
+    assert (code, result["code"]) == (3, "unhealthy")
     assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
     assert check(result, "launcher")[1] == "passed"
     assert check(result, "push-launcher") == ("error", "failed", f"{hook} {problem}")
     assert result["next_steps"] == REFRESH
-    assert gateseal(root, "doctor")[0] == 3
 
 
 def test_a_push_launcher_is_unknown_before_setup_wrote_its_launcher(pushing):
@@ -336,14 +330,13 @@ def test_no_push_launcher_is_needed_without_a_push_hook(machine, tmp_path):
     """Another tool's push hook, such as Git LFS's, is then no concern."""
     root = clone(tmp_path, "hygiene")
     executable(git_path(root, "hooks/pre-push"), "#!/bin/sh\ngit lfs pre-push\n")
-    for command in ("status", "doctor"):
-        code, result = gateseal(root, command)
-        assert (code, result["code"]) == (0, "healthy")
-        assert check(result, "push-launcher") == (
-            "info",
-            "skipped",
-            "No selected hook runs at a push.",
-        )
+    code, result = gateseal(root, "status")
+    assert (code, result["code"]) == (0, "healthy")
+    assert check(result, "push-launcher") == (
+        "info",
+        "skipped",
+        "No selected hook runs at a push.",
+    )
 
 
 def test_a_push_launcher_that_runs_no_check_is_reported(machine, tmp_path):
@@ -352,16 +345,15 @@ def test_a_push_launcher_that_runs_no_check_is_reported(machine, tmp_path):
     root = clone(tmp_path, "hygiene")
     executable(git_path(root, "hooks/pre-commit"), COMMIT)
     hook = executable(git_path(root, "hooks/pre-push"), PUSH)
-    for command in ("status", "doctor"):
-        code, result = gateseal(root, command)
-        assert (code, result["code"]) == (0, "healthy")
-        assert check(result, "push-launcher") == (
-            "info",
-            "skipped",
-            f"No selected hook runs at a push, so the push launcher {hook} runs no "
-            "check. gateseal setup --refresh removes it, so that Git LFS can write "
-            "its push hook.",
-        )
+    code, result = gateseal(root, "status")
+    assert (code, result["code"]) == (0, "healthy")
+    assert check(result, "push-launcher") == (
+        "info",
+        "skipped",
+        f"No selected hook runs at a push, so the push launcher {hook} runs no "
+        "check. gateseal setup --refresh removes it, so that Git LFS can write "
+        "its push hook.",
+    )
     identity = ["-c", "user.name=gateseal test", "-c", "user.email=t@x.invalid"]
     commit = ["commit", "--quiet", "--no-verify", "-m", "Configure"]
     success(["git", *identity, *commit], root)
@@ -383,7 +375,7 @@ def test_the_push_launcher_is_not_checked_while_the_lock_does_not_load(pushing):
     root, hook = pushing
     hook.unlink()
     (root / "gateseal.lock").unlink()
-    code, result = gateseal(root, "doctor")
+    code, result = gateseal(root, "status")
     assert (code, result["code"]) == (3, "unhealthy")
     assert result["diagnostics"][0]["message"] == "1 of 5 checks failed."
     assert check(result, "push-launcher") == (
@@ -395,18 +387,26 @@ def test_the_push_launcher_is_not_checked_while_the_lock_does_not_load(pushing):
 
 def hooks_path_warning(root):
     success(["git", "config", "core.hooksPath", "custom-hooks"], root)
-    [warning] = warnings(gateseal(root, "doctor")[1])
+    [warning] = warnings(gateseal(root, "status")[1])
     return warning["message"]
 
 
-def test_doctor_warns_that_a_hooks_path_skips_the_commit_launcher(hygiene):
+def test_status_warns_that_a_hooks_path_skips_the_commit_launcher(hygiene):
     assert hooks_path_warning(hygiene) == (
         "Git's core.hooksPath names custom-hooks, so git commit skips the commit "
         "launcher."
     )
 
 
-def test_doctor_warns_that_a_hooks_path_skips_the_push_launcher_too(pushing):
+def test_status_names_a_hooks_path_that_is_not_utf_8(hygiene):
+    success(["git", "config", "core.hooksPath", os.fsdecode(b"hooks-\xff")], hygiene)
+    code, result = gateseal(hygiene, "status")
+    assert (code, result["code"]) == (0, "healthy")
+    [warning] = warnings(result)
+    assert warning["message"].startswith("Git's core.hooksPath names hooks-\ufffd,")
+
+
+def test_status_warns_that_a_hooks_path_skips_the_push_launcher_too(pushing):
     root, _ = pushing
     assert hooks_path_warning(root) == (
         "Git's core.hooksPath names custom-hooks, so git commit and git push skip "
@@ -414,10 +414,34 @@ def test_doctor_warns_that_a_hooks_path_skips_the_push_launcher_too(pushing):
     )
 
 
-def test_doctor_warns_about_a_hooks_path_while_the_lock_does_not_load(pushing):
+def test_status_warns_about_a_hooks_path_while_the_lock_does_not_load(pushing):
     root, _ = pushing
     (root / "gateseal.lock").unlink()
     assert hooks_path_warning(root) == (
         "Git's core.hooksPath names custom-hooks, so git commit skips the commit "
         "launcher."
     )
+
+
+def test_status_shows_each_warning_and_its_step_as_text(secrets, monkeypatch):
+    for name in ("GITHUB_ACTIONS", "TF_BUILD"):
+        monkeypatch.delenv(name, raising=False)
+    success(["git", "config", "core.hooksPath", "custom-hooks"], secrets)
+    monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
+    output = io.StringIO()
+    with contextlib.redirect_stdout(output):
+        code = main(["--repo", str(secrets), "status"])
+    lines = output.getvalue().splitlines()
+    assert code == 0
+    assert lines[0] == "Every check passed."
+    assert [line for line in lines if line.startswith("Warning: ")] == [
+        "Warning: Git's core.hooksPath names custom-hooks, so git commit skips the "
+        "commit launcher.",
+        "Warning: mise's install at first use is off through MISE_AUTO_INSTALL, so "
+        "a hook starts an executable of the same name from the PATH when mise has "
+        "not installed its tool.",
+    ]
+    assert lines[-2:] == [
+        "Next: Remove the core.hooksPath setting.",
+        "Next: Unset MISE_AUTO_INSTALL.",
+    ]

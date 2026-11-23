@@ -293,8 +293,9 @@ def _refuse_hooks_path(git: str, root: Path) -> None:
 def git_setting(git: str, root: Path, *options: str) -> str | None:
     """Return a setting as Git reads it from root, or None when it is unset.
 
-    The setting's name comes last in options. Any failure but Git's exit code 1
-    for an unset setting stops setup.
+    The setting's name comes last in options. The value decodes as a file name
+    does, so bytes that are not UTF-8 survive a comparison with a path. Any
+    failure but Git's exit code 1 for an unset setting stops setup.
     """
     found = execute(
         [git, "config", "--includes", "--get", *options],
@@ -312,7 +313,7 @@ def git_setting(git: str, root: Path, *options: str) -> str | None:
             4,
             "Fix what Git reports, then run gateseal setup again.",
         )
-    return found.stdout.decode().removesuffix("\n")
+    return os.fsdecode(found.stdout).removesuffix("\n")
 
 
 def require_pre_commit() -> str:

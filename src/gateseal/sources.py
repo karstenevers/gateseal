@@ -366,7 +366,7 @@ def store(preparation: Path, source: GitSource, policy: Policy) -> None:
     """Store policy as source's release, replacing a damaged copy.
 
     Each release is one file, its content stream, written atomically. Only
-    configure, check, run, gate, doctor and upgrade store, under the worktree's
+    configure, check, run, gate and upgrade store, under the worktree's
     operation lock, so a scratch file that is already there was left by an
     interrupted run.
     """

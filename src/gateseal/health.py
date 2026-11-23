@@ -1,10 +1,10 @@
-"""What gateseal status and gateseal doctor check in a clone.
+"""What gateseal status checks in a clone.
 
-Both commands report the same five checks: the Lock, the pre-commit that
-gateseal setup installs, the clone's commit launcher, its push launcher, and
-mise. status only observes, so it uses no network and always exits 0. doctor
-fetches a Policy that the clone has not stored, fails when a check fails, and
-warns about settings that keep a hook from running as the Lock says.
+status reports five checks: the Lock, the pre-commit that gateseal setup
+installs, the clone's commit launcher, its push launcher, and mise. It warns
+about settings that keep a hook from running as the Lock says, and exits 3
+when a check fails. It only observes, so it uses no network: a Policy that the
+clone has not stored fails the Lock check.
 """
 
 import os
@@ -73,11 +73,9 @@ def load(worktree: Worktree) -> lock.Locked:
     return lock.load(root, preparation)
 
 
-def _lock(worktree: Worktree, fetch: bool) -> tuple[Check, lock.Locked | None]:
+def _lock(worktree: Worktree) -> tuple[Check, lock.Locked | None]:
     try:
-        locked = (
-            load(worktree) if fetch else lock.load(worktree.root, worktree.preparation)
-        )
+        locked = lock.load(worktree.root, worktree.preparation)
     except GatesealError as exc:
         return Check("lock", "failed", str(exc), exc.next_step), None
     return (
@@ -199,10 +197,8 @@ def _without_install(binary: bool, node: bool) -> str:
     return ", and ".join(effects)
 
 
-def _checks(
-    worktree: Worktree, fetch: bool
-) -> tuple[tuple[Check, ...], lock.Locked | None]:
-    found, locked = _lock(worktree, fetch)
+def _checks(worktree: Worktree) -> tuple[tuple[Check, ...], lock.Locked | None]:
+    found, locked = _lock(worktree)
     launchers = _launchers(worktree, locked)
     return (found, _pre_commit(), *launchers, _mise(locked)), locked
 
@@ -212,13 +208,14 @@ def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note
     warnings: list[tuple[Note, str]] = []
     folder = setup.git_setting(worktree.git, worktree.root, "core.hooksPath")
     if folder is not None:
+        shown = os.fsencode(folder).decode(errors="replace")
         skipped = "git commit skips the commit launcher"
         if locked is not None and locked.selection.pushes:
             skipped = "git commit and git push skip their launchers"
         warning = Note(
             "warning",
             "custom_hooks_path",
-            f"Git's core.hooksPath names {folder}, so {skipped}.",
+            f"Git's core.hooksPath names {shown}, so {skipped}.",
         )
         warnings.append((warning, "Remove the core.hooksPath setting."))
     off = [
@@ -236,36 +233,8 @@ def _warnings(worktree: Worktree, locked: lock.Locked | None) -> list[tuple[Note
     return warnings
 
 
-def _result(
-    command: str,
-    checks: tuple[Check, ...],
-    locked: lock.Locked | None,
-    warnings: list[tuple[Note, str]],
-    failure: int,
-) -> Result:
-    """Report checks; a failed one gives the code unhealthy and exits failure."""
-    failed = [check for check in checks if check.status == "failed"]
-    notes = () if locked is None else lock.describe(locked)
-    steps = [check.next_step for check in failed if check.next_step]
-    steps += [step for _, step in warnings]
-    return Result(
-        command,
-        "unhealthy" if failed else "healthy",
-        f"{len(failed)} of {len(checks)} checks failed."
-        if failed
-        else "Every check passed.",
-        failure if failed else 0,
-        next_steps=tuple(dict.fromkeys([*steps, *lock.review_steps(notes)])),
-        details="\n".join(
-            f"{LABELS[check.name]}: {check.status}. {check.message}" for check in checks
-        ),
-        notes=(*(note for note, _ in warnings), *notes),
-        entries=tuple(check.entry() for check in checks),
-    )
-
-
 def status(worktree: Worktree) -> Result:
-    """Report the checks without the network and without a failing exit code."""
+    """Report the checks and the warnings, and exit 3 when a check fails."""
     if not (worktree.root / MANIFEST).exists():
         return Result(
             "status",
@@ -273,11 +242,23 @@ def status(worktree: Worktree) -> Result:
             "No gateseal manifest exists.",
             next_steps=("gateseal configure --help",),
         )
-    checks, locked = _checks(worktree, fetch=False)
-    return _result("status", checks, locked, [], 0)
-
-
-def doctor(worktree: Worktree) -> Result:
-    """Report the checks and the warnings, and fail when a check fails."""
-    checks, locked = _checks(worktree, fetch=True)
-    return _result("doctor", checks, locked, _warnings(worktree, locked), 3)
+    checks, locked = _checks(worktree)
+    warnings = _warnings(worktree, locked)
+    failed = [check for check in checks if check.status == "failed"]
+    notes = () if locked is None else lock.describe(locked)
+    steps = [check.next_step for check in failed if check.next_step]
+    steps += [step for _, step in warnings]
+    return Result(
+        "status",
+        "unhealthy" if failed else "healthy",
+        f"{len(failed)} of {len(checks)} checks failed."
+        if failed
+        else "Every check passed.",
+        3 if failed else 0,
+        next_steps=tuple(dict.fromkeys([*steps, *lock.review_steps(notes)])),
+        details="\n".join(
+            f"{LABELS[check.name]}: {check.status}. {check.message}" for check in checks
+        ),
+        notes=(*(note for note, _ in warnings), *notes),
+        entries=tuple(check.entry() for check in checks),
+    )

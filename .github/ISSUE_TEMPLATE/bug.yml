@@ -21,9 +21,9 @@ body:
     validations:
       required: true
   - type: textarea
-    id: doctor
+    id: status
     attributes:
-      label: Output of gateseal doctor --verbose
+      label: Output of gateseal status --verbose
       description: Remove any credentials or private URLs before you paste.
       render: text
   - type: input

@@ -87,7 +87,7 @@ def test_two_repositories_upgrade_and_roll_back_independently(
     commit_hygiene(first)
     assert committed_pin(first)["version"] == NEXT
     assert hook_commit(first) == committed_pin(first)["commit"] == upcoming[-40:]
-    assert next_installed.cli(first, "doctor")["code"] == "healthy"
+    assert next_installed.cli(first, "status")["code"] == "healthy"
     refused = installed.cli(first, "check", code=2)
     assert refused["code"] == "selected_compiler_required"
     assert "gateseal upgrade" in refused["next_steps"][0]
@@ -239,8 +239,5 @@ def test_every_command_refuses_a_lock_of_format_1(installed, configured):
             "unsupported_schema",
             [FORMAT_1_STEP],
         )
-    for command, code in (("status", 0), ("doctor", 3)):
-        assert (
-            FORMAT_1_STEP in installed.cli(configured, command, code=code)["next_steps"]
-        )
+    assert FORMAT_1_STEP in installed.cli(configured, "status", code=3)["next_steps"]
     assert tracked(configured) == before
