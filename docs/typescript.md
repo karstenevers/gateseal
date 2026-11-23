@@ -31,7 +31,7 @@ Tool eslint 10.15.0 for typescript: built-in, npm-package on Node 24.22.3.
 
 ## What each developer needs
 
-Each developer needs Git, pre-commit 4.7.0 or later, and mise 2026.10.19 or later. Node, npm and gateseal are not needed. The hooks start the Node that the Lock records, whatever Node is on `PATH`. This needs mise's auto-install, which is on by default. With it off, mise starts the `node` on `PATH` until the pinned Node is installed. Each hook then stops and says that mise has no install of the pinned Node, and `gateseal doctor` warns.
+Each developer needs Git, pre-commit 4.7.0 or later, and mise 2026.10.19 or later. Node, npm and gateseal are not needed. The hooks start the Node that the Lock records, whatever Node is on `PATH`. This needs mise's auto-install, which is on by default. With it off, mise starts the `node` on `PATH` until the pinned Node is installed. Each hook then stops and says that mise has no install of the pinned Node, and `gateseal status` warns.
 
 The first commit that stages a TypeScript file downloads these files:
 

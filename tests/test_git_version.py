@@ -107,7 +107,7 @@ def test_older_git_stops_every_worktree_command(installed, configured, tmp_path)
     path = os.pathsep.join([str(shims), installed.environment["PATH"]])
     shimmed = dict(installed.environment, PATH=path)
     message = f"{git} reports Git 2.43.0, {FLOOR}"
-    for command in ("configure", "check", "run", "gate", "status", "doctor"):
+    for command in ("configure", "check", "run", "gate", "status"):
         result = installed.cli(configured, command, code=4, env=shimmed)
         assert result["code"] == "git_version_mismatch", command
         assert result["diagnostics"][0]["message"] == message

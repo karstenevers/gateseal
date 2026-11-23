@@ -103,6 +103,18 @@ def test_an_invalid_invocation_without_json_is_text(capsys, repository):
     assert HELP in out
 
 
+def test_doctor_is_no_command(capsys, repository):
+    code, result = gateseal(capsys, "--json", "--repo", repository, "doctor")
+    assert (code, result["code"]) == (2, "invalid_invocation")
+    assert "invalid choice: 'doctor'" in result["diagnostics"][0]["message"]
+    with pytest.raises(SystemExit) as exit:
+        main(["--help"])
+    assert exit.value.code == 0
+    shown = capsys.readouterr().out
+    assert "status" in shown
+    assert "doctor" not in shown
+
+
 def test_policy_needs_an_action(capsys):
     assert main(["policy"]) == 2
     out = capsys.readouterr().out

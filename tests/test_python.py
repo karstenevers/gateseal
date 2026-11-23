@@ -84,7 +84,7 @@ def test_python_capability_locks_and_renders_ruff(installed, consumer):
     assert [hook["id"] for hook in ruff["hooks"]] == ["ruff-check", "ruff-format"]
     assert ruff["hooks"][0]["args"][-1] == "--"
     assert installed.cli(consumer, "check")["code"] == "consistent"
-    assert installed.cli(consumer, "doctor")["code"] == "healthy"
+    assert installed.cli(consumer, "status")["code"] == "healthy"
 
 
 def test_hygiene_alone_renders_no_ruff(installed, configured):

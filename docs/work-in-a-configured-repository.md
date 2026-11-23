@@ -88,7 +88,7 @@ The check runs only on a branch whose configuration has checks at a push. Until 
 
 ## Add your own hooks
 
-Personal hooks run during an ordinary Git commit. They do not run in `gateseal run`, the CI gate, `status`, or `doctor`. For a shared check, ask the repository maintainer to add a [repository hook](adjust-a-setup.md#add-a-repository-hook).
+Personal hooks run during an ordinary Git commit. They do not run in `gateseal run`, the CI gate, or `status`. For a shared check, ask the repository maintainer to add a [repository hook](adjust-a-setup.md#add-a-repository-hook).
 
 For example, configure an executable script at `$HOME/bin/check-notes` for this clone:
 

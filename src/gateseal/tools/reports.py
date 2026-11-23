@@ -5,7 +5,7 @@ gives each its path. This module holds what follows from those declarations
 for a whole policy or selection: which hook writes the report that another
 reads, whether it runs before the reader wherever the reader runs, the owned
 output that keeps the reports out of Git, what the gate does so that no hook
-passes on a report of an earlier run or on none, and what check and doctor
+passes on a report of an earlier run or on none, and what check and status
 say about each report.
 """
 

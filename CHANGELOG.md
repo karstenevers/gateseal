@@ -216,6 +216,17 @@ change the manifest, policy or lock format, and its entry says how to move.
   `gateseal upgrade` to this release stops with `bundled_policy_moves` until
   you add `--policy bundled`. A repository that moves and does not select
   `typescript` gets no new check and needs no Node.
+- `gateseal status` exits 3 when a check fails, no longer 0. A script that
+  expects exit 0 from `status` with a failed check must handle exit 3.
+  `status` also warns when `core.hooksPath`
+  is set or mise's install at first use is off, and names the fix. It still
+  uses no network: in a clone that has not stored its policy, the `lock` check
+  fails and names `gateseal check`, which fetches it.
+
+### Removed
+
+- `gateseal doctor`. Run `gateseal status`, which now reports the same checks
+  and warnings and exits 3 when a check fails.
 
 ### Security
 

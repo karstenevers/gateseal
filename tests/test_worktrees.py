@@ -42,8 +42,8 @@ def test_linked_worktree_commits_with_its_clones_launcher(
         success(["git", "commit", "-m", "Partial"], worktree)
         assert success(["git", "show", "HEAD:part.txt"], worktree).stdout == "staged\n"
         assert part.read_text() == "staged\nunstaged\n"
-        assert installed.cli(worktree, "doctor")["code"] == "healthy"
-        assert installed.cli(prepared, "doctor")["code"] == "healthy"
+        assert installed.cli(worktree, "status")["code"] == "healthy"
+        assert installed.cli(prepared, "status")["code"] == "healthy"
         moved = worktree.with_name("moved wt ü")
         success(["git", "worktree", "move", worktree, moved], prepared)
         worktree = moved
@@ -51,7 +51,7 @@ def test_linked_worktree_commits_with_its_clones_launcher(
         success(["git", "add", "moved.txt"], moved)
         committed = success(["git", "commit", "-m", "Moved"], moved)
         assert "Passed" in committed.stdout + committed.stderr
-        assert installed.cli(moved, "doctor")["code"] == "healthy"
+        assert installed.cli(moved, "status")["code"] == "healthy"
     finally:
         success(["git", "worktree", "remove", "--force", worktree], prepared)
     success(["git", "commit", "--allow-empty", "-m", "Main"], prepared)
@@ -170,7 +170,7 @@ def test_commit_modes_check_the_index_they_commit(
         other.unlink(missing_ok=True)
 
 
-COMMANDS = ("status", "check", "run", "gate", "doctor", "configure")
+COMMANDS = ("status", "check", "run", "gate", "configure")
 
 
 def test_public_commands_refuse_an_alternate_index(
@@ -202,4 +202,4 @@ def test_linked_worktree_whose_path_has_shell_characters_commits(
     success(["git", "commit", "-m", "Adopt hygiene"], configured)
     worktree = add_worktree(configured, tmp_path.resolve() / "wt a=b $c 'd'", "eq")
     commit_hygiene(worktree)
-    assert installed.cli(worktree, "doctor")["code"] == "healthy"
+    assert installed.cli(worktree, "status")["code"] == "healthy"

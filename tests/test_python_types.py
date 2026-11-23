@@ -200,6 +200,6 @@ def test_a_repository_without_a_uv_project_is_refused(installed, consumer):
         missing = installed.cli(consumer, command, code=2)
         assert missing["code"] == "missing_project", command
         assert "has no uv.lock" in missing["diagnostics"][0]["message"]
-    status = installed.cli(consumer, "status")
+    status = installed.cli(consumer, "status", code=3)
     (failed,) = [d for d in status["diagnostics"] if d.get("status") == "failed"]
     assert failed["check"] == "lock" and "has no uv.lock" in failed["message"]

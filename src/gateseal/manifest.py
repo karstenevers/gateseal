@@ -580,7 +580,7 @@ def tool_note(tool: Tool) -> Note:
 
 
 def notes(selection: Selection, today: date) -> tuple[Note, ...]:
-    """Describe the selection's choices and exceptions for status and doctor."""
+    """Describe the selection's choices and exceptions for status and check."""
     found: list[Note] = []
     for capability, values in selection.choices.items():
         for name, value in values.items():

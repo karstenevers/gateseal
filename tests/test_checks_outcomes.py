@@ -337,7 +337,7 @@ def test_a_scan_that_ends_otherwise_stopped(attempt, planned, output, status):
     assert (result.code, result.exit_code) == ("tool_failed", 4)
     assert "history" in result.message
     assert planned.scope.reason in result.message
-    assert result.next_steps == ("gateseal doctor",)
+    assert result.next_steps == ("gateseal status",)
     [scan] = history(result)
     assert (scan["severity"], scan["status"]) == ("error", "failed")
     assert f"{planned.base}..{planned.head}" in scan["message"]
@@ -358,7 +358,7 @@ def test_pre_commit_stopping_is_a_tool_failure(attempt, planned):
     assert (result.code, result.exit_code) == ("tool_failed", 4)
     assert "status 3" in result.message
     assert planned.scope.reason in result.message
-    assert result.next_steps == ("gateseal doctor",)
+    assert result.next_steps == ("gateseal status",)
 
 
 @pytest.mark.parametrize(
@@ -421,7 +421,7 @@ def test_run_reports_pre_commit_stopping(attempt, planned):
     result = run(planned)
     assert (result.code, result.exit_code) == ("tool_failed", 4)
     assert "status 3" in result.message
-    assert result.next_steps == ("gateseal doctor",)
+    assert result.next_steps == ("gateseal status",)
     assert result.details == "An unexpected error\na warning\n"
 
 

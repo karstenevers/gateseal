@@ -41,7 +41,7 @@ gateseal setup --refresh
 
 A repository with [checks at a push](work-in-a-configured-repository.md#checks-at-a-push) needs that command in each clone, new or old. New clones get the commit hook alone, so that Git LFS can install its push hook.
 
-After setup, `gateseal run` checks all files with that pre-commit. `gateseal status` and `gateseal doctor` also report whether it is ready.
+After setup, `gateseal run` checks all files with that pre-commit. `gateseal status` also reports whether it is ready.
 
 To use your own pre-commit instead, run `pre-commit install` in each clone. If `core.hooksPath` is set, see [Troubleshoot gateseal](troubleshooting.md#git-uses-a-different-hooks-directory).
 

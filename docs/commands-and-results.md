@@ -19,8 +19,7 @@ The Manifest is `gateseal.toml`, which selects the policy and checks. The Lock i
 | `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. With the push launcher, it adds `hook.gateseal-lfs-upload` to the clone's Git configuration, which starts Git LFS at each push. It removes both when no worktree of the clone has a selected hook at a push, but keeps the upload hook while another push hook keeps Git LFS from writing its own. When it removes both in a clone that holds Git LFS objects, it runs `git lfs update`, so that Git LFS writes its own push hook. |
 | `configure` | Generate the Lock and files from the Manifest. |
 | `check` | Validate the selected policy and generated files. |
-| `status` | Report readiness without network access. This is the default command. |
-| `doctor` | Report readiness, fetch a missing policy, and warn about conflicting settings. |
+| `status` | Report readiness without network access, and warn about settings that skip the hooks. This is the default command. |
 | `run` | Run commit checks on all tracked files using setup's pre-commit. |
 | `fetch` | Download each selected release binary and build the hook environments. |
 | `gate` | Run CI-stage checks and selected history scans. |
@@ -29,11 +28,11 @@ The Manifest is `gateseal.toml`, which selects the policy and checks. The Lock i
 
 Repository commands reject an alternate `GIT_INDEX_FILE` with `alternate_index`.
 
-## Status and doctor
+## Status
 
-Both commands report checks named `lock`, `pre-commit`, `launcher`, `push-launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `mise` is `skipped` unless a selected tool is a release binary or runs on the policy's Node. `push-launcher` is `skipped` unless a selected hook runs at a push. Its message then names a push launcher of setup that runs no check. `status` exits 0 even when a check fails, so read its result code and diagnostics. `doctor` exits 3 if a check fails. `doctor` can also warn about `core.hooksPath` or disabled mise auto-install. Neither command requires setup to execute. Both can report that it is missing.
+`status` reports checks named `lock`, `pre-commit`, `launcher`, `push-launcher`, and `mise`. A check is `passed`, `failed`, or `skipped`. `status` exits 3 when a check fails, and 0 when none fails. `mise` is `skipped` unless a selected tool is a release binary or runs on the policy's Node. `push-launcher` is `skipped` unless a selected hook runs at a push. Its message then names a push launcher of setup that runs no check. `status` warns when `core.hooksPath` is set or mise's install at first use is off, and names the fix. It uses no network, so in a clone that has not stored its policy, the `lock` check fails and names `gateseal check`, which fetches it. `status` does not require setup to execute. It can report that setup is missing.
 
-`status`, `doctor` and `check` describe each selected tool in a `tool` diagnostic. It names the version, capability, origin and kind, and the Node of a tool from npm, such as `Tool eslint 10.15.0 for typescript: built-in, npm-package on Node 24.22.3.`
+`status` and `check` describe each selected tool in a `tool` diagnostic. It names the version, capability, origin and kind, and the Node of a tool from npm, such as `Tool eslint 10.15.0 for typescript: built-in, npm-package on Node 24.22.3.`
 
 ## JSON results
 
@@ -51,7 +50,7 @@ A warning leaves the exit code unchanged. Text output prints it as a `Warning:` 
 
 | Exit | Meaning |
 | --- | --- |
-| 0 | The operation succeeded. Read the `status` result code for readiness. |
+| 0 | The operation succeeded. |
 | 1 | A check failed or modified files. |
 | 2 | Invalid invocation, repository, configuration, ownership, or tracked content. |
 | 3 | The machine, clone, or stored policy is not ready. |

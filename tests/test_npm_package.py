@@ -546,7 +546,7 @@ def warning(result):
     return found["message"]
 
 
-def test_status_and_doctor_need_mise_for_a_tool_on_node(
+def test_status_needs_mise_for_a_tool_on_node(
     tmp_path,
     releases,  # noqa: F811
     hygiene,  # noqa: F811
@@ -563,7 +563,7 @@ def test_status_and_doctor_need_mise_for_a_tool_on_node(
         lambda root, *_, **__: replace(locked, root=root, snapshot=snapshot),
     )
     monkeypatch.setenv("MISE_AUTO_INSTALL", "0")
-    code, result = gateseal(hygiene, "doctor")
+    code, result = gateseal(hygiene, "status")
     assert (code, result["code"]) == (3, "unhealthy")
     assert check(result, "mise") == ("error", "failed", f"{NEED} none is on PATH.")
     off = "mise's install at first use is off through MISE_AUTO_INSTALL, so "

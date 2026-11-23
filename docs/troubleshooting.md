@@ -5,10 +5,10 @@ Read the error and its `Next:` instruction. For a stopped commit, also read the 
 From the affected worktree, run:
 
 ```sh
-gateseal doctor --verbose
+gateseal status --verbose
 ```
 
-The report checks the selected configuration, setup's pre-commit, the commit and push launchers, and mise. Follow the reported next step. See [Commands and results](commands-and-results.md#status-and-doctor).
+The report checks the selected configuration, setup's pre-commit, the commit and push launchers, and mise. Follow the reported next step. See [Commands and results](commands-and-results.md#status).
 
 ## A commit runs no checks
 

@@ -98,7 +98,7 @@ def without_mise(env, directory):
 
 
 def checks(result):
-    """Return each check's status from a status or doctor result."""
+    """Return each check's status from a status result."""
     return {
         entry["check"]: entry["status"]
         for entry in result["diagnostics"]
@@ -382,23 +382,18 @@ def test_a_commit_ignores_mise_files_and_a_host_betterleaks(
     assert (sentinels / "project-template").exists(), "the planted files are inert"
 
 
-def test_status_and_doctor_check_mise_for_a_release_binary(
-    installed, guarded, tmp_path
-):
-    for command in ("status", "doctor"):
-        result = installed.cli(guarded, command)
-        assert (result["code"], checks(result)["mise"]) == ("healthy", "passed")
+def test_status_checks_mise_for_a_release_binary(installed, guarded, tmp_path):
+    result = installed.cli(guarded, "status")
+    assert (result["code"], checks(result)["mise"]) == ("healthy", "passed")
     missing = without_mise(installed.environment, tmp_path / "mirror")
-    assert checks(installed.cli(guarded, "status", env=missing))["mise"] == "failed"
-    doctor = installed.cli(guarded, "doctor", code=3, env=missing)
-    assert (doctor["code"], checks(doctor)["mise"]) == ("unhealthy", "failed")
-    assert doctor["next_steps"] == ["Install mise 2026.10.19 or later."]
+    failed = installed.cli(guarded, "status", code=3, env=missing)
+    assert (failed["code"], checks(failed)["mise"]) == ("unhealthy", "failed")
+    assert failed["next_steps"] == ["Install mise 2026.10.19 or later."]
     off = dict(installed.environment, MISE_EXEC_AUTO_INSTALL="0")
-    warned = installed.cli(guarded, "doctor", env=off)
+    warned = installed.cli(guarded, "status", env=off)
     [warning] = [e for e in warned["diagnostics"] if e["severity"] == "warning"]
     assert warning["category"] == "mise_auto_install_off"
     assert warned["next_steps"] == ["Unset MISE_EXEC_AUTO_INSTALL."]
-    assert "warning" not in json.dumps(installed.cli(guarded, "status", env=off))
 
 
 def test_configure_follows_the_manifest(installed, configured):

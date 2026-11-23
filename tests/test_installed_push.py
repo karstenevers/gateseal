@@ -212,7 +212,7 @@ def test_a_ranged_gate_gives_the_hook_the_range_a_push_gives(installed, pushing)
     assert pushing.calls() == [f"from={before} to={after} files=notes.txt"]
 
 
-def test_status_and_doctor_check_the_push_launcher(installed, pushing):
+def test_status_checks_the_push_launcher(installed, pushing):
     def check(command, code=0):
         result = installed.cli(pushing.clone, command, code=code)
         [entry] = [
@@ -220,19 +220,18 @@ def test_status_and_doctor_check_the_push_launcher(installed, pushing):
         ]
         return result, entry["status"], entry["message"]
 
-    for command in ("status", "doctor"):
-        result, status, message = check(command)
-        assert (result["code"], status) == ("healthy", "passed")
-        assert message == f"{pushing.launcher} is the push launcher."
+    result, status, message = check("status")
+    assert (result["code"], status) == ("healthy", "passed")
+    assert message == f"{pushing.launcher} is the push launcher."
     pushing.launcher.unlink()
-    result, status, message = check("doctor", 3)
+    result, status, message = check("status", 3)
     assert (result["code"], status) == ("unhealthy", "failed")
     assert message == f"{pushing.launcher} is missing, so git push runs no hook."
     assert result["next_steps"] == ["gateseal setup --refresh"]
     refreshed = installed.cli(pushing.clone, "setup", "--refresh")
     assert refreshed["changed"] == [str(pushing.launcher)]
     assert installed.cli(pushing.clone, "setup", "--refresh")["changed"] == []
-    assert check("doctor")[1] == "passed"
+    assert check("status")[1] == "passed"
 
 
 needs_lfs = pytest.mark.skipif(shutil.which("git-lfs") is None, reason="needs Git LFS")
