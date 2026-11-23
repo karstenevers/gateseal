@@ -2,7 +2,8 @@
 
 A stand-in for mise runs the command after exec, as mise exec does with its
 auto-install off, and prints the folder of the Node that it installed. Its
-npm and an npm first on PATH each record their arguments and PATH.
+node runs a program as a shell script. Its npm and an npm first on PATH each
+record their arguments and PATH.
 """
 
 import os
@@ -46,7 +47,7 @@ NO_NODE = (
 def run(root, *arguments):
     """Start npm with the hook's command, an npm first on PATH and mise after."""
     node = root / "node/bin"
-    executable(node / "node")
+    executable(node / "node", '#!/bin/sh\nexec /bin/sh "$@"\n')
     executable(node / "npm", NPM_PROGRAM.format(name="pinned-ran"))
     executable(root / "other/npm", NPM_PROGRAM.format(name="path-ran"))
     executable(root / "mise/mise", MISE)

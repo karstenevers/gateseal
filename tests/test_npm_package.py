@@ -2,7 +2,7 @@
 
 The team policy of node_policy formats docs with Prettier and two plugins
 that policy.toml pins as the tool's packages. A fake upstream answers where
-gateseal policy lock and add would ask nodejs.org and the npm registry.
+gateseal policy lock and add would ask nodejs.org and npm.
 """
 
 import json
@@ -18,7 +18,6 @@ from gateseal.policy import load_policy_tree, review_policy
 from gateseal.processes import Timed
 from gateseal.tools import load_definition
 from gateseal.tools.model import Origin
-from gateseal.tools.node import Package, launch
 from gateseal.validation import canonical
 from node_policy import (
     DEFINITION,
@@ -28,7 +27,7 @@ from node_policy import (
     RULES,
     VERSION,
     docs,
-    released,
+    lockfile,
     releases,  # noqa: F401
 )
 from node_policy import POLICY as DOCS
@@ -37,27 +36,9 @@ from test_health import NEED, check, gateseal, hygiene, machine  # noqa: F401
 from test_lock_configure import refused
 from test_team_tools import CAVEAT, POLICY, consumer, team, upstream  # noqa: F401
 
-RECORD = {
-    "package": "prettier",
-    "packages": {"@prettier/plugin-xml": "3.4.2", "prettier-plugin-toml": "2.0.6"},
-}
+DEPENDENCIES = {"prettier": PRETTIER, **PACKAGES}
+RECORD = {"lockfile": lockfile(DEPENDENCIES)}
 STALE_LOCK = "Run gateseal policy lock in the policy directory."
-
-
-def started(request, prettier=PRETTIER):
-    """Return the words after mise's that install Prettier and two plugins once.
-
-    request is mise's request for the Node, whose install the words name.
-    """
-    packages = (
-        Package("prettier", prettier),
-        Package("@prettier/plugin-xml", "3.4.2"),
-        Package("prettier-plugin-toml", "2.0.6"),
-    )
-    install = f"{request.partition('[')[0]}@{VERSION}"
-    return shlex.join(launch(VERSION, install, packages, "prettier"))
-
-
 ARGS = (
     "--config .gateseal/prettier-docs.toml --no-editorconfig --ignore-path "
     "/dev/null --write --ignore-unknown --"
@@ -79,73 +60,64 @@ def lock_records(root):
     return json.loads((root / "policy.lock").read_bytes())["components"]
 
 
+def edit_record(root, edit):
+    """Rewrite the Policy Lock record of prettier-docs at its pin with edit."""
+    lock = json.loads((root / "policy.lock").read_bytes())
+    versions = lock["components"]["prettier-docs"]["versions"]
+    versions[PRETTIER] = edit(versions[PRETTIER])
+    (root / "policy.lock").write_bytes(canonical(lock))
+
+
 def hooks(locked):
     """Return the hooks of each repository in the generated configuration."""
     config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
     return {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
 
 
-def test_policy_lock_records_the_package_and_its_pinned_packages(
+def test_policy_lock_records_npm_s_lockfile_of_the_package_and_its_packages(
     tmp_path,
     releases,  # noqa: F811
 ):
     root = docs(tmp_path)
     assert authoring.lock(root).code == "locked"
     assert lock_records(root)["prettier-docs"] == {"versions": {PRETTIER: RECORD}}
-    asked = [url for url in releases.downloaded if "registry" in url]
-    assert asked == [
-        released("prettier", PRETTIER),
-        released("@prettier/plugin-xml", "3.4.2"),
-        released("prettier-plugin-toml", "2.0.6"),
-    ]
-    assert asked[1] == "https://registry.npmjs.org/@prettier%2fplugin-xml/3.4.2"
-    releases.downloaded.clear()
+    assert releases.resolved == [DEPENDENCIES]
     assert authoring.lock(root).changed == ()
-    assert not [url for url in releases.downloaded if "registry" in url]
+    assert releases.resolved == [DEPENDENCIES]
 
 
-def test_policy_add_asks_the_registry_for_each_package_of_the_new_version(
+def test_policy_add_resolves_the_packages_of_the_new_version(
     tmp_path,
     releases,  # noqa: F811
 ):
     root = locked_policy(tmp_path)
-    releases.downloaded.clear()
+    releases.missing.add("prettier@3.10.2")
     missing = refused(authoring.add, root, "prettier-docs", "3.10.2")
     assert missing.code == "upstream_release_missing"
     assert str(missing) == (
-        "The npm registry has no release 3.10.2 of prettier, which prettier-docs "
-        "3.10.2 installs."
+        "npm cannot resolve the packages of prettier-docs 3.10.2: No matching "
+        "version found for prettier@3.10.2."
     )
     assert missing.next_step == (
-        "Check that prettier 3.10.2 is released, then run gateseal policy add "
-        "prettier-docs 3.10.2 again."
+        "Check that prettier-docs 3.10.2 is released, then run gateseal policy "
+        "add prettier-docs 3.10.2 again."
     )
-    releases.publish("prettier", "3.10.2")
-    releases.downloaded.clear()
+    releases.missing.clear()
     assert authoring.add(root, "prettier-docs", "3.10.2").code == "added"
-    asked = [url for url in releases.downloaded if "registry" in url]
-    assert asked == [
-        released("prettier", "3.10.2"),
-        released("@prettier/plugin-xml", "3.4.2"),
-        released("prettier-plugin-toml", "2.0.6"),
-    ]
-    assert lock_records(root)["prettier-docs"]["versions"]["3.10.2"] == RECORD
+    assert releases.resolved[-1] == DEPENDENCIES | {"prettier": "3.10.2"}
+    assert lock_records(root)["prettier-docs"]["versions"]["3.10.2"] == {
+        "lockfile": lockfile(DEPENDENCIES | {"prettier": "3.10.2"})
+    }
 
 
-def test_a_package_the_registry_lacks_stops_the_lock(
-    tmp_path,
-    releases,  # noqa: F811
-):
-    del releases.files[released("prettier-plugin-toml", "2.0.6")]
+def test_a_package_npm_lacks_stops_the_lock(tmp_path, releases):  # noqa: F811
+    releases.missing.add("prettier-plugin-toml@2.0.6")
     root = docs(tmp_path)
     failure = refused(authoring.lock, root)
     assert failure.code == "upstream_release_missing"
-    assert str(failure) == (
-        "The npm registry has no release 2.0.6 of prettier-plugin-toml, which "
-        f"prettier-docs {PRETTIER} installs."
-    )
+    assert "prettier-plugin-toml@2.0.6" in str(failure)
     assert failure.next_step == (
-        "Check that prettier-plugin-toml 2.0.6 is released, or remove it from "
+        f"Check that prettier-docs {PRETTIER} is released, or remove it from "
         "policy.toml. Then run gateseal policy lock."
     )
     assert not (root / "policy.lock").exists()
@@ -156,62 +128,106 @@ def test_a_package_bump_is_an_edit_and_a_lock(tmp_path, releases):  # noqa: F811
     (root / "policy.toml").write_text(DOCS.replace('"2.0.6"', '"2.0.7"'))
     stale = refused(load_policy_tree, root)
     assert (stale.code, stale.next_step) == ("policy_lock_stale", STALE_LOCK)
-    bumped = RECORD | {
-        "packages": RECORD["packages"] | {"prettier-plugin-toml": "2.0.7"}
-    }
+    bumped = DEPENDENCIES | {"prettier-plugin-toml": "2.0.7"}
     assert str(stale) == (
-        f"policy.lock records {json.dumps(RECORD, sort_keys=True)} for prettier-docs "
-        f"{PRETTIER}, but its definition and policy.toml give "
+        f"policy.lock locks {json.dumps(DEPENDENCIES, sort_keys=True)} for "
+        f"prettier-docs {PRETTIER}, but its definition and policy.toml give "
         f"{json.dumps(bumped, sort_keys=True)}."
     )
-    releases.publish("prettier-plugin-toml", "2.0.7")
-    releases.downloaded.clear()
     assert authoring.lock(root).code == "locked"
-    asked = [url for url in releases.downloaded if "registry" in url]
-    assert asked == [released("prettier-plugin-toml", "2.0.7")]
-    assert lock_records(root)["prettier-docs"]["versions"][PRETTIER] == bumped
+    assert releases.resolved[-1] == bumped
+    record = lock_records(root)["prettier-docs"]["versions"][PRETTIER]
+    assert record == {"lockfile": lockfile(bumped)}
     assert authoring.check(root).code == "consistent"
 
 
-def test_a_lock_for_another_package_is_stale_and_never_replaced(
-    tmp_path,
-    releases,  # noqa: F811
-):
+@pytest.mark.parametrize("recorded", [1, {"lockfile": []}], ids=str)
+def test_an_unreadable_record_is_resolved_again(tmp_path, releases, recorded):  # noqa: F811
     root = locked_policy(tmp_path)
-    (root / "tools/prettier-docs.toml").write_text(
-        DEFINITION.replace('package = "prettier"', 'package = "prettier-fork"')
-    )
-    assert refused(load_policy_tree, root).code == "policy_lock_stale"
-    before = (root / "policy.lock").read_bytes()
-    changed = refused(authoring.lock, root)
-    assert changed.code == "upstream_changed"
-    assert str(changed).startswith(
-        f"policy.lock records {json.dumps(RECORD, sort_keys=True)} for prettier-docs "
-        f"{PRETTIER}, but its definition now gives "
-    )
-    assert (root / "policy.lock").read_bytes() == before
-
-
-@pytest.mark.parametrize(
-    "recorded", [1, {"package": "prettier", "packages": []}], ids=str
-)
-def test_an_unreadable_record_is_a_changed_fact(tmp_path, releases, recorded):  # noqa: F811
-    root = locked_policy(tmp_path)
-    lock = json.loads((root / "policy.lock").read_bytes())
-    lock["components"]["prettier-docs"]["versions"][PRETTIER] = recorded
-    (root / "policy.lock").write_text(json.dumps(lock))
-    assert refused(authoring.lock, root).code == "upstream_changed"
+    edit_record(root, lambda _: recorded)
+    assert authoring.lock(root).code == "locked"
+    assert lock_records(root)["prettier-docs"]["versions"][PRETTIER] == RECORD
 
 
 def test_a_record_with_another_field_is_an_edited_lock(tmp_path, releases):  # noqa: F811
     root = locked_policy(tmp_path)
-    lock = json.loads((root / "policy.lock").read_bytes())
-    lock["components"]["prettier-docs"]["versions"][PRETTIER]["integrity"] = "x"
-    (root / "policy.lock").write_text(json.dumps(lock, indent=2, sort_keys=True) + "\n")
+    edit_record(root, lambda record: record | {"integrity": "x"})
     failure = refused(load_policy_tree, root)
     assert failure.code == "policy_lock_edited"
     assert f"components.prettier-docs.versions.{PRETTIER} requires exactly" in (
         str(failure)
+    )
+
+
+@pytest.mark.parametrize("integrity", [None, "sha512-?", "md5-AAAA", "x sha512-AAAA"])
+def test_a_package_without_an_integrity_hash_is_refused(
+    tmp_path,
+    releases,  # noqa: F811
+    integrity,
+):
+    """A malformed hash is none: npm would install the package unchecked."""
+    root = locked_policy(tmp_path)
+
+    def unhashed(record):
+        entry = record["lockfile"]["packages"]["node_modules/prettier-plugin-toml"]
+        entry["integrity"] = integrity
+        return record
+
+    edit_record(root, unhashed)
+    failure = refused(load_policy_tree, root)
+    assert "policy.lock locks node_modules/prettier-plugin-toml for prettier-docs " in (
+        str(failure)
+    )
+    assert str(failure).endswith("without an integrity hash.")
+
+
+def test_a_bundled_package_needs_no_integrity_hash(tmp_path, releases):  # noqa: F811
+    root = locked_policy(tmp_path)
+    bundled = {"inBundle": True, "version": "1.0.0"}
+
+    def bundle(record):
+        packages = record["lockfile"]["packages"]
+        packages["node_modules/prettier/node_modules/inner"] = bundled
+        return record
+
+    edit_record(root, bundle)
+    assert authoring.check(root).code == "consistent"
+
+
+def test_a_package_without_the_program_is_refused(tmp_path, releases):  # noqa: F811
+    renamed = DEFINITION.replace('name = "prettier"\n\n', 'name = "prettierd"\n\n')
+    root = docs(tmp_path, definition=renamed)
+    failure = refused(authoring.lock, root)
+    assert failure.code == "upstream_executable_missing"
+    assert str(failure) == (
+        f"The npm package prettier of prettier-docs {PRETTIER} links no program "
+        "prettierd."
+    )
+    assert not (root / "policy.lock").exists()
+
+
+def test_a_choice_key_cannot_load_prettier_plugins(tmp_path, releases):  # noqa: F811
+    choice = (
+        '\n[choices.plugin]\nkey = "plugins"\n\n[choices.plugin.since]\nx = "3.0.0"\n'
+    )
+    root = docs(tmp_path, definition=DEFINITION + choice)
+    failure = refused(authoring.lock, root)
+    assert failure.code == "invalid_field"
+    assert str(failure) == (
+        "tools/prettier-docs.toml: tools.prettier-docs.choices.plugin needs a "
+        "lowercase name, a key other than extend and plugins, and a since table "
+        "that maps lowercase values to stable releases."
+    )
+
+
+def test_a_choice_key_hides_no_override_with_plugins(tmp_path, releases):  # noqa: F811
+    """A choice of the key overrides, which the policy need not expose."""
+    choice = '\n[choices.over]\nkey = "overrides"\n[choices.over.since]\nx = "3.0.0"\n'
+    override = '[[overrides]]\nfiles = ["*.md"]\n[overrides.options]\nplugins = ["x"]\n'
+    root = docs(tmp_path, definition=DEFINITION + choice, rules=RULES + override)
+    failure = refused(authoring.lock, root)
+    assert str(failure).startswith(
+        "The prettier-docs configuration must not name plugins"
     )
 
 
@@ -225,7 +241,7 @@ def test_the_tools_own_package_is_no_extra_package(tmp_path, releases):  # noqa:
     )
     assert failure.next_step == "Remove prettier from the packages of prettier-docs."
     assert not (root / "policy.lock").exists()
-    assert not [url for url in releases.downloaded if "registry" in url]
+    assert releases.resolved == []
 
 
 def test_a_lock_naming_the_own_package_fails_at_load(tmp_path, releases):  # noqa: F811
@@ -286,9 +302,10 @@ def test_only_a_tool_on_node_takes_packages(tmp_path, upstream):  # noqa: F811
 def test_a_consumer_compiles_one_launch_on_the_node(tmp_path, releases):  # noqa: F811
     policy = load_policy_tree(locked_policy(tmp_path))
     locked, compiled = consumer(policy, ("hygiene", "docs"))
-    request = policy.tools["prettier-docs"].node.prefix[3]
+    tool = policy.tools["prettier-docs"]
+    request = tool.node.prefix[3]
     entry = hooks(locked)["prettier-docs"]
-    program = f"{started(request)} {ARGS}"
+    program = f"{shlex.join(tool.program()[5:])} {ARGS}"
     assert entry == {
         "id": "prettier-docs",
         "name": "prettier docs",
@@ -303,11 +320,16 @@ def test_a_consumer_compiles_one_launch_on_the_node(tmp_path, releases):  # noqa
     assert compiled["components"]["prettier-docs"] == {
         "package": "prettier",
         "version": PRETTIER,
-        "packages": RECORD["packages"],
+        "packages": PACKAGES,
         "hook_ids": ["prettier-docs"],
     }
     assert compiled["native_artifacts"]["node"]["version"] == VERSION
-    assert locked.snapshot.outputs[".gateseal/prettier-docs.toml"] == RULES.encode()
+    outputs = locked.snapshot.outputs
+    assert outputs[".gateseal/prettier-docs.toml"] == RULES.encode()
+    lockfile_output = outputs[".gateseal/prettier-docs.package-lock.json"]
+    assert lockfile_output == canonical(RECORD["lockfile"])
+    copy = "cat .gateseal/prettier-docs.package-lock.json > "
+    assert f'{copy}"$new/package-lock.json"' in entry["entry"]
     assert [note.message for note in describe(locked) if note.category == "tool"] == [
         "Tool pre-commit-hooks 6.0.0 for hygiene: built-in, pre-commit-repository.",
         f"Tool prettier-docs {PRETTIER} for docs: team-defined, npm-package on Node "
@@ -328,22 +350,23 @@ def test_a_version_exception_changes_only_the_tools_version(
     tmp_path,
     releases,  # noqa: F811
 ):
-    releases.publish("prettier", "3.9.0")
     reviewed = DOCS.replace(
         f'reviewed = ["{PRETTIER}"]', f'reviewed = ["{PRETTIER}", "3.9.0"]'
     )
     policy = load_policy_tree(locked_policy(tmp_path, reviewed))
+    pinned, _ = consumer(policy, ("hygiene", "docs"))
     exception = (
         '\n[exceptions.prettier-docs]\nversion = "3.9.0"\nreason = "r"\n'
         "review_by = 2099-12-31\n"
     )
     locked, compiled = consumer(policy, ("hygiene", "docs"), exception)
+    path = ".gateseal/prettier-docs.package-lock.json"
+    older = lockfile(DEPENDENCIES | {"prettier": "3.9.0"})
+    assert locked.snapshot.outputs[path] == canonical(older)
     entry = hooks(locked)["prettier-docs"]["entry"]
-    request = policy.tools["prettier-docs"].node.prefix[3]
-    assert f"-- {started(request, '3.9.0')} --config" in entry
-    assert started(request, "3.9.0") != started(request)
+    assert entry != hooks(pinned)["prettier-docs"]["entry"]
     assert compiled["components"]["prettier-docs"]["version"] == "3.9.0"
-    assert compiled["components"]["prettier-docs"]["packages"] == RECORD["packages"]
+    assert compiled["components"]["prettier-docs"]["packages"] == PACKAGES
 
 
 def test_offer_needs_the_node_and_the_executable(tmp_path, releases):  # noqa: F811
@@ -411,16 +434,14 @@ def test_an_npm_package_tool_is_never_checked_at_commit():
 
 
 def test_every_reviewed_version_installs_the_same_packages(tmp_path, releases):  # noqa: F811
-    releases.publish("prettier", "3.9.0")
     reviewed = DOCS.replace(
         f'reviewed = ["{PRETTIER}"]', f'reviewed = ["{PRETTIER}", "3.9.0"]'
     )
     root = locked_policy(tmp_path, reviewed)
     assert lock_records(root)["prettier-docs"]["versions"] == {
-        "3.9.0": RECORD,
+        "3.9.0": {"lockfile": lockfile(DEPENDENCIES | {"prettier": "3.9.0"})},
         PRETTIER: RECORD,
     }
-    assert list(PACKAGES) != list(RECORD["packages"])
 
 
 def test_a_skipped_optional_hook_leaves_the_tool_its_other_hooks(

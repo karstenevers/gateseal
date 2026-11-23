@@ -121,10 +121,11 @@ change the manifest, policy or lock format, and its entry says how to move.
   Lock records. A commit needs mise, but no Node or npm, and a later commit
   calls no npm. npm installs outside the repository's Node project and runs
   no install script, so the repository's `package.json`, `.npmrc` and
-  `node_modules` do not change what runs. Each Node version and each set of
-  pins has its own install. Each hook skips every file that gateseal
-  generates. `gateseal policy lock` checks that the npm registry has each
-  package.
+  `node_modules` do not change what runs. `gateseal policy lock` records
+  npm's lockfile of each tool, and the hook installs exactly that tree,
+  checking each package's integrity hash. npm reads only the user's proxy,
+  CA and registry settings. Each Node version and each lockfile has its own
+  install. Each hook skips every file that gateseal generates.
 - `node` in `policy.toml`, which pins one Node version for every tool from
   npm. It is required exactly when a tool runs on Node. `gateseal policy
   lock` records each Node archive's SHA-256 from the release's

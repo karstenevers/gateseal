@@ -43,6 +43,7 @@ from gateseal.tools import reports, require_projects
 from gateseal.tools.configurations import owned_outputs
 from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, exclusion
 from gateseal.tools.node_project import install_hook_entries
+from gateseal.tools.npm_package import lockfiles
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
 from gateseal.tools.uv_project import locked_packages
 from gateseal.validation import (
@@ -117,6 +118,7 @@ def compile_outputs(
     outputs = {CONFIG: canonical(config)}
     for tool in selection.tools:
         outputs |= owned_outputs(tool, selection.choices.get(tool.use.capability, {}))
+    outputs |= lockfiles(selection.tools)
     outputs |= reports.ignore_file(selection.hooks)
     if selection.ci is not None:
         provider = PROVIDERS[selection.ci.provider]

@@ -9,10 +9,11 @@ policy.toml.
 
 import fcntl
 import http.client
+import os
 import tempfile
 import urllib.error
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from gateseal import policy_toml, sources
@@ -30,10 +31,11 @@ from gateseal.policy import (
     require_compatible,
     review_policy,
 )
-from gateseal.processes import find_tool
+from gateseal.processes import execute, find_tool
+from gateseal.tools.mise import require_mise
 from gateseal.tools.model import Catalog, MissingUpstream, Release
 from gateseal.tools.node import NAME as NODE
-from gateseal.tools.node import lock_node
+from gateseal.tools.node import Node, lock_node, read_node
 from gateseal.validation import canonical, decode_json, mapping
 from gateseal.validation import version as stable_version
 
@@ -50,8 +52,11 @@ class Releases:
     Tags come through the user's Git, as a policy release does, so Git's
     credentials and url.<base>.insteadOf apply. Release files come over HTTPS
     with the proxy and trust settings Python reads from the environment.
+    npm resolves lockfiles on node, the policy's Node, as a hook's npm installs.
     A failed read's next step is to rerun the command that started it.
     """
+
+    node: Node
 
     def __init__(self, git: str, scratch: Path, rerun: str) -> None:
         self.git = git
@@ -89,6 +94,27 @@ class Releases:
             4,
             f"Check that this machine reaches {url}, then rerun {self.rerun}.",
         )
+
+    def lockfile(
+        self, dependencies: Mapping[str, str], tool: str, version: str
+    ) -> dict[str, object]:
+        env = dict(os.environ)
+        require_mise(env)
+        folder = Path(tempfile.mkdtemp(dir=self.scratch))
+        (folder / "package.json").write_bytes(canonical({"dependencies": dependencies}))
+        run = execute(
+            [*self.node.write_lockfile(), str(folder)], folder, env, allow_failure=True
+        )
+        if run.returncode:
+            detail = run.stderr.decode("utf-8", "replace").strip()
+            text = f"npm cannot resolve the packages of {tool} {version}: {detail}"
+            if "E404" in detail or "ETARGET" in detail:
+                raise MissingUpstream("upstream_release_missing", text, tool, version)
+            step = f"Check that npm reaches its registry, then rerun {self.rerun}."
+            raise GatesealError("upstream_unavailable", text, 4, step)
+        lockfile = decode_json((folder / "package-lock.json").read_bytes())
+        lockfile.pop("name", None)
+        return lockfile
 
 
 class Snapshot:
@@ -229,6 +255,10 @@ def _resolve(
     recorded, node = _recorded(existing)
     with tempfile.TemporaryDirectory(prefix="gateseal-") as scratch:
         upstream = Releases(find_tool("git"), Path(scratch), rerun)
+        document: dict[str, object] = {"generated_by": LOCK_COMMAND}
+        if review.node is not None:
+            document[NODE] = lock_node(review.node, node, upstream)
+            upstream.node = read_node(review.node, document[NODE])
         components: dict[str, object] = {}
         for name, catalog in sorted(review.catalogs.items()):
             definition, kept = review.definitions[name], recorded.get(name, {})
@@ -240,9 +270,7 @@ def _resolve(
                     for version in sorted(catalog.requires)
                 }
             }
-        document = {"components": components, "generated_by": LOCK_COMMAND}
-        if review.node is not None:
-            document[NODE] = lock_node(review.node, node, upstream)
+        document["components"] = components
     data = canonical(document)
     return data, load_policy(lambda name: data if name == LOCK else reader(name))
 

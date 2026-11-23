@@ -332,6 +332,12 @@ class Upstream(Protocol):
         """Return a file's bytes, or None when the server has no such file."""
         ...
 
+    def lockfile(
+        self, dependencies: Mapping[str, str], tool: str, version: str
+    ) -> dict[str, object]:
+        """Return npm's lockfile of dependencies, or fail with MissingUpstream."""
+        ...
+
 
 class Source(Protocol):
     """A definition's [source] table as its kind parsed it, and the kind's rules.

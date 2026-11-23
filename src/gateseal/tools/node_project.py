@@ -96,14 +96,14 @@ def start(node: Node, manager: PackageManager) -> tuple[str, ...]:
 
     Node's distribution includes npm, so npm is the one of the pinned install,
     and the command stops without that install. Any other package manager
-    starts from its pinned package, as every tool from npm starts: gateseal
+    starts from its pinned lockfile, as every tool from npm starts: gateseal
     installs it once into its own folder, outside the project. So npm does not
     read the project's package.json there, whose devEngines field can name
     another package manager and then stops npm.
     """
-    if manager.package is None:
+    if manager.tree is None:
         return node.included(manager.name)
-    return node.launch([manager.package], manager.name)
+    return node.launch(manager.tree, None, manager.name)
 
 
 def install_hook_entries(tools: Iterable[Tool]) -> tuple[dict[str, object], ...]:

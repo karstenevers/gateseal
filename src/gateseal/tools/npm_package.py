@@ -1,21 +1,17 @@
 """The npm-package kind: a tool from the npm registry, on the policy's Node.
 
-Each hook is one command on the policy's Node, which node.Node.launch
-renders, so two hooks with the same packages give the same bytes and share
-one install. Each hook excludes every file that gateseal writes, so a
-formatter never rewrites one.
-
-Each version's Policy Lock record is its package and the tool's packages.
-The Lock records each tool in components under its name, and its Node once
-in native_artifacts.
+Each version's Policy Lock record is npm's lockfile of the tool's package and
+its packages, which configure writes as an owned output. Each hook is one
+command that node.Node.launch renders, and excludes every file that gateseal
+writes, so a formatter never rewrites one. The Lock records each tool in
+components under its name, and its Node once in native_artifacts.
 """
 
 from __future__ import annotations
 
-import json
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
-from typing import ClassVar, cast
+from typing import ClassVar
 
 from gateseal.ci_providers import PROVIDERS
 from gateseal.diagnostics import GatesealError
@@ -28,15 +24,14 @@ from gateseal.tools.model import (
     LockSection,
     Release,
     Starts,
+    Tool,
     ToolDefinition,
     ToolUse,
     Upstream,
-    changed_upstream,
     exclusion,
     local_repository,
-    lock_failure,
 )
-from gateseal.tools.node import Node, Package, package_name, require_released
+from gateseal.tools.node import Node, Tree, package_name, read_tree
 from gateseal.validation import fields, nested
 
 GENERATED = exclusion(
@@ -73,27 +68,25 @@ class NpmPackage:
         records: Mapping[str, object],
         node: Node | None,
     ) -> NpmTool:
-        """Require each version's record to be the one gateseal policy lock writes.
+        """Require each version's record to lock the tool's package and packages.
 
-        A record whose package or packages differ from the definition's and
-        policy.toml's fails with policy_lock_stale.
+        A record that locks others fails with policy_lock_stale.
         """
         name, executable = definition.name, definition.executable
         if executable is None or node is None:
             raise GatesealError(
                 "invalid_field", f"tools.{name} runs on Node with an executable."
             )
-        packages, expected = self._packages(name, catalog), self.record(catalog)
+        trees: dict[str, Tree] = {}
         for version in catalog.requires:
             field = f"components.{name}.versions.{version}"
-            recorded = fields(records[version], {"package", "packages"}, field)
-            if recorded != expected:
-                raise lock_failure(
-                    "policy_lock_stale",
-                    f"policy.lock records {json.dumps(recorded)} for {name} "
-                    f"{version}, but its definition and policy.toml give "
-                    f"{json.dumps(expected)}.",
-                )
+            trees[version] = read_tree(
+                fields(records[version], {"lockfile"}, field)["lockfile"],
+                self.dependencies(name, catalog, version),
+                self.package,
+                executable.name,
+                f"{name} {version}",
+            )
         versions = {
             version: Release(version, requires)
             for version, requires in catalog.requires.items()
@@ -107,7 +100,7 @@ class NpmPackage:
             versions,
             catalog.pin,
             node,
-            packages,
+            trees,
         )
 
     def lock(
@@ -118,37 +111,21 @@ class NpmPackage:
         recorded: object,
         upstream: Upstream,
     ) -> dict[str, object]:
-        """Record the package and the packages, once the registry has each release.
+        """Record npm's lockfile of the package and the packages.
 
-        The package is the definition's fact: a recorded one that differs
-        fails with upstream_changed. The packages are policy.toml's, so a
-        recorded set that differs is replaced. The registry is asked only for
-        a package version that the record lacks.
+        A recorded lockfile of the same packages stays, so npm resolves only
+        a version or a set of packages that the record lacks.
         """
-        name = definition.name
-        packages = (Package(self.package, version), *self._packages(name, catalog))
-        record = self.record(catalog)
-        known: Mapping[str, object] = {}
-        if recorded is not None:
-            found = nested(recorded, "packages")
-            if nested(recorded, "package") != self.package or not isinstance(
-                found, dict
-            ):
-                raise changed_upstream(
-                    name, version, "its definition", recorded, record
-                )
-            known = cast(dict[str, object], found) | {self.package: version}
-        require_released(packages, known, upstream, name, version)
-        return record
+        dependencies = self.dependencies(definition.name, catalog, version)
+        lockfile = nested(recorded, "lockfile")
+        if nested(lockfile, "packages", "", "dependencies") != dependencies:
+            lockfile = upstream.lockfile(dependencies, definition.name, version)
+        return {"lockfile": lockfile}
 
-    def record(self, catalog: Catalog) -> dict[str, object]:
-        """Return a version's Policy Lock record: the package and the packages."""
-        return {"package": self.package, "packages": dict(catalog.packages)}
+    def dependencies(self, name: str, catalog: Catalog, version: str) -> dict[str, str]:
+        """Return what the tool installs: its package at version and its packages.
 
-    def _packages(self, name: str, catalog: Catalog) -> tuple[Package, ...]:
-        """Return the tool's packages by name, which never hold its own package.
-
-        Its own package twice would install two versions under one name.
+        Its own package among its packages would install two versions under one name.
         """
         if self.package in catalog.packages:
             raise GatesealError(
@@ -157,7 +134,7 @@ class NpmPackage:
                 f"{self.package} is the tool's own package, which its pin selects.",
                 next_step=f"Remove {self.package} from the packages of {name}.",
             )
-        return tuple(Package(*item) for item in catalog.packages.items())
+        return {self.package: version, **catalog.packages}
 
 
 def parse_source(value: object, field: str) -> NpmPackage:
@@ -177,11 +154,19 @@ class NpmTool:
     versions: Mapping[str, Release]
     version: str
     node: Node
-    packages: tuple[Package, ...]
+    trees: Mapping[str, Tree]
 
     @property
     def release(self) -> Release:
         return self.versions[self.version]
+
+    @property
+    def tree(self) -> Tree:
+        return self.trees[self.version]
+
+    @property
+    def lockfile(self) -> str:
+        return f"{OWNED}/{self.definition.name}.package-lock.json"
 
     def select(self, version: str) -> NpmTool:
         return replace(self, version=version)
@@ -190,12 +175,11 @@ class NpmTool:
         return replace(self, use=replace(self.use, hooks=hooks))
 
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
-        """Return the command that installs the packages if needed and starts the tool.
+        """Return the command that installs the tree if needed and starts the tool.
 
         mise passes the caller's whole environment on, so variables adds nothing.
         """
-        packages = (Package(self.source.package, self.version), *self.packages)
-        return self.node.launch(packages, self.executable.name)
+        return self.node.launch(self.tree, self.lockfile, self.executable.name)
 
     def entry(self, exclude: str | None) -> dict[str, object]:
         """Return the local repository, whose hooks never get a generated file."""
@@ -207,15 +191,22 @@ class NpmTool:
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:
         """Return the components record. The Lock records the Node apart."""
+        packages = dict(self.tree.dependencies)
+        del packages[self.source.package]
         return (
             "components",
             self.definition.name,
             {
                 "package": self.source.package,
                 "version": self.version,
-                "packages": {
-                    package.name: package.version for package in self.packages
-                },
+                "packages": packages,
                 "hook_ids": [hook.id for hook in self.use.hooks],
             },
         )
+
+
+def lockfiles(tools: Iterable[Tool]) -> dict[str, bytes]:
+    """Return the lockfile of each tool from npm at its selected version, by path."""
+    return {
+        tool.lockfile: tool.tree.lockfile for tool in tools if isinstance(tool, NpmTool)
+    }

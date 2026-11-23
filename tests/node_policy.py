@@ -1,14 +1,16 @@
 """A team policy whose docs capability runs Prettier from npm on the policy's Node.
 
-A fake upstream serves nodejs.org's release files, the npm registry and the
-team policy's other tools from dictionaries, where gateseal policy lock and
-add would reach the network.
+A fake upstream serves nodejs.org's release files and the team policy's
+other tools from dictionaries, and resolves npm lockfiles, where gateseal
+policy lock and add would reach the network.
 """
 
 import hashlib
+from base64 import b64encode
 
 import pytest
 from gateseal import authoring
+from gateseal.tools.model import MissingUpstream
 from test_team_tools import Upstream as TeamUpstream
 from test_team_tools import team
 
@@ -17,7 +19,6 @@ DIST = f"https://nodejs.org/dist/v{VERSION}/"
 LINUX = f"node-v{VERSION}-linux-x64.tar.gz"
 MACOS = f"node-v{VERSION}-darwin-arm64.tar.gz"
 SHASUMS = DIST + "SHASUMS256.txt"
-REGISTRY = "https://registry.npmjs.org/"
 
 PRETTIER = "3.10.1"
 PACKAGES = {"prettier-plugin-toml": "2.0.6", "@prettier/plugin-xml": "3.4.2"}
@@ -118,18 +119,43 @@ def node_record(version=VERSION):
     }
 
 
-def released(name, version):
-    """Return the registry URL of an npm package's release, as policy lock asks it."""
-    return f"{REGISTRY}{name.replace('/', '%2f')}/{version}"
+PROGRAMS = {"typescript": "tsc"}
+"""The program of each package that links none named after the package."""
+
+
+def lockfile(dependencies):
+    """Return the lockfile that the fake npm resolves for dependencies.
+
+    It installs each package alone at its version, with a made-up integrity
+    hash, and each links one program.
+    """
+    packages = {
+        f"node_modules/{name}": {
+            "bin": {PROGRAMS.get(name, name.rpartition("/")[2]): "bin/cli.js"},
+            "integrity": f"sha512-{b64encode(f'{name}@{version}'.encode()).decode()}",
+            "version": version,
+        }
+        for name, version in dependencies.items()
+    }
+    return {
+        "lockfileVersion": 3,
+        "packages": {"": {"dependencies": dict(dependencies)}} | packages,
+        "requires": True,
+    }
 
 
 class Releases:
-    """Tags, nodejs.org and the npm registry, recording every URL a lock asks for."""
+    """Tags, nodejs.org and npm, recording each URL and package set a lock asks for.
+
+    npm lacks each name@version in missing.
+    """
 
     def __init__(self, files, tags=None):
         self.files = dict(files)
         self.tags = dict(tags or {})
         self.downloaded = []
+        self.resolved = []
+        self.missing = set()
 
     def tagged(self, repository, tag):
         return self.tags.get((repository, tag))
@@ -138,28 +164,36 @@ class Releases:
         self.downloaded.append(url)
         return self.files.get(url)
 
-    def publish(self, name, version):
-        self.files[released(name, version)] = b"{}"
+    def lockfile(self, dependencies, tool, version):
+        self.resolved.append(dict(dependencies))
+        lacking = {f"{name}@{v}" for name, v in dependencies.items()} & self.missing
+        if lacking:
+            raise MissingUpstream(
+                "upstream_release_missing",
+                f"npm cannot resolve the packages of {tool} {version}: "
+                f"No matching version found for {min(lacking)}.",
+                tool,
+                version,
+            )
+        return lockfile(dependencies)
 
 
 @pytest.fixture
 def releases(monkeypatch):
-    """Serve the team policy's tags, Node and every package of DEFINITION and TABLE."""
+    """Serve the team policy's tags and Node, and resolve its npm packages."""
     hooks = TeamUpstream()
     fake = Releases(hooks.files | node_files(), hooks.tags)
-    for name, version in {"prettier": PRETTIER, **PACKAGES}.items():
-        fake.publish(name, version)
     monkeypatch.setattr(authoring, "Releases", lambda git, scratch, rerun: fake)
     return fake
 
 
-def docs(tmp_path, policy=POLICY, definition=DEFINITION):
+def docs(tmp_path, policy=POLICY, definition=DEFINITION, rules=RULES):
     """Write the team policy with Prettier for docs, and only the files it names."""
     files = {
         "rules/gitleaks.toml": None,
         "tools/yamllint.toml": None,
         "tools/gitleaks.toml": None,
-        "rules/prettier-docs.toml": RULES,
+        "rules/prettier-docs.toml": rules,
         "tools/prettier-docs.toml": definition,
     }
     return team(tmp_path, policy, files)

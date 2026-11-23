@@ -3,7 +3,7 @@
 docs/add-a-tool.md's tsc-app definition and table, and docs/typescript.md's
 typescript-types table and its version exception, are the files these tests
 write into a team policy. A fake upstream answers where gateseal policy lock
-would ask nodejs.org and the npm registry.
+would ask nodejs.org and npm.
 """
 
 import json
@@ -13,8 +13,7 @@ import tomllib
 from doc_examples import example
 from gateseal import authoring
 from gateseal.policy import bundled_root, load_policy_tree
-from gateseal.tools.node import Package
-from node_policy import VERSION, released
+from node_policy import VERSION, lockfile
 from node_project_policy import (
     HEADER,
     TYPESCRIPT,
@@ -56,10 +55,11 @@ def test_the_tsc_app_example_locks_its_typescript_package(tmp_path, registry):  
     assert authoring.lock(root).code == "locked"
     assert authoring.check(root).code == "consistent"
     components = json.loads((root / "policy.lock").read_bytes())["components"]
+    compiler = {"typescript": TYPESCRIPT}
     assert components["tsc-app"] == {
-        "versions": {TYPESCRIPT: {"package": "typescript", "packages": {}}}
+        "versions": {TYPESCRIPT: {"lockfile": lockfile(compiler)}}
     }
-    assert released("typescript", TYPESCRIPT) in registry.downloaded
+    assert registry.resolved == [compiler]
 
 
 def test_the_tsc_app_example_runs_at_a_push_after_the_install(tmp_path, registry):  # noqa: F811
@@ -74,7 +74,8 @@ def test_the_tsc_app_example_runs_at_a_push_after_the_install(tmp_path, registry
         "args": install_arguments(node),
         "stages": ["pre-push", "manual"],
     }
-    launch = shlex.join(node.launch([Package("typescript", TYPESCRIPT)], "tsc"))
+    tree = policy.tools["tsc-app"].tree
+    launch = shlex.join(node.launch(tree, ".gateseal/tsc-app.package-lock.json", "tsc"))
     assert hooks["tsc-app"] == {
         "id": "tsc-app",
         "name": "Check the types of the app with tsc",
@@ -94,8 +95,6 @@ def test_the_tsc_exception_selects_a_version_that_the_table_reviews(
     registry,  # noqa: F811
 ):
     shown = tomllib.loads(TYPES_TABLE)["capabilities"]["typescript-types"]
-    for version in shown["tools"]["tsc"]["reviewed"]:
-        registry.publish("typescript", version)
     root = policy_root(tmp_path, TYPES_TABLE)
     authoring.lock(root)
     policy = load_policy_tree(root)

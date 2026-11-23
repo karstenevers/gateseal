@@ -4,7 +4,8 @@ A release of a team policy adds the how-to's docs capability, and gateseal
 policy lock locks it against nodejs.org and the npm registry. A consumer
 commits a Markdown file that Prettier wraps. The first commit installs Node
 and Prettier. A node and an npm first on PATH fail, so the hook passes only on
-the pinned Node.
+the pinned Node. Its temporary and cache folders sit behind a symlink, as macOS's
+/var does, which npm resolves.
 """
 
 import pytest
@@ -39,14 +40,23 @@ def test_a_commit_formats_markdown_with_the_how_to_s_prettier(installed, tmp_pat
     origin.mkdir(parents=True)
     git(origin, "init", "--initial-branch=main")
 
+    (tmp_path / "real/temporary").mkdir(parents=True)
+    linked = tmp_path / "linked"
+    linked.symlink_to(tmp_path / "real", target_is_directory=True)
+
     def release(data):
         add_prettier_markdown(data)
-        installed.cli(data, "policy", "lock", str(data))
+        temporary = dict(installed.environment, TMPDIR=str(linked / "temporary"))
+        installed.cli(data, "policy", "lock", str(data), env=temporary)
         installed.cli(data, "policy", "check", str(data))
 
     with on_machine(installed):
         publish(origin, "v1", release)
-    env = dict(environment(installed, origin), PATH=wrong_path(tmp_path / "wrong"))
+    env = dict(
+        environment(installed, origin),
+        PATH=wrong_path(tmp_path / "wrong"),
+        XDG_CACHE_HOME=str(linked / "cache"),
+    )
     consumer = clone(tmp_path / "origin", tmp_path / "consumer")
     installed.cli(
         consumer,

@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from gateseal.diagnostics import GatesealError
-from gateseal.tools.node import Package
+from gateseal.tools.node import Tree
 
 PROJECT_FILE = "package.json"
 
@@ -19,8 +19,8 @@ PROJECT_FILE = "package.json"
 class PackageManager:
     """One package manager: its lockfile and how it installs what that pins.
 
-    package is the npm package that provides the executable when Node's
-    distribution does not. checks holds argument lists of the package manager's
+    tree is npm's lockfile of the package that provides the executable when
+    Node's distribution does not. checks holds argument lists of the package manager's
     own executable that prove the lockfile current and install nothing, and
     install the argument list that then installs. None of them runs code of a
     package or of the repository. record is the file in which the package
@@ -34,7 +34,7 @@ class PackageManager:
 
     name: str
     lockfile: str
-    package: Package | None
+    tree: Tree | None
     checks: tuple[tuple[str, ...], ...]
     install: tuple[str, ...]
     record: str | None
@@ -119,7 +119,10 @@ run.
 PNPM = PackageManager(
     "pnpm",
     "pnpm-lock.yaml",
-    Package("pnpm", "10.28.0"),
+    Tree(
+        b'{"lockfileVersion":3,"packages":{"":{"dependencies":{"pnpm":"10.28.0"}},"node_modules/pnpm":{"version":"10.28.0","resolved":"https://registry.npmjs.org/pnpm/-/pnpm-10.28.0.tgz","integrity":"sha512-Bd9x0UIfITmeBT/eVnzqNNRG+gLHZXFEG/wceVbpjjYwiJgtlARl/TRIDU2QoGaLwSNi+KqIAApk6D0LDke+SA=="}}}',
+        "node_modules/pnpm/bin/pnpm.cjs",
+    ),
     (),
     (
         "install",
