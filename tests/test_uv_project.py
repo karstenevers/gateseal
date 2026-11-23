@@ -39,9 +39,22 @@ reviewed = ["6.0.0"]
 
 {TABLE}"""
 OLDER = "2.4.0"
-UV_RUN = ["uv", "run", "--locked", "--all-packages", "--with"]
-ENTRY = [*UV_RUN, f"mypy=={VERSION}", "--", "mypy"]
-ARGS = ["--strict", "--python-executable", ".venv/bin/python", "."]
+UV_RUN = [
+    "env",
+    "UV_PROJECT_ENVIRONMENT=.gateseal/environments/mypy",
+    "uv",
+    "run",
+    "--locked",
+    "--exact",
+    "--all-packages",
+]
+ENTRY = [*UV_RUN, "--with", f"mypy=={VERSION}", "--", "mypy"]
+ARGS = [
+    "--strict",
+    "--python-executable",
+    ".gateseal/environments/mypy/bin/python",
+    ".",
+]
 STALE_LOCK = "Run gateseal policy lock in the policy directory."
 
 
@@ -93,9 +106,8 @@ def test_policy_lock_asks_pypi_for_the_package_without_its_extras(
         "package": "mypy[faster-cache,reports]"
     }
     locked, _ = consumer(load_policy_tree(root), ("python-types",))
-    assert shlex.split(hooks(locked)["mypy"]["entry"])[5] == (
-        f"mypy[faster-cache,reports]=={VERSION}"
-    )
+    entry = shlex.split(hooks(locked)["mypy"]["entry"])
+    assert entry[entry.index("--with") + 1] == f"mypy[faster-cache,reports]=={VERSION}"
 
 
 def test_a_policy_lock_for_another_package_is_stale(tmp_path, upstream):  # noqa: F811
@@ -187,8 +199,9 @@ def test_a_version_exception_changes_the_version_in_the_entry(
         "review_by = 2099-12-31\n"
     )
     locked, compiled = consumer(load_policy_tree(root), ("python-types",), exception)
-    assert shlex.split(hooks(locked)["mypy"]["entry"])[:8] == [
+    assert shlex.split(hooks(locked)["mypy"]["entry"])[:11] == [
         *UV_RUN,
+        "--with",
         f"mypy=={OLDER}",
         "--",
         "mypy",

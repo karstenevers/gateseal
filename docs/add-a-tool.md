@@ -176,7 +176,7 @@ name = "mypy"
 
 [hooks.mypy]
 name = "mypy"
-args = ["--strict", "--python-executable", ".venv/bin/python", "."]
+args = ["--strict", "--python-executable", ".gateseal/environments/mypy/bin/python", "."]
 output = "plain"
 ```
 
@@ -194,12 +194,13 @@ Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock c
 A repository that adopts the release needs a `pyproject.toml` and a `uv.lock` at its root. Its generated hook is one command:
 
 ```sh
-uv run --locked --all-packages --with mypy==2.4.1 -- mypy --strict --python-executable .venv/bin/python .
+env UV_PROJECT_ENVIRONMENT=.gateseal/environments/mypy uv run --locked --exact --all-packages --with mypy==2.4.1 -- mypy --strict --python-executable .gateseal/environments/mypy/bin/python .
 ```
 
-- uv installs the pinned mypy over the project's environment, `.venv`. The repository's `uv.lock` pins the packages in that environment.
-- `--python-executable` makes mypy read the packages of the project's environment. Without it, mypy reads the packages of the Python that starts it. That Python finds mypy's own dependencies before the project's, so a package that both install would have the wrong version.
+- mypy gets its own environment, `.gateseal/environments/mypy`. uv installs exactly what the repository's `uv.lock` pins into it, removes every other package, and adds the pinned mypy over it. Your `.venv` stays as it is.
+- `--python-executable` makes mypy read the packages of that environment. Without it, mypy reads the packages of the Python that starts it. That Python finds mypy's own dependencies before the project's, so a package that both install would have the wrong version.
 - The hook stops when `uv.lock` is missing or out of date.
+- If the checked code imports from an extra or a dependency group that uv does not install by default, list it in `[source]`, such as `extras = ["cli"]` or `groups = ["typing"]`.
 - With `scope = "project"`, the hook runs at every commit. mypy gets no file names and checks the whole project. So it also finds an error in a file that the commit does not change, and an error that a deleted file causes.
 
 ## Format Markdown with Prettier from npm

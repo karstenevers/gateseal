@@ -26,11 +26,20 @@ change the manifest, policy or lock format, and its entry says how to move.
   is not Linux on x86-64 with glibc.
 - The `uv-project` tool kind. A tool of this kind runs in the repository's own
   uv project, so a type checker reads the packages that the project installs.
-  Its hook starts the program with `uv run --locked --all-packages --with
-  <package>==<version>`: the policy pins the tool, and the repository's
-  `uv.lock` pins what the tool reads. `gateseal configure` and `gateseal
-  check` stop with `missing_project` in a repository without `pyproject.toml`
-  or `uv.lock`, or with `tool.uv.managed = false`.
+  Its hook starts the program with `uv run --locked --exact --all-packages
+  --with <package>==<version>`: the policy pins the tool, and the repository's
+  `uv.lock` pins what the tool reads. Each tool has its own environment,
+  `.gateseal/environments/<name>`, which holds exactly what `uv.lock` pins,
+  so a commit and the CI gate read the same packages. The hook does not read
+  or change `.venv`. A definition can list the project's `extras` and
+  dependency `groups` that the tool needs, and `default_groups = false`
+  leaves out the default groups. `gateseal configure` and `gateseal check`
+  stop with `missing_project` in a repository without `pyproject.toml` or
+  `uv.lock`, or with `tool.uv.managed = false`. The commit check and every
+  command that reads the Lock stop with `shadowed_tool` when `uv.lock`
+  installs a package with a tool's name and pinned version from the project's
+  own source, such as a path. The commit check also stops a commit that does
+  not hold `uv.lock` as a regular TOML file.
 - The `project` scope of a tool definition. Its hooks get no file names and
   check the whole project. A hook runs at every commit, or, when it lists
   `types_or`, only when a file of those types changed.
@@ -172,6 +181,8 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Changed
 
+- When `gateseal-check` stops a commit, pre-commit runs no later hook, so no
+  tool runs the files that the check refused.
 - The generated CI file downloads the selected tools in a step of its own,
   before the gate. The next `gateseal upgrade` writes the file with the step.
   `gateseal gate` makes the same downloads before its first hook, so a failed

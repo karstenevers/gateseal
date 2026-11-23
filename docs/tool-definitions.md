@@ -90,20 +90,35 @@ A `release-binary` source also has `archive`, `checksums`, and `platforms`. The 
 
 The optional `executable.check_at_commit` defaults to `false`. When true, the policy lock records the program's SHA-256 and the commit hook checks an installed copy. The check does not run in `gateseal run` or the CI gate. mise verifies an archive's recorded SHA-256 when it downloads the archive.
 
-A `uv-project` source has a `package`: the tool's name on PyPI, with any extras in brackets, such as `pyright[nodejs]`. Set `executable.name` to the program that the package installs. The hook runs `uv run --locked --all-packages --with <package>==<version> -- <program>` in the repository's uv project:
+A `uv-project` source has a `package`: the tool's name on PyPI, with any extras of the tool in brackets, such as `pyright[nodejs]`. Set `executable.name` to the program that the package installs. The source can also list the project's `extras` and dependency `groups` that the tool needs. `default_groups = false` leaves out the project's default groups:
 
-- The policy pins the tool, by version and without a wheel hash. `gateseal policy lock` checks that PyPI has each reviewed release. The project's uv settings choose the index. If the project installs a package of the same name and version from another source, such as a path, that package runs in the tool's place.
-- The repository's `uv.lock` pins the packages that the tool reads. The hook stops when `uv.lock` is missing or out of date. The hook removes no package from `.venv`. So a package that `uv.lock` no longer holds stays there until `uv sync`, and a commit can pass that the CI gate stops.
-- The tool runs on the project's Python. Its first run installs the project's packages into `.venv`, the project's environment. In a uv workspace, it installs the packages of every member. uv installs each package's dependencies and its default dependency groups, which is `dev` unless `tool.uv.default-groups` names others. It installs no extra and no other group. So put what checked code imports in a default group.
-- That Python finds the tool's own dependencies before the project's packages. So make an analyzer read the project's environment by name. The bundled Pyright rules set `venvPath` and `venv`, and the [mypy example](add-a-tool.md#add-mypy-a-tool-that-imports-the-project) passes `--python-executable`. A setting that moves the environment, such as `UV_PROJECT_ENVIRONMENT`, needs the same path there.
+```toml
+[source]
+package = "mypy"
+extras = ["cli"]
+groups = ["typing"]
+```
+
+The hook runs one command in the repository's uv project:
+
+```sh
+env UV_PROJECT_ENVIRONMENT=.gateseal/environments/mypy uv run --locked --exact --all-packages --extra cli --group typing --with mypy==2.4.1 -- mypy
+```
+
+- Each tool has its own environment, `.gateseal/environments/<name>`, which Git ignores. At each run, uv installs exactly what the repository's `uv.lock` pins and removes every other package. So a commit and the CI gate read the same packages. The hook does not read or change `.venv`. A package that you install there yourself, such as from an extra, does not reach the tool.
+- uv installs each package's dependencies and the project's default dependency groups, which is `dev` unless `tool.uv.default-groups` names others. It adds each extra and group that the source lists. In a uv workspace, it installs the packages of every member. uv stops the hook when the project defines no extra or group of a listed name.
+- The hook stops when `uv.lock` is missing or out of date. The tool runs on the project's Python. The first run installs the packages, which needs the network.
+- The policy pins the tool by version, without a wheel hash. `gateseal policy lock` checks that PyPI has each reviewed release. The project's uv settings choose the index.
+- `uv.lock` can install a package with the tool's name and pinned version from the project's own source, such as a path, a Git repository or the packaged project itself. uv would then run that package in the tool's place. So the commit check, and every command that reads the Lock, stop with `shadowed_tool`. They stop for such a package anywhere in `uv.lock`, also in an extra or group that the tool does not install.
+- That Python finds the tool's own dependencies before the project's packages. So make an analyzer read the tool's environment by name. The bundled Pyright rules set `venvPath` and `venv`, and the [mypy example](add-a-tool.md#add-mypy-a-tool-that-imports-the-project) passes `--python-executable`.
 - `check_at_commit` is invalid for this kind.
-- A tool that imports the project's packages itself needs a uv cache whose path holds no space. With a space, uv starts the program outside the project. This was seen with uv 0.13.6 and 0.13.9 on Linux. The bundled deptry definition avoids it: its program is `python`, and its arguments start with `-m deptry`.
+- A tool that imports the project's packages itself needs a uv cache whose path holds no space. With a space, uv starts the program outside the project. This was seen with uv 0.13.6 and 0.13.9 on Linux, and is [uv issue 23299](https://github.com/astral-sh/uv/issues/23299). The bundled deptry definition avoids it: its program is `python`, and its arguments start with `-m deptry`.
 
-The repository needs `pyproject.toml` and `uv.lock` at its root, and `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. A commit through pre-commit alone has no such check: without a project, uv starts the tool outside one. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
+The repository needs `pyproject.toml` and `uv.lock` at its root, with `uv.lock` as a regular file and not a link. `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. The commit check stops a commit that does not hold `uv.lock` as a regular TOML file. It does not check `pyproject.toml`: without it, uv starts the tool outside a project. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
 
 A hook with the `project` scope and no `types_or` runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. With `types_or`, it runs only when a changed file has one of those types. A change that only deletes such files does not start it, because pre-commit matches no hook against a deleted file. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. At a push, pre-commit hides nothing, so the tool reads the checked-out files, also when the push names another branch. The CI gate checks a new clone.
 
-Release binaries run through `mise --no-config exec --deny-env`. A hook of any other kind receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
+Release binaries run through `mise --no-config exec --deny-env`. A hook of any other kind receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. A `uv-project` hook sets `UV_PROJECT_ENVIRONMENT` itself. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
 
 ## Tools from npm
 

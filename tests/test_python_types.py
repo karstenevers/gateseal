@@ -26,8 +26,9 @@ pytestmark = pytest.mark.integration
 PYRIGHT = BUNDLED_TOOLS["pyright"]
 CAPABILITIES = ("hygiene", "python", "python-types")
 ENTRY = (
-    f"uv run --locked --all-packages --with 'pyright[nodejs]=={PYRIGHT.pin}' -- "
-    "pyright --project .gateseal/pyright.toml"
+    "env UV_PROJECT_ENVIRONMENT=.gateseal/environments/pyright uv run --locked "
+    f"--exact --all-packages --with 'pyright[nodejs]=={PYRIGHT.pin}' -- pyright "
+    "--project .gateseal/pyright.toml"
 )
 NOTE = (
     f"Tool pyright {PYRIGHT.pin} for python-types: built-in, uv-project; the "
@@ -140,7 +141,8 @@ def test_pyright_reads_the_project_s_package_not_its_own_of_that_name(typed):
     result, output = commit(typed)
     assert result.returncode == 0, output
     own = "import nodeenv; print(hasattr(nodeenv, 'marker'))"
-    started = success(shlex.split(ENTRY)[:7] + ["python", "-c", own], typed)
+    words = shlex.split(ENTRY)
+    started = success([*words[: words.index("--") + 1], "python", "-c", own], typed)
     assert started.stdout == "False\n"
 
 

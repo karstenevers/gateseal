@@ -41,13 +41,15 @@ The first commit downloads hook environments and selected binaries. Check networ
 
 ## A type checker does not read the project's packages
 
-The bundled Pyright reads `.venv` at the repository root, where uv installs the project's packages. `UV_PROJECT_ENVIRONMENT` makes uv install them in another folder. Pyright then reads an outdated `.venv`. Without a `.venv`, it prints that it did not find one and reads the packages of the Python that starts it, which finds Pyright's own dependencies first. Unset the variable for commits, or ask the policy author to name the other folder in the Pyright rules.
+A tool that runs in the uv project reads its own environment, `.gateseal/environments/<name>`, not `.venv`. uv installs into it each package's dependencies and the default dependency groups. If the checked code imports from an extra or another group, ask the policy author to list it in the tool's definition. A policy that copies the bundled Pyright rules for a tool with another name sets `venv` to that name.
 
-If a commit passes and the CI gate reports a missing import, `.venv` holds a package that the hook does not install. Run `uv sync`. Then retry. The hook installs each package's dependencies and its default dependency groups. For a package from an extra or another group, add the group to `tool.uv.default-groups` in `pyproject.toml`, or name the extra in the `dev` group.
+## A command reports shadowed_tool
+
+`uv.lock` installs a package with a tool's name and pinned version from the project's own source, such as a path or a Git repository. uv would run that package in place of the reviewed release. Install the package from a package index, or give the project's own package another version. Then run `uv lock`.
 
 ## The test hook does not find pytest
 
-The `tests with coverage` hook runs pytest in the repository's uv project. Put pytest in a dependency group that uv installs by default, such as `dev`.
+The `tests with coverage` hook runs pytest in the repository's uv project. Put pytest in a dependency group that uv installs by default, such as `dev`, or in a group that the tool's definition lists.
 
 The hook, and a team's tool that imports the project's packages itself, also need a uv cache whose path holds no space. With a space, uv starts the program outside the project, so it does not find pytest or the project's packages. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
 

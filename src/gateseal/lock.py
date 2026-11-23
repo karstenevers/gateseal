@@ -44,6 +44,7 @@ from gateseal.tools.configurations import owned_outputs
 from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, exclusion
 from gateseal.tools.node_project import install_hook_entries
 from gateseal.tools.release_binary import InstalledProgram, checked_programs
+from gateseal.tools.uv_project import locked_packages
 from gateseal.validation import (
     canonical,
     decode_json,
@@ -443,11 +444,13 @@ class Ledger:
 
     files holds the Manifest's SHA-256 and each owned output's, by path, from
     the ownership ledger. programs holds each executable checked at commit
-    on the machine's platform.
+    on the machine's platform. packages holds each Project Tool's package and
+    version, by tool name.
     """
 
     files: dict[str, str]
     programs: tuple[InstalledProgram, ...]
+    packages: dict[str, tuple[str, str]]
 
 
 def own_ledger(lock: bytes, platform: str | None) -> Ledger:
@@ -471,6 +474,7 @@ def own_ledger(lock: bytes, platform: str | None) -> Ledger:
         }
         native = mapping(document.get("native_artifacts"), "native_artifacts")
         programs = () if platform is None else checked_programs(native, platform)
+        packages = locked_packages(mapping(document.get("components"), "components"))
     except GatesealError as exc:
         raise _unreadable(exc) from exc
     for name in outputs:
@@ -481,7 +485,7 @@ def own_ledger(lock: bytes, platform: str | None) -> Ledger:
                 f"{__version__} never writes it.",
                 next_step=f"Restore {LOCK} from Git, then run gateseal configure.",
             )
-    return Ledger({MANIFEST: manifest, **outputs}, programs)
+    return Ledger({MANIFEST: manifest, **outputs}, programs, packages)
 
 
 def _optional(root: Path, name: str) -> bytes | None:

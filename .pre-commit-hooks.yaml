@@ -5,6 +5,7 @@
   language: python
   pass_filenames: false
   always_run: true
+  fail_fast: true
   stages: [pre-commit]
 - id: gateseal-lfs-check
   name: Check that a push uploads to Git LFS
