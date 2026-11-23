@@ -11,6 +11,7 @@ versions from the real upstream.
 
 import hashlib
 import json
+import re
 import tomllib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from gateseal.policy import bundled_root
 from installation import clone, process, success
 from node_policy import node_files
 
+EXACT_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
 RELEASES = "github.com/betterleaks/betterleaks/releases/download"
@@ -431,13 +433,51 @@ def test_a_started_policy_is_adopted_and_a_stale_release_is_refused(
 
 @pytest.mark.network
 def test_lock_reads_the_bundled_facts_from_the_real_upstream(installed, started):
-    """Resolve every bundled version from GitHub, downloading each archive."""
+    """Resolve every bundled version from upstream, downloading each archive.
+
+    npm resolves what a tool's packages depend on to the newest matching
+    release, so an npm lockfile must match only in the packages it pins.
+    """
     (started / "policy.lock").unlink()
     locked = installed.cli(started, "policy", "lock", str(started))
     assert locked["changed"] == ["policy.lock"]
-    assert (started / "policy.lock").read_bytes() == (
-        bundled_root() / "policy.lock"
-    ).read_bytes()
+    assert pinned(lock_document(started)) == pinned(lock_document(bundled_root()))
+
+
+def pinned(document):
+    """Return document with each npm lockfile cut to the packages pinned exactly.
+
+    The root pins the tool's package and its packages, and a package may pin
+    others, such as TypeScript's native executables. npm resolves a range to
+    its newest match, so a package that only ranges require may differ.
+    """
+    for component in document["components"].values():
+        for record in component["versions"].values():
+            if "lockfile" in record:
+                packages = record["lockfile"]["packages"]
+                record["lockfile"]["packages"] = exact_pins(packages)
+    return document
+
+
+def exact_pins(packages):
+    kept, pending = {}, [""]
+    while pending:
+        path = pending.pop()
+        entry = kept[path] = packages.get(path, {})
+        for field in ("dependencies", "optionalDependencies"):
+            for name, spec in entry.get(field, {}).items():
+                if EXACT_VERSION.fullmatch(spec):
+                    found = installed_path(packages, path, name)
+                    if found not in kept:
+                        pending.append(found)
+    return kept
+
+
+def installed_path(packages, path, name):
+    """Return the path where npm installs name for the package at path."""
+    while path and f"{path}/node_modules/{name}" not in packages:
+        path = path.rpartition("/node_modules/")[0]
+    return f"{path}/node_modules/{name}" if path else f"node_modules/{name}"
 
 
 @pytest.fixture
