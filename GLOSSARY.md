@@ -44,7 +44,7 @@
 
 <a id="team-defined-tool"></a>A **Team-defined Tool** has a definition in a team's policy.
 
-<a id="project-tool"></a>A **Project Tool** reads the repository's own uv or Node project, so it finds the packages that the project installs.
+<a id="project-tool"></a>A **Project Tool** reads the repository's own uv or Node project, so it finds the packages that the project installs. Each one in the uv project has its own environment, which holds exactly what `uv.lock` pins.
 
 <a id="policy-node"></a>The **Policy Node** is the Node version that a policy pins in `node`. Every tool from npm runs on it, whatever Node the machine has.
 <a id="report"></a>A **Report** is a file that one hook writes and a later hook reads, such as coverage data. Git ignores it.

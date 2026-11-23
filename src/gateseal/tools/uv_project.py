@@ -1,30 +1,37 @@
 """The uv-project kind: a PyPI package that runs in the repository's uv project.
 
 A tool such as a type checker resolves imports from the packages that the
-project installs, so it cannot run in an environment of its own. Each hook of
-this kind is one uv run command, which starts the tool in the project.
+project installs, so it cannot run without them. Each hook of this kind is one
+uv run command, which starts the tool in the project.
 
 Guarantees this module owns, whatever a definition says:
 
 - Exact pin: each hook names the package at its selected version with --with.
-  uv installs that version in a layer over the project's environment, where
-  it wins over another version of the package that the project pins. gateseal
+  uv installs that version in a layer over the tool's environment, where it
+  wins over another version of the package that the project pins. gateseal
   policy lock checks that PyPI has each reviewed release. As for a hook
   repository's own dependencies, the install has no wheel hash. So the pin is
-  a name and a version, and the project's uv settings choose the index. A
-  package of that name and version that the project installs from another
-  source, such as a path, runs in the tool's place.
-- The project's packages: with --locked, uv installs what the repository's
-  uv.lock pins into the project's environment, .venv, and stops the hook when
-  uv.lock is missing or no longer matches pyproject.toml. In a uv workspace
-  it installs every member's packages. uv run removes nothing from .venv, so
-  a package that uv.lock no longer holds stays there until uv sync. A new
-  clone, as the CI gate checks one, has no such package.
+  a name and a version, and the project's uv settings choose the index.
+- The project's package never runs in the tool's place: uv skips the layer
+  when the environment already holds the package at that version, and checks
+  no hash for it. So every command that loads the Lock, and the commit check
+  with the staged uv.lock, refuses a uv.lock that installs the tool's package
+  at its pin from a source other than a package index, such as a path.
+- Its own exact environment: each tool runs in .gateseal/environments/<tool>,
+  which uv creates at the project root and Git ignores. With --locked and
+  --exact, uv installs what the repository's uv.lock pins, removes every other
+  package, and stops the hook when uv.lock is missing or no longer matches
+  pyproject.toml. So a commit sees the packages that a new clone, as the CI
+  gate checks one, installs. In a uv workspace it installs every member's
+  packages. uv installs the default dependency groups, and the extras and
+  groups that the definition names. The hook sets UV_PROJECT_ENVIRONMENT
+  over the caller's and never reads or changes the developer's .venv.
 - A project: outside a project uv ignores --locked and still starts the tool,
   which would then check without the project's packages. So configure and
   every command that loads the Lock require pyproject.toml and uv.lock at the
   repository root, and refuse a pyproject.toml that sets tool.uv.managed to
-  false. A commit through pre-commit alone has no such check.
+  false or a uv.lock that is a link. The commit check requires only a staged
+  uv.lock, as a regular TOML file, and does not read pyproject.toml.
 
 The tool runs on the project's Python, as uv selects it. Its hooks get the
 caller's environment, as a hook repository's do, so uv reads the caller's UV_
@@ -33,9 +40,9 @@ PRE_COMMIT_FROM_REF. The first use installs the project's packages and the
 tool, which needs the network.
 
 The layer's packages come first on that Python's import path, the tool's own
-dependencies among them. So a definition makes an analyzer read the project's
-environment by name, as the bundled Pyright rules do with venvPath and venv.
-An analyzer that asks the Python that starts it would read the layer's
+dependencies among them. So a definition makes an analyzer read the tool's
+environment by its path, as the bundled Pyright rules do with venvPath and
+venv. An analyzer that asks the Python that starts it would read the layer's
 version of a package that the tool and the project both install.
 
 One limit is uv's, for a tool that imports the project's packages itself:
@@ -49,14 +56,15 @@ in components under its name.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, cast
 
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import MANIFEST
 from gateseal.tools.model import (
+    OWNED,
     Catalog,
     Executable,
     Hook,
@@ -72,14 +80,26 @@ from gateseal.tools.model import (
     local_repository,
     lock_failure,
 )
-from gateseal.validation import fields, nested, parse_toml, string
+from gateseal.validation import (
+    fields,
+    mapping,
+    nested,
+    parse_toml,
+    sequence,
+    string,
+)
+from gateseal.validation import version as stable_version
 
 if TYPE_CHECKING:
     from gateseal.tools.node import Node
 
-UV_RUN = ("uv", "run", "--locked", "--all-packages", "--with")
-"""Start a program in the project, with what uv.lock pins and one more package.
+ENVIRONMENTS = f"{OWNED}/environments"
+"""The folder of each tool's environment, relative to the project root."""
 
+UV_RUN = ("uv", "run", "--locked", "--exact", "--all-packages")
+"""Start a program in the project, with exactly what uv.lock pins.
+
+--exact removes every package that uv.lock does not pin from the environment.
 --all-packages installs every member of a uv workspace with its dependencies.
 Without it, uv installs only the root project's, and a tool that reads the
 whole repository misses what a member alone depends on.
@@ -94,11 +114,31 @@ PROJECT_FILES = ("pyproject.toml", "uv.lock")
 _NAME = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
 PACKAGE = re.compile(rf"(?P<name>{_NAME})(?:\[{_NAME}(?:,{_NAME})*\])?")
 """A package's name on PyPI, with the extras to install in brackets."""
+NAME = re.compile(_NAME)
+"""The name of a project's extra or dependency group."""
+OPTIONAL = {"extras", "groups", "default_groups"}
+"""The keys of [source] that a definition may leave out."""
+LOCAL_SOURCES = frozenset({"path", "directory", "editable"})
+"""The uv.lock sources whose location a message shows. A URL can hold a token."""
+INDEX_OR_VIRTUAL = frozenset({"registry", "virtual"})
+"""The uv.lock sources that cannot shadow a tool.
+
+A package index serves reviewed releases. uv never installs a virtual source,
+the project when it is not a package.
+"""
+
+LOCKED_VERSION = re.compile(r"(?:0!)?(?P<release>[0-9]+(?:\.[0-9]+)*)(?:\+[a-z0-9.]+)?")
+"""A version in uv.lock without a pre, post or dev segment."""
 
 
 @dataclass(frozen=True)
 class UvProject:
-    """The [source] of a tool that runs in the uv project: its PyPI package."""
+    """The [source] of a tool that runs in the uv project: its PyPI package.
+
+    extras and groups name the project's extras and dependency groups that
+    the tool's environment installs; the tool's own extras are in package's
+    brackets. default_groups false leaves out the project's default groups.
+    """
 
     kind: ClassVar[str] = "uv-project"
     starts: ClassVar[Starts] = Starts.EXECUTABLE
@@ -106,6 +146,9 @@ class UvProject:
     on_node: ClassVar[bool] = False
     scans_history: ClassVar[bool] = True
     package: str
+    extras: tuple[str, ...]
+    groups: tuple[str, ...]
+    default_groups: bool
 
     def offer(
         self,
@@ -167,7 +210,8 @@ class UvProject:
 
 
 def parse_source(value: object, field: str) -> UvProject:
-    table = fields(value, {"package"}, field)
+    table = mapping(value, field)
+    table = fields(table, {"package"} | (OPTIONAL & set(table)), field)
     package = string(table["package"], f"{field}.package")
     if not PACKAGE.fullmatch(package):
         raise GatesealError(
@@ -175,7 +219,31 @@ def parse_source(value: object, field: str) -> UvProject:
             f"{field}.package must be a package's name on PyPI, with any extras in "
             f"brackets, such as pyright[nodejs], not {package!r}.",
         )
-    return UvProject(package)
+    default_groups = table.get("default_groups", True)
+    if not isinstance(default_groups, bool):
+        raise GatesealError(
+            "invalid_field", f"{field}.default_groups must be true or false."
+        )
+    return UvProject(
+        package,
+        _names(table.get("extras", []), f"{field}.extras"),
+        _names(table.get("groups", []), f"{field}.groups"),
+        default_groups,
+    )
+
+
+def _names(value: object, field: str) -> tuple[str, ...]:
+    """Return the project's extras or groups that value lists, each once."""
+    names = tuple(string(item, field) for item in sequence(value, field))
+    for name in names:
+        if not NAME.fullmatch(name):
+            raise GatesealError(
+                "invalid_field",
+                f"{field} must list names of the project, such as dev, not {name!r}.",
+            )
+    if len(set(names)) < len(names):
+        raise GatesealError("invalid_field", f"{field} lists a name more than once.")
+    return names
 
 
 @dataclass(frozen=True)
@@ -205,12 +273,23 @@ class ProjectTool:
         return replace(self, use=replace(self.use, hooks=hooks))
 
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
-        """Return the command that starts the tool in the project.
+        """Return the command that starts the tool in its environment.
 
         uv passes the caller's whole environment on, so variables adds nothing.
         """
-        requirement = f"{self.source.package}=={self.version}"
-        return (*UV_RUN, requirement, "--", self.executable.name)
+        source = self.source
+        return (
+            "env",
+            f"UV_PROJECT_ENVIRONMENT={ENVIRONMENTS}/{self.definition.name}",
+            *UV_RUN,
+            *(option for extra in source.extras for option in ("--extra", extra)),
+            *(option for group in source.groups for option in ("--group", group)),
+            *(() if source.default_groups else ("--no-default-groups",)),
+            "--with",
+            f"{source.package}=={self.version}",
+            "--",
+            self.executable.name,
+        )
 
     def entry(self, exclude: str | None) -> dict[str, object]:
         definition = self.definition
@@ -244,7 +323,12 @@ def _unmanaged(root: Path) -> bool:
 
 
 def require_project(root: Path, tools: Iterable[Tool]) -> None:
-    """Require the repository at root to be a locked uv project for such a tool."""
+    """Require the repository at root to be a locked uv project for such a tool.
+
+    Its uv.lock must be a regular file, as the commit check reads it, and must
+    not install a tool's package from the project's source.
+    """
+    packages: dict[str, tuple[str, str]] = {}
     for tool in tools:
         if not isinstance(tool, ProjectTool):
             continue
@@ -259,6 +343,14 @@ def require_project(root: Path, tools: Iterable[Tool]) -> None:
                 next_step=f"Create the project's {file} with uv and commit it, or "
                 f"{stop} gateseal configure.",
             )
+        if (root / PROJECT_FILES[1]).is_symlink():
+            raise GatesealError(
+                "missing_project",
+                f"{runs} {PROJECT_FILES[1]} is a link, and the commit check reads "
+                "only a regular file.",
+                next_step=f"Replace {PROJECT_FILES[1]} with the file that it links "
+                f"to, or {stop} gateseal configure.",
+            )
         if _unmanaged(root):
             raise GatesealError(
                 "missing_project",
@@ -267,3 +359,99 @@ def require_project(root: Path, tools: Iterable[Tool]) -> None:
                 next_step=f"Remove managed = false from [tool.uv], or {stop} "
                 "gateseal configure.",
             )
+        packages[tool.definition.name] = (tool.source.package, tool.version)
+    if packages:
+        refuse_shadowing(packages, (root / PROJECT_FILES[1]).read_bytes())
+
+
+def locked_packages(components: Mapping[str, object]) -> dict[str, tuple[str, str]]:
+    """Return each Project Tool's package and version that the Lock records.
+
+    A record with a package is a Project Tool's, unless it lists packages too,
+    as the record of a tool from npm does.
+    """
+    packages: dict[str, tuple[str, str]] = {}
+    for name, value in components.items():
+        field = f"components.{name}"
+        record = mapping(value, field)
+        if "package" not in record or "packages" in record:
+            continue
+        record = fields(record, {"package", "version", "hook_ids"}, field)
+        packages[name] = (
+            string(record["package"], f"{field}.package"),
+            stable_version(record["version"], f"{field}.version"),
+        )
+    return packages
+
+
+def refuse_shadowing(packages: Mapping[str, tuple[str, str]], uv_lock: bytes) -> None:
+    """Fail when uv.lock installs a tool's package at its pin from another source.
+
+    uv then skips the tool's --with layer and runs the project's package. A
+    source other than a package index has no reviewed release.
+    """
+    sourced = list(_sourced_packages(uv_lock))
+    for tool, (package, pin) in packages.items():
+        distribution = package.partition("[")[0]
+        for name, locked_version, kind, location in sourced:
+            if _normalized(name) != _normalized(distribution) or not _same_release(
+                locked_version, pin
+            ):
+                continue
+            shown = f" {location!r}" if kind in LOCAL_SOURCES else ""
+            raise GatesealError(
+                "shadowed_tool",
+                f"uv.lock installs {distribution} {locked_version} from its {kind} "
+                f"source{shown}, so the project's own package would run in place of "
+                f"the reviewed {tool}.",
+                next_step=f"Install {distribution} from a package index, or give the "
+                f"project's own {distribution} another version. Then run uv lock.",
+            )
+
+
+def _sourced_packages(uv_lock: bytes) -> Iterator[tuple[str, str, str, object]]:
+    """Yield each package of uv.lock that could shadow a tool.
+
+    Each is its name, its version, its source's kind and the source's location.
+    A uv.lock that is not TOML, or whose packages it cannot read, is uv's to
+    report.
+    """
+    try:
+        locked = parse_toml(uv_lock).get("package")
+    except GatesealError:
+        return
+    for entry in cast(list[object], locked) if isinstance(locked, list) else []:
+        name, version, source = (
+            nested(entry, key) for key in ("name", "version", "source")
+        )
+        if (
+            isinstance(name, str)
+            and isinstance(version, str)
+            and isinstance(source, dict)
+            and source
+            and source.keys().isdisjoint(INDEX_OR_VIRTUAL)
+        ):
+            kind, location = next(iter(cast(dict[str, object], source).items()))
+            yield name, version, kind, location
+
+
+def _normalized(name: str) -> str:
+    """Return a package's name as PEP 503 compares it."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _same_release(locked: str, pin: str) -> bool:
+    """Say whether a uv.lock version satisfies ==pin under PEP 440.
+
+    The release segments compare without trailing zeros, the epoch must be 0,
+    and a local label matches; a pre, post or dev release does not.
+    """
+    found = LOCKED_VERSION.fullmatch(locked)
+    return found is not None and _release(found["release"]) == _release(pin)
+
+
+def _release(text: str) -> tuple[int, ...]:
+    parts = [int(part) for part in text.split(".")]
+    while parts[-1] == 0 and len(parts) > 1:
+        parts.pop()
+    return tuple(parts)

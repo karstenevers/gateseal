@@ -25,7 +25,8 @@ this README and every other file.
   the Ruff configuration, the Pyright configuration and the Betterleaks rules
   that configure copies into each repository. Pyright reads the paths in its
   file relative to `.gateseal/`, where configure writes it. Its `venvPath`
-  and `venv` name `.venv`, the environment of the repository's uv project.
+  and `venv` name `environments/pyright`, the environment in which the
+  Pyright hook runs.
   The Betterleaks rules start from the rules built into Betterleaks, and
   `disabledRules` turns some of them off.
 - `rules/crap.toml` holds only `limit`, the highest CRAP score that a

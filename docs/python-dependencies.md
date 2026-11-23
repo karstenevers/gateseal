@@ -52,7 +52,7 @@ The hook runs the uv that the policy pins, not the uv on your machine. pre-commi
 
 ## deptry
 
-deptry compares the imports in the project with the dependencies in `pyproject.toml`. It runs in the project's own environment, like Pyright, so it reads the packages that `uv.lock` pins. The first commit installs deptry.
+deptry compares the imports in the project with the dependencies in `pyproject.toml`. Like Pyright, it runs in an environment of its own, `.gateseal/environments/deptry`, which holds exactly the packages that `uv.lock` pins. The first commit installs deptry.
 
 The output names each problem:
 
@@ -63,7 +63,7 @@ src/labels/settings.py:1:8: DEP001 'yaml' imported but missing from the dependen
 
 To fix a problem, remove the unused dependency, or add the missing one with `uv add`.
 
-The repository's `[tool.deptry]` settings apply. In a src layout, deptry reads the project's own package as a missing dependency. List the package in `known_first_party`, as in the example above. Use the other settings of deptry for further exceptions, such as `per_rule_ignores`.
+The repository's `[tool.deptry]` settings apply. In a src layout, deptry reads the project's own package as a missing dependency. List the package in `known_first_party`, as in the example above. Use the other settings of deptry for further exceptions, such as `per_rule_ignores`. deptry skips the files that Git ignores, such as the tool environments, only while `[tool.deptry]` sets no `exclude`. If it sets `exclude`, add `'\.gateseal'` to the list. Otherwise deptry reads the packages in those environments as code of the project.
 
 In a uv workspace, deptry checks the files of every member against the dependencies of the root `pyproject.toml` only. The root needs a `[project]` table, so deptry cannot check a virtual workspace, whose root has only `[tool.uv.workspace]`. A member's own dependency shows as `DEP003`, a transitive dependency. List such packages for `DEP003` in `per_rule_ignores`:
 

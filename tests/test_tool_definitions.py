@@ -49,41 +49,41 @@ TYPESCRIPT = {
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "36a0b97315592b4983e979b8eeae6a929012b0843c6d4fad71c9383a4ba8496d"
+            "596f58af840377925d230784947d073e8c857df85db483de043b1a2ad23f6503"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "76267b8e014091bc351d776a29a3c900f2f8b688aab275cd9d144e7ee5f4d785"
+            "6733024452b8f1b332538861a3400df9cd1cf0282c46e110a91d2dec5d8d8090"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "a20efbe6dac974e16bb02ac5a358ab1a3926116daa3520b560505b032010c6ca",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "eae882c41331f15f7f62d0dcba780339c8655513d0724a21fc1c79defed60885"
+            "6311202dd629ef6015700fe2717239c832b6c930fe93662aa60568f08e27bcbc"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "cf03838d6052bd861cc1c5d3c1e2c36a5d8843ebd4f792ae6d4e5b680cd8dfa4"
+            "d0de5fec00cc2c4231a4e2f7b29c69f8819c8ad69771307ba3600ff949af25cd"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "18d9757dc9ed2dddfd7a0baf45641149752595ce85edd1e799c9f3bd1e50750b"
+            "4aa3aff359b8d632a76b6354823caa93f1166f67937b1963d15b97b4cb45e549"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "eae811e889c8e0d6ad4408626dd7d1e37134cf41173b1054c8c6b0a4ef85c367"
+            "f33374812c8abe1a63b9d3cf03229076b5b089a0ca829d08317470e21580831a"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -91,7 +91,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "e7f87d82efe8eeb283d1cd6597f50cca1a2025bbbabd67c3283d2eacfb258526"
+            "dd940e1737c9f9582789a3699c7d885b0cfdad181e6906b140778cf878ab6ca2"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -99,7 +99,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "b73747b6a25f2241e0ae1a156fd2be74d3e7e9c46fd86b5b5d290b6cd103f2aa"
+            "0274975641300d26c91b93a6760fa55d1b48a7e72c4890d27acf65fb13b8c424"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -107,22 +107,22 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "6f616881dcb60781d954942dda056e4434dbb26b1292c338b59671966b453deb"
+            "caae093ece9685ec00baaac6a7f2139844a03464c04f4eec3e3a82b59d2f3b21"
         ),
-        CONFIG: "d027f65dbbee8a8cc0466becddb3e526f84aab9d15df91fcb36e9cd2e2ead797",
-        PYRIGHT: "e7b7d2f1eb0b2fc23e760f8dc124c5a4cedb48a02e97ef94d17537c85f00faf7",
+        CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
+        PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
         **PYTHON,
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "d09fed776b3a841dcba07ffcd91522eab33d18b18629b2437fcafef76fb64360"
+            "4ced885f0de170e2d84aae879f8ab6a05c05e3f8760376ced4e5dc5e01874373"
         ),
         CONFIG: "5a4243fbb9a076ee9821ef1f7623fa7b4a98e2ce67fccbcce9e31a1665931bcf",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "fc3bb55bf7aee162a3dd942315181320aa81100be29e9d6bc7d4bb4366309485"
+            "842e8e51d27f07f5787bc2c768da4982fcd315d6a0a431a5e6c956ca143002a0"
         ),
         CONFIG: "bf720f44931a16b7a3b6f97d383cd1ac1a50574f52923ad9d9155d6581f661f6",
         **TYPESCRIPT,
