@@ -180,7 +180,9 @@ def test_configure_writes_a_ci_table_without_the_optional_keys(provider, tmp_pat
         "provider": provider,
         "default_branch": "main",
     }
-    assert f'[ci]\nprovider = "{provider}"\ndefault_branch = "main"\n\n' in manifest
+    assert manifest.endswith(
+        f'\n[ci]\nprovider = "{provider}"\ndefault_branch = "main"\n'
+    )
     document = yaml.safe_load((consumer / PROVIDERS[provider].path).read_bytes())
     assert weekly(provider, document) is None
     assert json.loads(output.getvalue())["code"] == "configured"

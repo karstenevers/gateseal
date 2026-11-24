@@ -83,11 +83,6 @@ def _exception_edits(
             edits.append((_header(lines, table), table.end, rendered))
         else:
             new.append(rendered)
-    if edits and not changed and ("exceptions",) not in found:
-        # Every edit removes a table, and the last [exceptions.<component>]
-        # also made the implicit parent.
-        start, end, _ = edits[0]
-        edits[0] = (start, end, ["[exceptions]"])
     return edits + _insertion(lines, found, new), changed
 
 
@@ -144,15 +139,18 @@ def edited(
     listed = cast(dict[str, object], expected.get("exceptions", {}))
     exception_edits, listed = _exception_edits(lines, found, exceptions, listed)
     edits += exception_edits
-    if listed or "exceptions" in expected:
-        expected["exceptions"] = listed
+    expected["exceptions"] = listed
     return _checked(_applied(lines, edits, newline), expected)
 
 
 def _checked(result: bytes, expected: dict[str, object]) -> bytes:
-    """Return result if it parses to expected, or refuse the edit."""
+    """Return result if it parses to expected, or refuse the edit.
+
+    A Manifest without [exceptions] has no exceptions, so the check counts a
+    missing table as an empty one.
+    """
     try:
-        if parse_toml(result) == expected:
+        if {"exceptions": {}, **parse_toml(result)} == expected:
             return result
     except GatesealError:
         pass

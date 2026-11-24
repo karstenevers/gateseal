@@ -320,12 +320,10 @@ def test_bundled_consumer_adopts_by_editing_its_manifest(
     env = environment(installed, origin)
     manifest = consumer / "gateseal.toml"
     text = manifest.read_text()
-    start, end = text.index("[policy]"), text.index("[choices]")
     manifest.write_text(
-        text[:start]
+        text[: text.index("[policy]")]
         + f'[policy]\nsource = "git"\nrepository = "{URL}"\npath = "policy"\n'
-        + f'commit = "{first}"\ntag = "v1"\n\n'
-        + text[end:]
+        + f'commit = "{first}"\ntag = "v1"\n'
     )
     result = installed.cli(consumer, "configure", env=env)
     assert result["changed"] == ["gateseal.lock"]

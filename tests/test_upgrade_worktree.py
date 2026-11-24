@@ -352,9 +352,7 @@ def test_only_a_manifest_ahead_of_its_lock_names_the_restore(consumer):
     worktree = configure(consumer, "hygiene")
     manifest = consumer / "gateseal.toml"
     manifest.write_text(
-        manifest.read_text().replace(
-            "[choices]", '[choices.hygiene]\nexclude = ["vendor"]'
-        )
+        manifest.read_text() + '\n[choices.hygiene]\nexclude = ["vendor"]\n'
     )
     ahead = refused(worktree, request())
     assert ahead.code == "lock_mismatch"

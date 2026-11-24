@@ -125,9 +125,8 @@ def test_policy_upgrade_and_rollback_keep_choices_and_exceptions(
     consumer, env = consumer_at(installed, team, tmp_path, "v1", "secrets")
     manifest = consumer / "gateseal.toml"
     manifest.write_text(
-        manifest.read_text().replace(
-            "[choices]", '[choices.hygiene]\nexclude = ["vendor"]  # generated'
-        )
+        manifest.read_text()
+        + '\n[choices.hygiene]\nexclude = ["vendor"]  # generated\n'
     )
     installed.cli(consumer, "configure", env=env)
     newer = upgrade(installed, consumer, env, f"betterleaks={BETTERLEAKS_PIN}", *REASON)

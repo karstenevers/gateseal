@@ -19,7 +19,7 @@ from gateseal.validation import canonical
 POLICY = load_bundled_policy()
 MANIFEST, LOCK, CONFIG = "gateseal.toml", "gateseal.lock", ".pre-commit-config.yaml"
 RUFF, WORKFLOW = ".gateseal/ruff.toml", ".github/workflows/gateseal.yml"
-CI_TABLE = '[ci]\nprovider = "github"\ndefault_branch = "main"\n\n'
+CI_TABLE = '\n[ci]\nprovider = "github"\ndefault_branch = "main"\n'
 OTHER_RELEASE = f"{int(__version__.split('.')[0]) + 1}.0.0"
 
 
@@ -112,8 +112,7 @@ def test_configure_writes_the_manifest_lock_and_outputs(tmp_path):
     assert sorted(files) == sorted(changed)
     assert files[MANIFEST].decode() == (
         'schema = 1\ncapabilities = ["hygiene", "python"]\n\n[policy]\n'
-        f'source = "bundled"\nrelease = "{POLICY.release}"\n\n[choices]\n\n'
-        "[exceptions]\n"
+        f'source = "bundled"\nrelease = "{POLICY.release}"\n'
     )
     for name in changed:
         assert stat.S_IMODE((root / name).stat().st_mode) == 0o644, name

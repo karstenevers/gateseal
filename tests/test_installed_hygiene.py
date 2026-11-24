@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -13,6 +14,8 @@ pytestmark = pytest.mark.integration
 
 def test_configure_assertions_and_owned_files(installed, configured):
     before = {name: (configured / name).read_bytes() for name in TRACKED}
+    tables = re.findall(r"^\[.*\]$", before["gateseal.toml"].decode(), re.MULTILINE)
+    assert tables == ["[policy]"]
     assert installed.cli(configured, "configure")["changed"] == []
     installed.cli(configured, "configure", "--capability", "python", code=2)
     assert before == {name: (configured / name).read_bytes() for name in TRACKED}

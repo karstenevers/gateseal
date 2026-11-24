@@ -224,6 +224,11 @@ change the manifest, policy or lock format, and its entry says how to move.
   is set or mise's install at first use is off, and names the fix. It still
   uses no network: in a clone that has not stored its policy, the `lock` check
   fails and names `gateseal check`, which fetches it.
+- A Manifest may leave out `[choices]` and `[exceptions]`. A missing table
+  has the same effect as an empty one. `gateseal configure` no longer writes
+  them empty into a new Manifest, and a Manifest that has them stays valid.
+  A gateseal before 0.3.0 stops on a Manifest without them with
+  `invalid_field`.
 
 ### Removed
 
