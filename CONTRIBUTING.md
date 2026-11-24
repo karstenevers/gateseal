@@ -48,7 +48,12 @@ integration layer, which builds a wheel, installs it and drives the installed
 release binary archive that the tests need into `.pytest_cache`, as
 `gateseal fetch` does. Every mise in the tests then installs from that folder
 with the network off, so a test that asks for another archive fails at once.
-Tests marked `network` read private test fixtures and run in CI.
+Every test home uses the Pythons in uv's own Python folder, so no test installs
+a Python of its own. The integration layer still needs the network:
+pre-commit clones hook repositories from GitHub, gateseal reads release
+checksums from GitHub and nodejs.org, uv and pip install packages from PyPI,
+and npm installs packages from the npm registry. Tests marked `network` also
+read private test fixtures or call other services, and run in CI.
 
 Run these too when they apply:
 

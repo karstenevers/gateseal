@@ -20,6 +20,7 @@ from installation import (
     next_release,
     package_version,
     process,
+    share_uv_pythons,
     success,
     tag_release,
     versioned_package,
@@ -132,7 +133,7 @@ def pytest_configure(config):
     home = Path(root).resolve() / f"gateseal home {worker}"
     kept = {"UV_CACHE_DIR": "cache", "UV_PYTHON_INSTALL_DIR": "python"}
     for name, command in kept.items():
-        if name not in os.environ:
+        if not os.environ.get(name):
             os.environ[name] = success(
                 ["uv", command, "dir"], Path.cwd()
             ).stdout.strip()
@@ -255,6 +256,7 @@ def installed(gateseal_origin, release_archives, tmp_path_factory):
         for name, value in home_environment(base / "home ü").items():
             patch.setenv(name, value)
         make_home(Path.home())
+        share_uv_pythons(Path.home())
         for url, insteadof in ((gateseal_origin.as_uri(), REPOSITORY), (hooks, hooks)):
             success(
                 ["git", "config", "--global", f"url.{url}.insteadOf", insteadof],
