@@ -76,11 +76,13 @@ change the manifest, policy or lock format, and its entry says how to move.
   in `gateseal run` and in the CI gate, and a stale `uv.lock` stops the commit
   with a message that names `uv lock`. `python-dependencies` runs deptry
   0.25.1 in the uv project and names each unused, missing or transitive
-  dependency. `python-audit` runs `uv audit` with uv 0.13.9 in the CI gate
-  only. It asks `api.osv.dev` about each locked package, so a new advisory can
-  fail a weekly run without a commit. The policy's `rules/uv-audit.toml` lists
-  the ignored advisories, and a repository cannot add one. A repository that
-  selects none of them gets no new check.
+  dependency. The repository's `[tool.deptry]` settings apply, and deptry
+  never reads `.gateseal/`, also when they set `exclude`. `python-audit` runs
+  `uv audit` with uv 0.13.9 in the CI gate only. It asks `api.osv.dev` about
+  each locked package, so a new advisory can fail a weekly run without a
+  commit. The policy's `rules/uv-audit.toml` lists the ignored advisories, and
+  a repository cannot add one. A repository that selects none of them gets no
+  new check.
 - `finding_exit_codes` in a hook of a tool definition: the exit codes with
   which the tool reports a finding. A hook that fails with another exit code
   is `stopped`, and `gateseal run` and `gateseal gate` report `tool_failed`
