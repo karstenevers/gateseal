@@ -122,7 +122,9 @@ def test_the_clean_project_passes_both_checks(installed, checked):
     config = json.loads((checked / ".pre-commit-config.yaml").read_bytes())
     entries = {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
     assert entries["uv-lock"]["args"] == ["--check"]
-    assert entries["deptry"]["entry"].endswith("-- python -m deptry --no-ansi .")
+    assert entries["deptry"]["entry"].endswith(
+        "-- python .gateseal/deptry-launcher.txt --no-ansi ."
+    )
     stage(checked, {"src/labels/names.py": "import idna\n\nNAME = idna.decode\n"})
     result, output = commit(checked)
     assert result.returncode == 0, output
@@ -169,6 +171,32 @@ def test_an_undeclared_import_stops_the_commit(checked):
         "src/labels/settings.py:1:8: DEP001 'yaml' imported but missing from the "
         "dependency definitions"
     ) in hook_output(output, "deptry")
+
+
+@pytest.mark.parametrize("key", ["exclude", "extend_exclude"])
+def test_deptry_skips_the_tool_environment_and_keeps_the_own_exclusions(checked, key):
+    """The commit passes, so deptry read neither environment nor docs.
+
+    An exclude replaces deptry's default, which skips the files that Git
+    ignores. python-dateutil in .gateseal/environments/deptry imports six,
+    which the project does not declare, and docs/conf.py imports yaml.
+    """
+    project_file = (checked / "pyproject.toml").read_text()
+    assert project_file.endswith('known_first_party = ["labels"]\n')
+    dependencies = '"idna==3.10", "python-dateutil==2.9.0.post0"'
+    stage(
+        checked,
+        {
+            "pyproject.toml": project_file.replace('"idna==3.10"', dependencies)
+            + f'{key} = ["docs"]\n',
+            "src/labels/dates.py": "import dateutil\n",
+            "docs/conf.py": "import yaml\n",
+        },
+    )
+    success(["uv", "lock"], checked)
+    success(["git", "add", "uv.lock"], checked)
+    result, output = commit(checked)
+    assert result.returncode == 0, output
 
 
 def test_deptry_reads_the_project_packages_with_a_space_in_the_uv_cache(

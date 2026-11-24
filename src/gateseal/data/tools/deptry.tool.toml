@@ -1,7 +1,7 @@
 # deptry compares the imports of the project with the dependencies in
 # pyproject.toml. It reads the installed packages to map each one to the
 # modules it provides. The repository's [tool.deptry] settings apply.
-# python -m starts it in the project's environment also when the uv cache path
+# python starts it in the project's environment also when the uv cache path
 # holds a space, where uv starts a console script outside the project.
 kind = "uv-project"
 stages = ["commit", "run", "ci"]
@@ -13,7 +13,34 @@ package = "deptry"
 [executable]
 name = "python"
 
+# Starts deptry with .gateseal added to the repository's own extend_exclude.
+# deptry skips the files that Git ignores, such as the tool's environment in
+# .gateseal/environments, only while [tool.deptry] sets no exclude. An
+# extend_exclude on the command line replaces the one in pyproject.toml, so
+# the launcher passes both. It reads pyproject.toml with deptry's own loader,
+# so it accepts exactly the TOML that deptry accepts. When extend_exclude is
+# not a list, it passes nothing, and deptry names the invalid value. Its
+# extension is not .py, so no Python check of the repository, such as a
+# team's Ruff rules or a direct deptry run, reads it as the project's code.
+[files.launcher]
+extension = "txt"
+content = '''
+# gateseal owns this file; gateseal configure writes it.
+import runpy
+import sys
+from pathlib import Path
+
+from deptry.utils import load_pyproject_toml
+
+project = load_pyproject_toml(Path("pyproject.toml"))
+own = project.get("tool", {}).get("deptry", {}).get("extend_exclude", [])
+if isinstance(own, list):
+    patterns = [*own, r"\.gateseal([/\\]|$)"]
+    sys.argv[1:1] = [f"--extend-exclude={pattern}" for pattern in patterns]
+runpy.run_module("deptry", run_name="__main__", alter_sys=True)
+'''
+
 [hooks.deptry]
 name = "deptry"
-args = ["-m", "deptry", "--no-ansi", "."]
+args = ["{launcher}", "--no-ansi", "."]
 output = "concise"
