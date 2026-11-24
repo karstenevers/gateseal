@@ -13,6 +13,8 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from gateseal.setup import PYTHON
+
 PACKAGE = Path(__file__).resolve().parents[1]
 
 
@@ -57,6 +59,27 @@ def environment(directory):
     )
     result.pop("PYTHONPATH", None)
     return result
+
+
+def share_uv_pythons(home):
+    """Let uv in home use the Pythons in UV_PYTHON_INSTALL_DIR.
+
+    gateseal's uv ignores that variable and looks in home's own folder, so
+    without this link setup in each new home installs a Python of its own.
+    The Python that setup asks for is installed in the shared folder first, so
+    uv never installs it through the link and records the home's path in it.
+    """
+    shared = Path(os.environ["UV_PYTHON_INSTALL_DIR"]).resolve()
+    success(
+        ["uv", "python", "install", "--no-bin", PYTHON],
+        home,
+        dict(os.environ, UV_PYTHON_INSTALL_DIR=str(shared)),
+    )
+    env = dict(os.environ, HOME=str(home))
+    del env["UV_PYTHON_INSTALL_DIR"]
+    folder = Path(success(["uv", "python", "dir"], home, env).stdout.strip())
+    folder.parent.mkdir(parents=True, exist_ok=True)
+    folder.symlink_to(shared, target_is_directory=True)
 
 
 def install(directory, package=PACKAGE):

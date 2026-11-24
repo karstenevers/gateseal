@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from installation import process, success
+from installation import process, share_uv_pythons, success
 
 PROFILES = (
     ".bashrc",
@@ -47,12 +47,12 @@ def machine(installed, tmp_path_factory):
     base = tmp_path_factory.mktemp("setup machine ü").resolve()
     home = base / "home"
     home.mkdir()
+    share_uv_pythons(home)
     environment = dict(
         installed.environment,
         HOME=str(home),
         GIT_CONFIG_GLOBAL=str(home / ".gitconfig"),
         PRE_COMMIT_HOME=str(base / "pre-commit home"),
-        UV_PYTHON_CACHE_DIR=str(base.parent / "setup python downloads"),
     )
     environment.pop("XDG_DATA_HOME", None)
     # The developer's own pre-commit, installed with uv in uv's default folders.

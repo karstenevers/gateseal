@@ -91,7 +91,7 @@ known-third-party = ["gateseal"]
 testpaths = ["tests"]
 markers = [
     "integration: real installed wheel, uv, Git and pre-commit; set for every test that uses the installed fixture",
-    "network: real network services, such as private artifact acquisition or the vulnerability service",
+    "network: private test fixtures and other services, such as the vulnerability service; the tests without this marker still need GitHub, PyPI, nodejs.org and the npm registry",
 ]
 
 [tool.coverage.run]
