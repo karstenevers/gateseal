@@ -228,6 +228,14 @@ change the manifest, policy or lock format, and its entry says how to move.
 - `gateseal doctor`. Run `gateseal status`, which now reports the same checks
   and warnings and exits 3 when a check fails.
 
+### Fixed
+
+- The `command` of a failed result names the command that you gave, also
+  when an option value such as `--repo check` names another command. It is
+  `null` when gateseal cannot tell the command from the arguments, such as
+  for an unknown command. The message of wrong arguments names the help of
+  that command, such as `gateseal run --help`.
+
 ### Security
 
 - gateseal redacts a recognized credential in captured output even when

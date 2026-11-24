@@ -4,7 +4,7 @@ import sys
 from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
-from typing import NoReturn, cast
+from typing import Any, NoReturn, cast
 
 from gateseal import (
     __version__,
@@ -41,11 +41,23 @@ REVIEW = {
 """The gateseal policy actions that also name a component and an exact version."""
 
 
-class Parser(argparse.ArgumentParser):
-    def error(self, message: str) -> NoReturn:
-        raise GatesealError(
-            "invalid_invocation", message + ". Run gateseal --help for examples."
+class InvalidInvocation(GatesealError):
+    def __init__(self, command: str | None, message: str) -> None:
+        program = " ".join(filter(None, ("gateseal", command)))
+        super().__init__(
+            "invalid_invocation", f"{message}. Run {program} --help for examples."
         )
+        self.command = command
+
+
+class Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, command: str | None = None, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.command = command
+        """The command this parser reads, such as run or policy lock, or None."""
+
+    def error(self, message: str) -> NoReturn:
+        raise InvalidInvocation(self.command, message)
 
 
 def _options(
@@ -99,7 +111,9 @@ def _parser() -> Parser:
         "status": "gateseal status --json; gateseal status --verbose",
     }
     for command, example in examples.items():
-        child = commands.add_parser(command, epilog="Examples: " + example)
+        child = commands.add_parser(
+            command, command=command, epilog="Examples: " + example
+        )
         _options(child)
         if command == "configure":
             child.add_argument("--capability", action="append")
@@ -147,6 +161,7 @@ def _parser() -> Parser:
             )
     policy = commands.add_parser(
         "policy",
+        command="policy",
         help="Start a team policy, review and pin tool versions, lock and check it",
         epilog="Examples: gateseal policy init team-policy/policy; "
         "gateseal policy add betterleaks 1.11.0; gateseal policy pin betterleaks "
@@ -159,7 +174,7 @@ def _parser() -> Parser:
 def _policy_actions(policy: argparse.ArgumentParser) -> None:
     actions = policy.add_subparsers(dest="action", required=True)
     for action in (*POLICY, *REVIEW):
-        child = actions.add_parser(action)
+        child = actions.add_parser(action, command=f"policy {action}")
         _options(child, repo=False)
         if action in REVIEW:
             child.add_argument("tool", help="Component, such as betterleaks")
@@ -181,6 +196,13 @@ GATE_SCOPES = {
 }
 """gate's revision flags, in groups: --base and --head, or --merge, or --after
 with the --before that the event names."""
+
+
+def _name(arguments: argparse.Namespace) -> str | None:
+    """Name the command that the parser chose, such as policy lock, if any."""
+    command = cast(str | None, arguments.command)
+    action = cast(str | None, getattr(arguments, "action", None))
+    return f"{command} {action}" if action else command
 
 
 def _operation(arguments: argparse.Namespace, in_ci: bool) -> Result:
@@ -329,36 +351,9 @@ def _output(
     return "\n".join(filter(None, (shown, published)))
 
 
-def _command_name(raw: list[str]) -> str:
-    """Name the command that raw asks for, as the Result of an error reports it."""
-    command = next(
-        (
-            a
-            for a in raw
-            if a
-            in {
-                "configure",
-                "check",
-                "upgrade",
-                "run",
-                "fetch",
-                "gate",
-                "status",
-                "setup",
-                "policy",
-            }
-        ),
-        "status",
-    )
-    if command == "policy":
-        action = raw[raw.index("policy") + 1 :][:1]
-        command = " ".join(["policy", *(a for a in action if a in POLICY | REVIEW)])
-    return command
-
-
 def main(argv: list[str] | None = None) -> int:
     raw = sys.argv[1:] if argv is None else argv
-    command = _command_name(raw)
+    command: str | None = None
     as_json = "--json" in raw
     # pytestmut: off[cmp.membership] -- a Result of a parse error has no details
     full = "--verbose" in raw
@@ -366,8 +361,13 @@ def main(argv: list[str] | None = None) -> int:
     provider = _provider(os.environ)
     try:
         try:
-            arguments = _parser().parse_args(raw)
+            arguments, unknown = _parser().parse_known_args(raw)
+            if unknown:
+                raise InvalidInvocation(
+                    _name(arguments), "unrecognized arguments: " + " ".join(unknown)
+                )
             as_json, full = bool(arguments.json), bool(arguments.verbose)
+            command = _name(arguments) or "status"
             result = _operation(arguments, provider is not None)
         except OSError as exc:
             raise GatesealError("filesystem_error", str(exc), 4) from exc
@@ -377,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
             ) from None
     except GatesealError as exc:
         result = Result(
-            command,
+            exc.command if isinstance(exc, InvalidInvocation) else command,
             exc.code,
             str(exc),
             exc.exit_code,

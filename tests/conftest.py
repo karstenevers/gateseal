@@ -26,6 +26,17 @@ from installation import (
 )
 
 TRACKED = ("gateseal.toml", "gateseal.lock", ".pre-commit-config.yaml")
+COMMANDS = (
+    "configure",
+    "check",
+    "upgrade",
+    "run",
+    "fetch",
+    "gate",
+    "setup",
+    "status",
+)
+"""Every command but policy, which works on a policy directory, not a worktree."""
 
 PIN = GatesealPin(REPOSITORY, __version__, "5ea1" + "0" * 36)
 """The gateseal release that the tests run in this process pin."""

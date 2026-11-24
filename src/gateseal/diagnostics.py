@@ -264,7 +264,8 @@ class Note:
 
 @dataclass(frozen=True)
 class Result:
-    command: str
+    command: str | None
+    """The command that ran or failed, or None when the arguments name none."""
     code: str = "ok"
     message: str = ""
     exit_code: int = 0
@@ -331,7 +332,8 @@ class Result:
     def summary(self) -> str:
         """Return the result as redacted Markdown for a CI provider's run summary."""
         failed = [str(owner["message"]) for owner, _ in _failures(self._redacted())]
-        sections = [f"### gateseal {self.command}", redact(self.message)]
+        heading = " ".join(filter(None, ("### gateseal", self.command)))
+        sections = [heading, redact(self.message)]
         steps = [redact(step) for step in self.next_steps]
         for heading, items in (("Failed checks:", failed), ("Next steps:", steps)):
             if items:

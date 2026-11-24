@@ -9,12 +9,10 @@ import sys
 import urllib.request
 
 import pytest
-from conftest import named_flags
+from conftest import COMMANDS, named_flags
 from gateseal.cli import main
 from gateseal.diagnostics import NEXT_STEPS
 from installation import package_version, success
-
-HELP = "gateseal --help"
 
 
 @pytest.fixture(scope="module")
@@ -94,13 +92,70 @@ def test_an_unknown_option_is_an_invalid_invocation(capsys, repository):
     assert result["next_steps"] == [NEXT_STEPS["invalid_invocation"]]
 
 
-def test_an_invalid_invocation_without_json_is_text(capsys, repository):
-    assert main(["--repo", str(repository), "status", "--bogus"]) == 2
+@pytest.mark.parametrize("command", [*COMMANDS, "policy lock"])
+def test_an_option_value_never_names_the_failed_command(capsys, command):
+    for value in ("policy", *COMMANDS):
+        code, result = gateseal(
+            capsys, "--json", "--repo", value, *command.split(), "--bogus"
+        )
+        assert (code, result["command"]) == (2, command)
+
+
+@pytest.mark.parametrize("command", COMMANDS)
+def test_a_repository_path_never_names_the_failed_command(
+    capsys, tmp_path, monkeypatch, command
+):
+    monkeypatch.chdir(tmp_path)
+    refresh = ["--refresh"] if command == "setup" else []
+    for value in ("policy", *COMMANDS):
+        code, result = gateseal(capsys, "--json", "--repo", value, command, *refresh)
+        assert (code, result["command"], result["code"]) == (
+            2,
+            command,
+            "not_a_repository",
+        )
+
+
+def test_a_policy_action_is_named_even_after_a_value_that_names_one(capsys, started):
+    code, result = gateseal(
+        capsys, "--json", "--repo", "policy", "policy", "add", "lock", "1.0.0", started
+    )
+    assert (code, result["command"], result["code"]) == (
+        2,
+        "policy add",
+        "unknown_component",
+    )
+
+
+@pytest.mark.parametrize(
+    "arguments", [["bogus"], ["--bogus"]], ids=["command", "option"]
+)
+def test_an_invalid_invocation_without_a_command_names_none(capsys, arguments):
+    code, result = gateseal(capsys, "--json", *arguments)
+    assert (code, result["command"], result["code"]) == (
+        2,
+        None,
+        "invalid_invocation",
+    )
+    assert result["diagnostics"][0]["message"].endswith(
+        "Run gateseal --help for examples."
+    )
+
+
+def test_a_misplaced_json_flag_still_gives_json(capsys):
+    code, result = gateseal(capsys, "policy", "--json", "lock")
+    assert (code, result["command"]) == (2, "policy lock")
+    assert named_flags(result["diagnostics"][0]["message"]) == {"--json", "--help"}
+
+
+def test_an_invalid_invocation_without_json_is_text(capsys):
+    assert main(["--repo", "check", "run", "--bogus"]) == 2
     out = capsys.readouterr().out
     with pytest.raises(json.JSONDecodeError):
         json.loads(out)
-    assert "--bogus" in out
-    assert HELP in out
+    assert out.startswith(
+        "unrecognized arguments: --bogus. Run gateseal run --help for examples.\n"
+    )
 
 
 def test_doctor_is_no_command(capsys, repository):
@@ -119,7 +174,7 @@ def test_policy_needs_an_action(capsys):
     assert main(["policy"]) == 2
     out = capsys.readouterr().out
     assert "action" in out
-    assert HELP in out
+    assert "Run gateseal policy --help" in out
 
 
 def test_an_unknown_policy_action_is_reported_as_policy(capsys):
@@ -140,7 +195,7 @@ def test_policy_init_needs_a_directory(capsys):
     )
     message = result["diagnostics"][0]["message"]
     assert "directory" in message
-    assert HELP in message
+    assert "Run gateseal policy init --help" in message
 
 
 def test_policy_actions_take_a_directory_not_a_repository(capsys, tmp_path):
