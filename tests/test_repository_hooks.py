@@ -30,8 +30,8 @@ def manifest(*tables):
     return (
         "schema = 1\n"
         'capabilities = ["hygiene"]\n\n'
-        f'[policy]\nsource = "bundled"\nrelease = "{POLICY.release}"\n\n'
-        "[choices]\n\n[exceptions]\n" + "".join(tables)
+        f'[policy]\nsource = "bundled"\nrelease = "{POLICY.release}"\n'
+        + "".join(tables)
     )
 
 

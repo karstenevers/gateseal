@@ -8,7 +8,7 @@
 | --- | --- |
 | `gateseal.toml`: `schema`, `[policy]` | `gateseal configure` writes them at first. `gateseal upgrade` rewrites `[policy]` when it moves the policy. |
 | `gateseal.toml`: `capabilities` | You choose them with `--capability` at first. Edit them later, then run `gateseal configure`. |
-| `gateseal.toml`: `[choices]`, `[exceptions]` | Empty at first. Edit them only to leave a policy default. `gateseal upgrade` can write an exception. |
+| `gateseal.toml`: `[choices]`, `[exceptions]` | Optional. Add them only to leave a policy default. `gateseal upgrade` can write an exception. |
 | `gateseal.toml`: `[hooks]`, `[ci]` | Optional. Add them when you need your own script or CI. `--ci` writes `[ci]` at first. |
 | `gateseal.lock` | `gateseal configure` and `gateseal upgrade` write it. Never edit it. |
 | `.pre-commit-config.yaml`, `.gateseal/`, the CI file | Generated with the Lock. Never edit them. |
@@ -34,8 +34,6 @@ skip = ["check-yaml"]        # the policy lists check-yaml as optional
 
 [choices.python]
 target_version = "py312"     # the policy default is py311
-
-[exceptions]
 ```
 
 You rarely write `commit` yourself. The `gateseal configure` command in [Adopt a team policy](adopt-a-team-policy.md) records it.
@@ -54,13 +52,11 @@ release = "2026.11-team-tools"
 
 [choices.python]
 target_version = "py311"
-
-[exceptions]
 ```
 
 ## Manifest
 
-The Manifest is UTF-8 TOML with schema `1`. It needs `capabilities`, `policy`, `choices`, and `exceptions`. Keep the last two tables even when they are empty.
+The Manifest is UTF-8 TOML with schema `1`. It needs `capabilities` and `policy`. The other tables are optional. Leave out `[choices]` and `[exceptions]` when the repository keeps every policy default. A Manifest without them needs gateseal 0.3.0 or later.
 
 ### Capabilities
 

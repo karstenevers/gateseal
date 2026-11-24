@@ -216,14 +216,14 @@ def parse_manifest(data: bytes) -> Manifest:
     document = parse_toml(data)
     doc = fields(
         document,
-        {"schema", "capabilities", "policy", "choices", "exceptions"}
-        | ({"ci", "hooks"} & set(document)),
+        {"schema", "capabilities", "policy"}
+        | ({"choices", "exceptions", "ci", "hooks"} & set(document)),
         "manifest",
     )
     schema(doc["schema"])
     choices = {
         name: mapping(table, f"choices.{name}")
-        for name, table in mapping(doc["choices"], "choices").items()
+        for name, table in mapping(doc.get("choices", {}), "choices").items()
     }
     return Manifest(
         capabilities(sequence(doc["capabilities"], "capabilities")),
@@ -231,7 +231,7 @@ def parse_manifest(data: bytes) -> Manifest:
         choices,
         tuple(
             _exception(name, value)
-            for name, value in mapping(doc["exceptions"], "exceptions").items()
+            for name, value in mapping(doc.get("exceptions", {}), "exceptions").items()
         ),
         parse_ci(doc["ci"]) if "ci" in doc else None,
         parse_hooks(doc.get("hooks", {})),
@@ -281,7 +281,7 @@ def render(
             f"provider = {json.dumps(provider)}",
             f"default_branch = {json.dumps(DEFAULT_BRANCH)}",
         ]
-    return ("\n".join([*lines, "", "[choices]", "", "[exceptions]"]) + "\n").encode()
+    return ("\n".join(lines) + "\n").encode()
 
 
 @dataclass(frozen=True)

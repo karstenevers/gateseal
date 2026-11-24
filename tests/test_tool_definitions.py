@@ -55,41 +55,41 @@ TYPESCRIPT = {
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "82b9bfa46acf8f65e9f6c4bb50b20f9bad9df034aae6be66636248cb67280bc2"
+            "3e285013707b673dd2bf653ce772e2583922bd0f1a34ce7d94354d2f18df40b6"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "5a2948d560cfef16cac085ed991b5c6c2372a7abdba0c6ea5137cdb12e2c71f4"
+            "99bc40005b4f59cb92c81921a507f8451938c967692bf07ba7794e26831bb5cb"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "a20efbe6dac974e16bb02ac5a358ab1a3926116daa3520b560505b032010c6ca",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "6cdf4bc8cbb651ced061ef31245b1dfe2dac4c63ab1ef3ed64a8c321cd066362"
+            "531fcf58f982256ca29fdcff8274e309a48a95bea2b4948bee89b28b15221171"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "c3290625626272b1a6082b7ae6aa3482c06577679916ed120b2e2600b939eec2"
+            "de0ef1db265f5e8a35de9340988c8e128381c868c8ad18f6beb78e610329319b"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "40acc0092033ef92fc7938b7eca6e306bccf107024f1995564088973bc1ed271"
+            "b4425521a8322cbc1c5a8eaf5b4dc09ebcc41a277c1a45d99384a3550e7c476a"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "d8bf690b764aafe7366136ffc146af050c421b7ba1ff24f3c58eb5adb2c80d66"
+            "11ef2a66f90de1067124668da77921f561cc710155ce322b81327ae342016771"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -97,7 +97,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "a154e4dea19f12e36a285c5fb464024e5b41454a0fcc805ec9e0191c99b24288"
+            "217863f99e55a32887d72b15139b3c6937ad8ade0ad68c3384116b86e0e85757"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -105,7 +105,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "e724ae39469ff488392f8049db32e70013f9291863dc33e51f24c39422e5b315"
+            "61eb02343568e2be2bf8b4b59488235b497a1e56e4da897f6d5e67a3fc2c56b5"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -113,7 +113,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "604ba94906ff73fdfec690f24dd8752f15bb41557415384949666476def4329e"
+            "8030b269bcdca9e87e7e5d423117e12dcbe1b3cc4f09f75c87e4d2d923790ffe"
         ),
         CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
         PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
@@ -121,14 +121,14 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "4436fdabff926185ccd4ce35f295e0b715ac9fc47beca28751d4c296187bfdc5"
+            "9a156784b2b99291dda1b5abebef2c8de19e56f422c6d0bcf5071c37ba953b58"
         ),
         CONFIG: "eaaf86891a6bdf161a5d2897fcd259612150df3a84b9af75b0f62ef19aaf5ae8",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "7d37575ec8ff8f9e0dba33a3ec5fea51062ea5addc70ec3e298c10b9e173169e"
+            "71f6f21a331dad739d55a4137add6332199ae4557a1264318fafe32683674ed3"
         ),
         CONFIG: "8bd4d001a4c27a116c9290927cb818eb43779cadeb6de7954efaea12b954d01e",
         ".gateseal/tsc.package-lock.json": (

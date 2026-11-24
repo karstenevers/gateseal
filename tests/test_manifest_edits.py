@@ -99,7 +99,11 @@ def test_a_manifest_it_cannot_edit_is_refused(manifest):
     assert raised.value.code == "manifest_edit_unsupported"
 
 
-def test_removing_the_last_exception_keeps_an_empty_exceptions_table():
-    implicit = MANIFEST.replace("[exceptions]\n\n", "")
-    result = edited(implicit.encode(), None, {"betterleaks": None}).decode()
-    assert result.endswith('exclude = ["vendor"]  # generated\n\n[exceptions]\n')
+def test_exceptions_come_and_go_in_a_manifest_without_the_exceptions_table():
+    without = MANIFEST.split("\n[exceptions]")[0]
+    added = edited(without.encode(), None, {"pre-commit-hooks": HOOKS}).decode()
+    assert added == without + (
+        '\n[exceptions.pre-commit-hooks]\nversion = "5.0.0"\n'
+        'reason = "6.0.0 rejects our YAML"\nreview_by = 2027-01-31\n'
+    )
+    assert edited(added.encode(), None, {"pre-commit-hooks": None}).decode() == without
