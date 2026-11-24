@@ -10,6 +10,7 @@ import json
 import pytest
 from gate_runs import AZURE, EOF_FAILED, GITHUB, YAML_PASSED, gateseal, stand_in
 from gateseal.ci_providers import PROVIDERS
+from gateseal.cli import main
 
 SUMMARY = """\
 ### gateseal gate
@@ -172,3 +173,20 @@ def test_a_summary_that_cannot_be_written_warns_and_keeps_the_exit_code(
     assert shown.splitlines()[-1] == (
         f"{command}gateseal could not write the run summary: {redacted}"
     )
+
+
+@pytest.mark.parametrize(
+    "arguments,heading",
+    [
+        (["--repo", "check", "run", "--bogus"], "### gateseal run"),
+        (["bogus"], "### gateseal"),
+    ],
+    ids=["a value that names a command", "an unknown command"],
+)
+def test_the_summary_of_an_invalid_invocation_names_its_command(
+    monkeypatch, tmp_path, arguments, heading
+):
+    summary = tmp_path / "summary.md"
+    in_ci(monkeypatch, **GITHUB, GITHUB_STEP_SUMMARY=str(summary))
+    assert main(arguments) == 2
+    assert summary.read_text().splitlines()[0] == heading
