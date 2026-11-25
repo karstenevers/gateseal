@@ -40,11 +40,11 @@ gateseal-node-packages = "gateseal.node_packages:main"
 
 [dependency-groups]
 dev = [
-    "coverage==7.17.2",
+    "coverage==7.17.3",
     "pytest==9.2.0",
     "pytest-xdist==3.8.0",
     "pytestmut==0.1.0",
-    "ruff==0.17.4",
+    "ruff==0.17.5",
     "pyright==1.1.414",
     "pre-commit==4.7.0",
 ]
