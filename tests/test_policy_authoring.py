@@ -2,12 +2,12 @@
 
 Every test drives the installed command. Offline, the hook repositories are
 local Git repositories that their GitHub URLs reach through
-url.<base>.insteadOf, a urllib opener that the driver installs serves
-Betterleaks' release files and PyPI's release pages from a directory, and the
-driver's npm answers with the lockfiles of npm.json and its Node with the
-presets of presets.json, so gateseal policy lock and add run their own code
-against fixtures. The network tests resolve
-versions from the real upstream.
+url.<base>.insteadOf, a urllib opener that the driver installs serves the
+release files of Betterleaks and OSV-Scanner and PyPI's release pages from a
+directory, and the driver's npm answers with the lockfiles of npm.json and its
+Node with the presets of presets.json, so gateseal policy lock and add run
+their own code against fixtures. The network tests resolve versions from the
+real upstream.
 """
 
 import hashlib
@@ -29,6 +29,7 @@ EXACT_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.+-]+)?")
 HOOKS = "https://github.com/pre-commit/pre-commit-hooks"
 RUFF = "https://github.com/astral-sh/ruff-pre-commit"
 RELEASES = "github.com/betterleaks/betterleaks/releases/download"
+AUDIT_RELEASES = "github.com/google/osv-scanner/releases/download"
 TEAM = "https://policy.example/team/gateseal-policy.git"
 IDENTITY = ["-c", "user.name=Policy author", "-c", "user.email=policy@example.invalid"]
 STEP = "Run gateseal policy lock in the policy directory."
@@ -128,6 +129,18 @@ def release(root, version, platforms=("linux_x64", "darwin_arm64")):
     return directory
 
 
+def audit_release(root, version):
+    """Publish fake OSV-Scanner programs of version and their checksums."""
+    directory = root / AUDIT_RELEASES / f"v{version}"
+    directory.mkdir(parents=True)
+    lines = []
+    for platform in ("linux_amd64", "darwin_arm64"):
+        name = f"osv-scanner_{platform}"
+        (directory / name).write_bytes(name.encode())
+        lines.append(f"{hashlib.sha256(name.encode()).hexdigest()}  {name}")
+    (directory / "osv-scanner_SHA256SUMS").write_text("\n".join(lines) + "\n")
+
+
 def serve_node(root):
     """Publish a fake release of the bundled Node, and npm's bundled lockfiles
     and presets."""
@@ -187,6 +200,8 @@ def upstream(installed, tmp_path):
         settings[f"url.{repository.as_uri()}.insteadOf"] = url
     for version in SECRETS.versions:
         release(root, version)
+    for version in BUNDLED_TOOLS["osv-scanner"].versions:
+        audit_release(root, version)
     for tool in ("coverage", "pyright", "pytestmut", "deptry"):
         for version in BUNDLED_TOOLS[tool].versions:
             page = root / f"pypi.org/pypi/{tool}/{version}/json"
@@ -226,6 +241,8 @@ def started(installed, tmp_path):
         "rules/betterleaks.toml",
         "rules/crap.toml",
         "rules/eslint.toml",
+        "rules/knip.toml",
+        "rules/osv-scanner.toml",
         "rules/prettier.toml",
         "rules/pyright.toml",
         "rules/ruff.toml",

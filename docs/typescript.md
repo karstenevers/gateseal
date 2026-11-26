@@ -4,6 +4,8 @@ The bundled `typescript` capability checks staged `.ts` and `.tsx` files with ES
 
 The bundled `typescript-types` capability checks the project's types with `tsc` at each push and in the CI gate. Select it beside `typescript` or alone. See [Type checks at push](#type-checks-at-push).
 
+Two more capabilities check the project's dependencies. `typescript-unused` runs knip at each push and in the CI gate. `typescript-audit` checks `package-lock.json` for known vulnerabilities in the CI gate only. See [Dependency checks](#dependency-checks).
+
 ## Select the capability
 
 [Install gateseal](install.md), pre-commit and mise first. From the repository root, run:
@@ -231,6 +233,115 @@ Run `gateseal configure` and commit the changed files. A team policy reviews ano
 - The built-in `tsc` takes its options from the project's `tsconfig.json`, so a project can turn strict checks off. A team policy can own them with [its own tool and strict flags](add-a-tool.md#check-a-second-tsconfig-with-strict-tsc-flags).
 - Yarn is not supported. Neither are workspaces nor project references. The check reads one lockfile and one `tsconfig.json`, both at the repository root.
 - `gateseal gate --json` lists no `tsc` error by file and line. The hook's entry says that it failed, and the text output shows the report of `tsc`.
+
+## Dependency checks
+
+Two capabilities of the bundled policy check a project's dependencies. Select each one alone or together, beside the other TypeScript capabilities:
+
+- `typescript-unused` runs [knip](https://knip.dev) at each push and in the CI gate. knip names each file, export and dependency that nothing in the project uses. With its defaults, knip also names an import of a package that `package.json` does not list, and an import that it cannot resolve.
+- `typescript-audit` runs [OSV-Scanner](https://google.github.io/osv-scanner/) in the CI gate only. It names each package in `package-lock.json` that has a known vulnerability.
+
+A repository that selects only `typescript` and `typescript-types` gets neither check, also after a `gateseal upgrade`.
+
+### Select the dependency checks
+
+`typescript-unused` needs the same Node project as `typescript-types`: `package.json` and exactly one lockfile at the root, `package-lock.json` or `pnpm-lock.yaml`. `typescript-audit` needs an npm project with `package-lock.json`. From the repository root, run:
+
+```sh
+gateseal configure \
+  --capability hygiene \
+  --capability typescript \
+  --capability typescript-unused \
+  --capability typescript-audit \
+  --ci github
+pre-commit install
+```
+
+In a configured repository, add the capabilities to `capabilities` in `gateseal.toml` and run `gateseal configure` instead. Commit the changed files. Each clone then needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push).
+
+configure writes these files under `.gateseal/`:
+
+- `knip.toml`, the knip settings of the policy.
+- `knip-loader.mjs`, the file that gives the settings to knip.
+- `knip.package-lock.json`, npm's lockfile of knip.
+- `osv-scanner.toml`, the advisories that the audit ignores.
+
+The bundled `policy.toml` has these lines for the two capabilities:
+
+<!-- policy tables: typescript dependencies -->
+```toml
+[capabilities.typescript-audit.tools.osv-scanner]
+configuration = "rules/osv-scanner.toml"
+pin = "2.7.1"
+reviewed = ["2.7.1"]
+
+[capabilities.typescript-unused.tools.knip]
+configuration = "rules/knip.toml"
+pin = "6.46.1"
+reviewed = ["6.46.1"]
+```
+
+### Unused code with knip
+
+At each push, gateseal's hook `gateseal-node-packages` first installs the packages that the lockfile pins, as for `tsc`. Then knip reads the whole project. A finding stops the push. knip names each unused item, with the file and the position:
+
+```text
+Unused files (1)
+src/old.ts
+Unused devDependencies (1)
+is-number  package.json:11:6
+Unused exports (1)
+unused  src/shop.ts:8:14
+```
+
+Delete the unused file or export, or remove the dependency from `package.json` and run `npm install` or `pnpm install`. Then commit and push again. To keep an export that only code outside the project uses, mark it with a `/** @public */` comment, as knip documents. The diff shows the comment.
+
+knip finds the entry files of the project without settings. It reads `main`, `exports`, `bin` and the `scripts` in `package.json`, and the configuration files of the tools that it knows, such as Vitest. It also takes `index`, `main` and `cli` files at the root and in `src/`. A file that no entry file reaches is an unused file. To make knip see an entry file, name it in `package.json`, for example in a script.
+
+knip ran in 0.4 to 0.6 seconds on a project of two files. The install of the packages took about 1 second more. Both grow with the project, so knip runs at a push and not at each commit.
+
+knip reads only the policy's settings. The hook gives knip gateseal's loader with `--config`, so knip does not read `knip.json` or the `knip` field of `package.json`. knip still checks the keys of that field. A key that the pinned knip does not know stops knip, so the push and the CI gate fail until you remove the key. knip skips the files that Git ignores, and the files in `.gateseal/`. A Policy Author can add keys of knip's configuration to `rules/knip.toml`, such as `ignoreDependencies` or `rules`. The bundled file is empty, so knip's defaults apply. To check only unused items, a Policy Author can set `include` to the issue types that knip documents.
+
+A `package-lock.json` or a `pnpm-lock.yaml` that does not match `package.json` stops the push and the CI gate at the install, before knip runs.
+
+### The audit
+
+The hook runs `osv-scanner scan source --lockfile package-lock.json`. It sends the name and version of each package in `package-lock.json` to the OSV service at `https://api.osv.dev`. It fails when a package has a known vulnerability. The output names the advisory, the package, its version and the fixed version:
+
+```text
++-------------------------------------+------+-----------+----------+---------+---------------+-------------------+
+| OSV URL                             | CVSS | ECOSYSTEM | PACKAGE  | VERSION | FIXED VERSION | SOURCE            |
++-------------------------------------+------+-----------+----------+---------+---------------+-------------------+
+| https://osv.dev/GHSA-xvch-5gv4-984h | 9.8  | npm       | minimist | 1.2.5   | 1.2.6         | package-lock.json |
++-------------------------------------+------+-----------+----------+---------+---------------+-------------------+
+```
+
+mise installs OSV-Scanner from its GitHub release and checks its SHA-256 against the Lock.
+
+The audit runs only in the CI gate, at each run, such as for a pull request or in the weekly run. It never runs at a commit, at a push or in `gateseal run`. The service gives the current advisories at each run. So a new advisory can fail the weekly run of a repository that nobody changed. Update the package to a fixed version and commit `package-lock.json`, or ask the Policy Author to ignore the advisory.
+
+The audit needs network access to `api.osv.dev`. When OSV-Scanner cannot reach the service, or `package-lock.json` is missing, the gate fails with `tool_failed` and exit code 4. It never passes. A `package-lock.json` that names no package, as in a project without dependencies, and an `npm-shrinkwrap.json` beside it also fail the gate, because OSV-Scanner then finds no package to check. Behind a proxy, OSV-Scanner reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in upper or lower case, and a CA bundle from `SSL_CERT_FILE` or `SSL_CERT_DIR`. The audit's time counts toward the policy's [time budget](ci-gate.md#time-budget).
+
+The audit reads `package-lock.json` as the repository commits it. Only the install of `typescript-unused` or `typescript-types` checks that the lockfile matches `package.json`. So select one of them beside `typescript-audit`.
+
+### Ignore an advisory
+
+The policy owns the list of ignored advisories. A Policy Author adds a table for each one to `rules/osv-scanner.toml` of the policy, with its ID and the reason:
+
+```toml
+[[IgnoredVulns]]
+id = "GHSA-xxxx-xxxx-xxxx"
+reason = "The project never parses untrusted arguments."
+```
+
+Any ID of the advisory works, such as its GHSA or CVE ID. `ignoreUntil` sets a date after which the advisory counts again. The hook gives OSV-Scanner this file with `--config`. So a repository cannot ignore an advisory: OSV-Scanner does not read an `osv-scanner.toml` of the repository.
+
+### What the dependency checks cannot do
+
+- knip and the audit read one project at the repository root. Workspaces are not supported.
+- The audit reads only `package-lock.json`. It does not check a pnpm or Yarn project.
+- knip runs the configuration files of the tools that it knows, such as `vitest.config.ts`, to find entry files. They are code of the repository, as the tests are.
+- `gateseal gate --json` lists no finding by file and line. The hook's entry says that it failed, and the text output shows the report.
 
 ## gateseal and pre-commit's Node hooks
 

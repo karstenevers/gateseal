@@ -1,0 +1,8 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# OSV-Scanner reads only this file, never an osv-scanner.toml of the
+# repository. To ignore an advisory, add a table with its ID, such as a GHSA
+# or CVE ID, and the reason:
+#
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# reason = "Why the advisory does not apply."

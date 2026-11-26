@@ -19,8 +19,9 @@ from gateseal.diagnostics import NEXT_STEPS, GatesealError
 from gateseal.policy import load_bundled_policy
 from gateseal.validation import canonical
 from gateseal.worktree import locate_worktree, operation_lock, preparation_directory
+from node_projects import NPM, write_project
 from team_policy import URL, git, publish
-from test_tool_definitions import without_typescript_types
+from test_tool_definitions import bundled_before
 
 REASON = "Our fixtures need the older rules"
 REVIEW_BY = date(2027, 1, 31)
@@ -243,14 +244,27 @@ def test_a_gateseal_move_takes_this_bundled_policy_only_when_asked(
     assert tracked(consumer) == current
 
 
+@pytest.mark.parametrize(
+    ("added", "capabilities", "left_out"),
+    [
+        ("typescript-types", ("hygiene", "python", "typescript"), ("tsc",)),
+        (
+            "typescript-audit",
+            ("hygiene", "typescript", "typescript-types"),
+            ("knip", "osv-scanner"),
+        ),
+    ],
+    ids=["before typescript-types", "before typescript-audit"],
+)
 def test_a_bundled_move_adds_no_hook_of_a_capability_left_unselected(
-    consumer, monkeypatch, tmp_path
+    consumer, monkeypatch, tmp_path, added, capabilities, left_out
 ):
-    """An older gateseal bundled the policy before it offered typescript-types."""
-    earlier = without_typescript_types(tmp_path / "earlier")
+    """An older gateseal bundled the policy before it offered added."""
+    earlier = bundled_before(tmp_path / "earlier", added)
+    write_project(consumer, NPM)
     with monkeypatch.context() as patched:
         patched.setattr(lock, "load_bundled_policy", lambda: earlier)
-        worktree = configure(consumer, "hygiene", "python", "typescript")
+        worktree = configure(consumer, *capabilities)
     path = consumer / "gateseal.lock"
     document = json.loads(path.read_bytes())
     document["gateseal"].update(version="0.1.0", commit="1" * 40)
@@ -264,7 +278,8 @@ def test_a_bundled_move_adds_no_hook_of_a_capability_left_unselected(
     assert moved | {"gateseal.lock": b""} == current | {"gateseal.lock": b""}
     document = json.loads(moved["gateseal.lock"])
     assert document["policy"]["digest"] == POLICY.content_digest
-    assert "tsc" not in document["components"]
+    recorded = {*document["components"], *document["native_artifacts"]}
+    assert not recorded & set(left_out)
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,6 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# The knip settings of every repository. knip reads no knip.json of the
+# repository and no knip field of its package.json. Without settings, knip
+# finds the entry files from package.json, such as main, exports, bin and the
+# scripts, and from the configuration files of the tools that it knows. Add
+# keys of knip's configuration here, such as ignoreDependencies or rules.

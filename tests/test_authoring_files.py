@@ -17,6 +17,8 @@ BUNDLED = (
     "rules/betterleaks.toml",
     "rules/crap.toml",
     "rules/eslint.toml",
+    "rules/knip.toml",
+    "rules/osv-scanner.toml",
     "rules/prettier.toml",
     "rules/pyright.toml",
     "rules/ruff.toml",

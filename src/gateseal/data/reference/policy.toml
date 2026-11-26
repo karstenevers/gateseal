@@ -110,3 +110,19 @@ exclude = []
 [capabilities.typescript-types.tools.tsc]
 pin = "6.0.3"
 reviewed = ["6.0.3", "7.0.2", "5.9.3"]
+
+# typescript-audit runs only in the gate, for an npm project. OSV-Scanner asks
+# the OSV service about each package in package-lock.json, so a new advisory
+# can fail a run without a commit. The rules list the advisories to ignore.
+[capabilities.typescript-audit.tools.osv-scanner]
+configuration = "rules/osv-scanner.toml"
+pin = "2.7.1"
+reviewed = ["2.7.1"]
+
+# typescript-unused runs knip at a push and in the gate, in the repository's
+# own npm or pnpm project. It finds unused files, exports and dependencies.
+# The rules hold knip's settings, and knip reads none of the repository's.
+[capabilities.typescript-unused.tools.knip]
+configuration = "rules/knip.toml"
+pin = "6.46.1"
+reviewed = ["6.46.1"]

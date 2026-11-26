@@ -10,7 +10,7 @@ from gateseal.lock import compile_lock, compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy, load_policy_tree
 from gateseal.tools import built_in_tools, load_definition
-from gateseal.tools.model import Origin
+from gateseal.tools.model import Origin, Stage
 from gateseal.validation import canonical
 
 BETTERLEAKS_1_8 = (
@@ -57,41 +57,41 @@ TYPESCRIPT = {
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "7cd97b48f90fa23625607e2032575648bd79d99487d96c374184a5a87a0a111b"
+            "aa72a95c4eef9c304cea61b323a5d800cb7d5aa092796b27918c14b22d311d7a"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "b5f1407b3fce80317916d89e03afa3021de56c44e19068d1083dd0892d9e9fb8"
+            "5386361f99f6be787ab30b95284e70e9678d947278900d39e909b539f2beeb4f"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "b3496ba1e7b787ed736e2ee864055d54dfeb5d5a699c9ba6415a2f6b49360cf9",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "1562b9393023621724aa674bdc6d53128ab8d1b010800460377bc6a8612f821f"
+            "dad68bb8403e07892d6fbea456f961855fa1376758a9c3083225f8e4913f4954"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "38b4bea73d28c8fbfb31911fd52ace0d1d2949a55d483fde6a725002e88ea5f2"
+            "6de61cc673359c0c5fec861103d70592df162a6dcfef385b997d67f4219c98f9"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "5eac82ec2e00659436787254473d8547f9ed506628502d7c484c1c0a473a1e9c"
+            "5098b27ec8600b733dd4fd3d5709f82ad14df02455583101d521bcaaff83e5e7"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "680e9251bca2aaef6114df24788e1f89aed43265540f6ef5774c29d491c588b3"
+            "8a9060405fea7573094bd096ea6553e9f882c9a9f5f7dc418287a46c65b8fbe3"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -99,7 +99,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "a619a05d8783f6304a72da02ba3da1ccd872fb6f9c552967652ed746cadd41f4"
+            "6daf9892cf6e6a55d3f38798760b7eb648fedf649e03727fcb11938d81c7ca67"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -107,7 +107,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "36d718ab374dbe1347bc9c29fde35e5498883ea96513fecb404b922a9f9f3d2c"
+            "e95df1c7375f6e980b8560d58fe5f61a27045f23703ea8cb83e8ea35f9a669db"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -115,7 +115,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "9e321d18c044825528d6ffdbc07420d09ba3796c37e65c8fc5dd6422a067606b"
+            "f3a5d8b8886ed6cc4c0d8ef81ce7afd7960a7bd0907ed31c9105bd5c48482ff9"
         ),
         CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
         PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
@@ -123,18 +123,46 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "84dda2eceb096911fb9dd239df0ed6c0f8110e8e4caf575fb98691ed69211f2d"
+            "c2a6ca58e19e27bdda630404bdd0dea14f3dd192439ce43cab7c95fdfc53f6ec"
         ),
         CONFIG: "b96d91315461442585f300d9272d6317dbaf0bdff8b2f9ba4ddc5b218d340a6c",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "508e9e4cf37717115ed8ae15ab7228983e1bbca536da52ff94ade878e2e7f516"
+            "2b9d0ff79873c09a5e193b100ad0758ae78cd34fe589668d2e10f005d47540d2"
         ),
         CONFIG: "45e7fd010427200b9b51552cb144cb75b6f78b4e8de4182f854b5d51d5b7f840",
         ".gateseal/tsc.package-lock.json": (
             "454a05c1b8202c11775d92f24048111003d4cc731e1e5d03326b67799ac76051"
+        ),
+        **TYPESCRIPT,
+    },
+    (
+        "hygiene",
+        "typescript",
+        "typescript-types",
+        "typescript-audit",
+        "typescript-unused",
+    ): {
+        "gateseal.lock": (
+            "abd5a8558f98115c03e259cfc30195dc3628d050307ca30ad8120deda4215282"
+        ),
+        CONFIG: "b6e9536f0b68aad704cf8595795cab17bedd7ee78b0ad90ccbd71550c44410e0",
+        ".gateseal/tsc.package-lock.json": (
+            "454a05c1b8202c11775d92f24048111003d4cc731e1e5d03326b67799ac76051"
+        ),
+        ".gateseal/knip.toml": (
+            "1532542f0473c9389fedad794667a0bcdf26d374902a05bba6bfd571929d79b7"
+        ),
+        ".gateseal/knip-loader.mjs": (
+            "5a62b046ff3d09daaec693b7720f42384f031195cb29da70189a605bd1367226"
+        ),
+        ".gateseal/knip.package-lock.json": (
+            "8ca59a3eef32ee898e489925c68b9523977414bd43118fef4d093b9f9ed06800"
+        ),
+        ".gateseal/osv-scanner.toml": (
+            "e729d669b14adac54a1d9c01264b344b0330a730252658cf6dbeb0d73f4c18df"
         ),
         **TYPESCRIPT,
     },
@@ -156,6 +184,7 @@ GOLDEN = {
         "python with types",
         "typescript",
         "typescript with types",
+        "typescript with every check",
     ],
 )
 def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
@@ -176,32 +205,46 @@ def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
     assert digests == GOLDEN[selection]
 
 
-def without_typescript_types(root):
-    """Return the bundled policy as it was before it offered typescript-types."""
+def bundled_before(root, capability):
+    """Return the bundled policy as it was before it offered capability.
+
+    Every capability after it in policy.toml goes too, with its tools' records.
+    """
     for asset in load_bundled_policy().assets:
-        (root / asset.path).parent.mkdir(exist_ok=True)
+        (root / asset.path).parent.mkdir(parents=True, exist_ok=True)
         (root / asset.path).write_bytes(asset.content)
     path = root / "policy.toml"
-    path.write_text(path.read_text().split("\n# typescript-types")[0])
+    kept, dropped = path.read_text().split(f"\n# {capability}")
+    path.write_text(kept)
     locked = json.loads((root / "policy.lock").read_bytes())
-    del locked["components"]["tsc"]
+    table = re.compile(r"^\[capabilities\.[a-z-]+\.tools\.([a-z-]+)\]$", re.M)
+    for tool in table.findall(dropped):
+        del locked["components"][tool]
     (root / "policy.lock").write_bytes(canonical(locked))
     return load_policy_tree(root)
 
 
-@pytest.mark.parametrize("capability", ["typescript", "python"])
-def test_a_selection_without_typescript_types_changes_only_in_the_policy_digest(
-    tmp_path, capability
+@pytest.mark.parametrize(
+    ("added", "selection"),
+    [
+        ("typescript-types", ("hygiene", "typescript")),
+        ("typescript-types", ("hygiene", "python")),
+        ("typescript-audit", ("hygiene", "typescript", "typescript-types")),
+    ],
+    ids=["typescript", "python", "typescript with types"],
+)
+def test_a_selection_without_a_new_capability_changes_only_in_the_policy_digest(
+    tmp_path, added, selection
 ):
     def compiled(policy):
         source = BundledSource(policy.release)
-        manifest = render(("hygiene", capability), source)
+        manifest = render(selection, source)
         chosen = resolve(parse_manifest(manifest), policy)
         lock = compile_lock(manifest, source, policy, PIN, chosen)
         return lock, compile_outputs(chosen, PIN, source)
 
-    bundled, earlier = load_bundled_policy(), without_typescript_types(tmp_path)
-    assert "typescript-types" not in earlier.capabilities
+    bundled, earlier = load_bundled_policy(), bundled_before(tmp_path, added)
+    assert added not in earlier.capabilities
     (lock, outputs), (earlier_lock, earlier_outputs) = map(compiled, (bundled, earlier))
     assert outputs == earlier_outputs
     assert lock["policy"] == earlier_lock["policy"] | {"digest": bundled.content_digest}
@@ -257,6 +300,30 @@ def test_built_in_npm_tools_name_only_owned_files():
     )
 
 
+def test_the_dependency_checks_read_only_the_policy_s_settings():
+    knip, audit = built_in_tools()["knip"], built_in_tools()["osv-scanner"]
+    assert knip.owned == (".gateseal/knip.toml", ".gateseal/knip-loader.mjs")
+    assert knip.hooks["knip"].args[:2] == ("--config", ".gateseal/knip-loader.mjs")
+    assert audit.owned == (".gateseal/osv-scanner.toml",)
+    args = audit.hooks["osv-scanner"].args
+    assert args[args.index("--config") + 1] == ".gateseal/osv-scanner.toml"
+    assert audit.stages == frozenset({Stage.CI})
+
+
+def allowed(program):
+    return {program[i + 1] for i, word in enumerate(program) if word == "--allow-env"}
+
+
+def test_only_a_tool_that_asks_a_service_gets_the_proxy_in_each_start():
+    """A hook and a history scan, which names its own variables, start it alike."""
+    tools = load_bundled_policy().tools
+    network = {"HTTPS_PROXY", "https_proxy", "NO_PROXY", "SSL_CERT_FILE"}
+    audit, scan = tools["osv-scanner"], ("GIT_NO_LAZY_FETCH",)
+    assert network <= allowed(audit.program())
+    assert network | set(scan) <= allowed(audit.program(scan))
+    assert allowed(tools["betterleaks"].program(scan)) == set(scan)
+
+
 @pytest.mark.parametrize(
     "name,old,new",
     [
@@ -300,6 +367,7 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
             "",
         ),
         ("betterleaks", "check_at_commit = true", 'check_at_commit = "yes"'),
+        ("osv-scanner", "network = true", 'network = "yes"'),
         ("ruff", 'scope = "files"', 'scope = "files"\n[executable]\nname = "ruff"'),
         ("betterleaks", "_{version}_{platform}.tar.gz", "_{version}.tar.gz"),
         ("betterleaks", '"betterleaks_{version}', '"../{version}'),
@@ -317,6 +385,7 @@ def test_values_this_compiler_lacks_need_a_newer_compiler(name, old, new):
         "hook name twice",
         "release binary without executable",
         "check at commit that is no boolean",
+        "network that is no boolean",
         "pre-commit repository with an executable",
         "archive without platform",
         "archive path",

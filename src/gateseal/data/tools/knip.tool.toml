@@ -1,0 +1,56 @@
+# knip finds the files, exports and dependencies of the Node project that
+# nothing uses. It reads the project's package.json and the packages in its
+# node_modules, which gateseal's own hook installs from the lockfile first.
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "knip"
+
+[executable]
+name = "knip"
+
+# The policy's knip settings, which the loader reads.
+[configuration]
+format = "toml"
+
+# The knip configuration that the hook names with --config, so knip reads no
+# knip.json of the repository. knip still merges the knip field of
+# package.json under it, so the loader sets each key of that field to
+# undefined before the policy's settings. knip still stops on a key there that
+# it does not know, and no configuration can remove the key. The loader parses
+# the policy's file with the smol-toml that the hook's install of knip holds,
+# and adds gateseal's own folder to ignore, so no owned file is an unused file.
+[files.loader]
+extension = "mjs"
+content = '''
+// gateseal owns this file; gateseal configure writes it.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+const { parse } = createRequire(process.argv[1])("smol-toml");
+const file = fileURLToPath(import.meta.url).replace(/-loader\.mjs$/, ".toml");
+const policy = parse(readFileSync(file, "utf8"));
+const manifest = readFileSync("package.json", "utf8").replace(/^\uFEFF/, "");
+const project = JSON.parse(manifest).knip ?? {};
+if (Object.hasOwn(project, "__proto__")) {
+  throw new Error("Remove __proto__ from the knip field of package.json.");
+}
+const unset = Object.fromEntries(Object.keys(project).map((key) => [key, undefined]));
+export default {
+  ...unset,
+  ...policy,
+  ignore: [...[policy.ignore ?? []].flat(), ".gateseal/**"],
+};
+'''
+
+# --no-config-hints leaves out hints to change a configuration that the
+# repository does not own. knip exits 1 when it finds an unused item and 2
+# when it cannot check, such as on an unknown setting.
+[hooks.knip]
+name = "knip"
+args = ["--config", "{loader}", "--no-progress", "--no-config-hints"]
+output = "plain"
+finding_exit_codes = [1]

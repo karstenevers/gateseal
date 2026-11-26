@@ -39,3 +39,14 @@ def test_the_typescript_example_is_part_of_the_bundled_policy():
         "node": bundled["node"],
         "capabilities": {"typescript": typescript},
     }
+
+
+def test_the_typescript_dependency_example_is_part_of_the_bundled_policy():
+    shown = tomllib.loads(
+        example("typescript.md", "policy tables: typescript dependencies")
+    )
+    capabilities = tomllib.loads((bundled_root() / "policy.toml").read_text())[
+        "capabilities"
+    ]
+    names = ("typescript-audit", "typescript-unused")
+    assert shown == {"capabilities": {name: capabilities[name] for name in names}}
