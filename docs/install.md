@@ -18,6 +18,7 @@ uv tool install "gateseal==VERSION"
 
 | Requirement | Version and use |
 | --- | --- |
+| Python | 3.11 or later. `gateseal policy lock` and `policy add` need 3.11.18, 3.12.16, 3.13.18, 3.14.10, 3.15.2 or a later release of the same line, because earlier releases trust compromised certificates. |
 | Git | 2.54.0 or later for repository commands and commits. |
 | uv | 0.13.6 or later is tested for installation and setup, and for commits when the policy selects a tool that runs in the uv project, such as Pyright. |
 | pre-commit | 4.7.0 or later for commits when installed separately. |

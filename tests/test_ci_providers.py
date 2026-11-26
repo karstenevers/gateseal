@@ -17,7 +17,6 @@ from gateseal.ci_providers.model import MISE_SHA256, MISE_URL, UV_SHA256, UV_URL
 from gateseal.cli import main
 from gateseal.diagnostics import GatesealError
 from gateseal.manifest import parse_manifest
-from gateseal.setup import PYTHON
 from installation import clone, process
 
 EACH = pytest.mark.parametrize("provider", sorted(PROVIDERS))
@@ -51,7 +50,7 @@ def test_preparation_pins_its_tools_and_the_locked_gateseal(provider):
         PIN.repository,
         PIN.commit,
     )
-    assert env["GATESEAL_PYTHON"] == PYTHON
+    assert env["GATESEAL_PYTHON"] == "~=3.14.10"
 
 
 @EACH

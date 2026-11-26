@@ -268,6 +268,18 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Security
 
+- `gateseal policy lock` and `gateseal policy add` need a Python release
+  that blocks the compromised eMudhra intermediate certificates
+  (CVE-2026-115557): 3.11.18, 3.12.16, 3.13.18, 3.14.10, 3.15.2 or a later
+  release of the same line. On an earlier release, someone on the network path
+  could change the checksums that they read over HTTPS, so they stop with
+  `untrusted_python` before they read anything from upstream. Commits and the
+  other commands still run on Python 3.11 and later.
+- `gateseal setup` installs pre-commit on Python 3.14.10 or a later 3.14
+  release, and reinstalls it when it runs on an earlier 3.14 release. It needs
+  uv 0.13.6 or later, the first uv that downloads Python 3.14.10. The
+  generated CI file asks uv for the same Python. The next `gateseal upgrade`
+  writes the file with the new request.
 - gateseal redacts a recognized credential in captured output even when
   terminal color codes split it or come right before it.
 - In GitHub Actions and Azure Pipelines, a workflow or logging command in

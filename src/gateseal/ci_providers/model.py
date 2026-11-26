@@ -60,11 +60,11 @@ class GateJob:
 
     triggers is None when the team's own pipeline includes the job and owns
     when it runs. runner is empty for the hosted image, or names the machine in
-    the provider's own terms. python is the version that gateseal setup
-    installs pre-commit with. repository and commit name the gateseal that the
-    Lock pins. policy_repository is the URL of a Git policy, or None for a
-    bundled policy. Each provider decides whether its credential helper serves
-    that URL.
+    the provider's own terms. python is the uv request for the Python that
+    gateseal setup installs pre-commit on. repository and commit name the
+    gateseal that the Lock pins. policy_repository is the URL of a Git policy,
+    or None for a bundled policy. Each provider decides whether its credential
+    helper serves that URL.
     """
 
     triggers: Triggers | None

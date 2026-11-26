@@ -20,6 +20,7 @@ import pytest
 from gateseal import setup
 from gateseal.cli import main
 from gateseal.diagnostics import GatesealError
+from gateseal.python_releases import FIRST_TRUSTED
 from installation import process, success
 
 PYTHON = "{}.{}".format(*sys.version_info)
@@ -157,7 +158,7 @@ def test_setup_installs_pre_commit_and_the_launcher_for_new_clones(machine, tmp_
     ]
     version = setup.PRE_COMMIT
     assert machine.calls() == [
-        ["tool", "install", "--reinstall", "--python", PYTHON]
+        ["tool", "install", "--reinstall", "--python", setup.python_request()]
         + [f"pre-commit=={version}", str(tools), str(machine.root / "bin")]
     ]
     assert message(result) == (
@@ -238,7 +239,7 @@ def test_setup_restores_a_launcher_without_execute_permission(machine):
     assert len(machine.calls()) == 1
 
 
-@pytest.mark.parametrize("named", ["python", "pre-commit"])
+@pytest.mark.parametrize("named", ["python", "untrusted python", "pre-commit"])
 def test_setup_reinstalls_pre_commit_on_another_named_version(
     machine, monkeypatch, named
 ):
@@ -246,12 +247,15 @@ def test_setup_reinstalls_pre_commit_on_another_named_version(
     if named == "python":
         # A prefix of the running version without its dot, such as 3.1 of 3.14.
         monkeypatch.setattr(setup, "PYTHON", PYTHON[:3])
+    elif named == "untrusted python":
+        line = tuple(sys.version_info[:2])
+        monkeypatch.setitem(FIRST_TRUSTED, line, sys.version_info.micro + 1)
     else:
         monkeypatch.setattr(setup, "PRE_COMMIT", "9.9.9")
     code, result = gateseal("setup")
     assert (code, result["changed"][0]) == (0, str(machine.root / "tools/pre-commit"))
     assert machine.calls()[1][4:6] == [
-        setup.PYTHON,
+        setup.python_request(),
         f"pre-commit=={setup.PRE_COMMIT}",
     ]
 
@@ -584,7 +588,7 @@ def test_setup_reports_a_failed_install(machine):
 
 @pytest.mark.parametrize(
     ("missing", "name", "minimum"),
-    [("git", "Git", "2.54.0"), ("uv", "uv", "0.13.5")],
+    [("git", "Git", "2.54.0"), ("uv", "uv", "0.13.6")],
 )
 def test_setup_names_the_minimum_version_of_a_missing_tool(
     machine, monkeypatch, missing, name, minimum
@@ -614,17 +618,17 @@ def test_setup_refuses_an_old_git_or_uv(machine):
     assert "gateseal requires Git 2.54.0 or later." in message(result)
     (machine.shims / "git").unlink()
     (machine.shims / "git").symlink_to(GIT)
-    machine.shim("uv", 'echo "uv 0.13.4"\n')
+    machine.shim("uv", 'echo "uv 0.13.5"\n')
     code, result = gateseal("setup")
     assert (code, result["code"]) == (4, "uv_version_mismatch")
-    assert message(result).endswith("requires uv 0.13.5 or later.")
+    assert message(result).endswith("requires uv 0.13.6 or later.")
     assert not machine.root.exists()
 
 
 def test_setup_accepts_the_oldest_uv_it_supports(machine):
     script = (machine.shims / "uv").read_text().removeprefix("#!/bin/sh\n")
     machine.shim(
-        "uv", 'if [ "$1" = --version ]; then echo "uv 0.13.5"; exit 0; fi\n' + script
+        "uv", 'if [ "$1" = --version ]; then echo "uv 0.13.6"; exit 0; fi\n' + script
     )
     code, result = gateseal("setup")
     assert (code, result["code"]) == (0, "set_up")

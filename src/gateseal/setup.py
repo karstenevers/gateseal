@@ -34,14 +34,14 @@ from gateseal.lfs_check import SET_UP
 from gateseal.lfs_check import UPLOAD as STARTS_UPLOAD
 from gateseal.managed_files import CONFIG, read_optional, write_atomic
 from gateseal.processes import MINIMUM_GIT, execute, find_git, find_tool
+from gateseal.python_releases import first_trusted, trusted
 from gateseal.tools.mise import mise_problem, require_mise
 from gateseal.tools.model import LAUNCHERS
 from gateseal.validation import version_key
 from gateseal.worktree import Worktree, locate_worktree
 
 PYTHON = "3.14"
-"""The Python that setup installs pre-commit on: a minor version, so that every
-supported uv finds or downloads a patch release of it."""
+"""The Python line that setup installs pre-commit on."""
 
 TEMPLATE_SETTING = "init.templateDir"
 
@@ -94,6 +94,14 @@ PROBE = (
     "print(platform.python_version(), importlib.metadata.version('pre-commit'))"
 )
 """Print the owned install's Python and pre-commit versions."""
+
+
+def python_request() -> str:
+    """Return the uv request for a trusted release of PYTHON, such as ~=3.14.10.
+
+    A request of the line alone could reuse an older release that uv installed.
+    """
+    return "~=" + first_trusted(PYTHON)
 
 
 def data_root() -> Path:
@@ -344,7 +352,7 @@ def _installed(layout: Layout, pre_commit: str, home: Path) -> bool:
         allow_failure=True,
     )
     python, _, version = reported.stdout.decode().strip().partition(" ")
-    return python.startswith(PYTHON + ".") and version == pre_commit
+    return python.startswith(PYTHON + ".") and trusted(python) and version == pre_commit
 
 
 def _install(uv: str, layout: Layout, pre_commit: str, home: Path) -> None:
@@ -355,7 +363,7 @@ def _install(uv: str, layout: Layout, pre_commit: str, home: Path) -> None:
         UV_TOOL_BIN_DIR=str(layout.root / "bin"),
     )
     execute(
-        [uv, "tool", "install", "--reinstall", "--python", PYTHON]
+        [uv, "tool", "install", "--reinstall", "--python", python_request()]
         + [f"pre-commit=={pre_commit}"],
         home,
         env,

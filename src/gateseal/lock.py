@@ -38,7 +38,7 @@ from gateseal.manifest import (
 )
 from gateseal.policy import Policy, load_bundled_policy
 from gateseal.repository_hooks import repository_entry, require_files
-from gateseal.setup import PYTHON
+from gateseal.setup import python_request
 from gateseal.tools import reports, require_projects
 from gateseal.tools.configurations import owned_outputs
 from gateseal.tools.model import LAUNCHERS, OWNED, LockSection, Tool, exclusion
@@ -132,7 +132,7 @@ def _gate_job(ci: CI, pin: GatesealPin, source: Source) -> GateJob:
         ci.triggers,
         ci.timeout_minutes,
         ci.runner,
-        PYTHON,
+        python_request(),
         pin.repository,
         pin.commit,
         policy,

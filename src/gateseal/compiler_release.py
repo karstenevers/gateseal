@@ -58,8 +58,9 @@ OWN_HOOKS = {
 }
 """The name of each hook that gateseal's repository defines, by ID."""
 
-MINIMUM_UV = "0.13.5"
-"""The oldest uv that gateseal setup accepts."""
+MINIMUM_UV = "0.13.6"
+"""The oldest uv that gateseal setup accepts: the first that downloads Python
+3.14.10."""
 
 PRE_COMMIT = "4.7.0"
 """The pre-commit this release runs: gateseal setup installs it, and the

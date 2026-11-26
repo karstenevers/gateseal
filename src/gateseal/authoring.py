@@ -11,6 +11,7 @@ import fcntl
 import http.client
 import json
 import os
+import platform
 import tempfile
 import urllib.error
 import urllib.request
@@ -18,7 +19,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
-from gateseal import npm_tool, policy_toml, sources
+from gateseal import __version__, npm_tool, policy_toml, sources
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.managed_files import open_directory, read, read_optional, write_atomic
 from gateseal.policy import (
@@ -34,6 +35,8 @@ from gateseal.policy import (
     review_policy,
 )
 from gateseal.processes import execute, find_tool
+from gateseal.python_releases import first_trusted, trusted
+from gateseal.setup import PYTHON
 from gateseal.tools.mise import archives, require_mise
 from gateseal.tools.model import Catalog, MissingUpstream, Release
 from gateseal.tools.node import NAME as NODE
@@ -326,6 +329,16 @@ def _resolve(
     a version or platform without one gets new facts. The new lock must pass
     the check every load runs.
     """
+    release = platform.python_version()
+    if not trusted(release):
+        raise GatesealError(
+            "untrusted_python",
+            f"Python {release} trusts compromised certificates, so gateseal "
+            "reads nothing from upstream with it.",
+            4,
+            f"Run uv tool install --reinstall --python {first_trusted(PYTHON)} "
+            f"gateseal=={__version__}, then rerun {rerun}.",
+        )
     review = review_policy(reader)
     recorded, node = _recorded(existing)
     with tempfile.TemporaryDirectory(prefix="gateseal-") as scratch:

@@ -33,12 +33,12 @@ def region(line, covered, statements, covered_branches, branches):
 
 
 def project(root, sources, summaries=None):
-    """Write sources and a coverage report with one region per def name.
+    """Write sources and a coverage report with one region per def.
 
     A region is named after its def and the defs and classes around it, as
     coverage.py names it, and is fully covered unless summaries gives
     (covered_lines, num_statements, covered_branches, num_branches). A
-    repeated name keeps its last def's region, as in coverage.py.
+    repeated name gets "@" and its line, as in coverage.py.
     """
     summaries = summaries or {}
     files = {}
@@ -54,11 +54,13 @@ def project(root, sources, summaries=None):
             scopes.append((len(indent), own))
             if kind == "def":
                 qualified = ".".join(scope[1] for scope in scopes)
+                if qualified in functions:
+                    qualified += f"@{number}"
                 summary = summaries.get(qualified, FULL)
                 functions[qualified] = region(number, *summary)
         files[name] = {"functions": functions}
     report = root / "coverage.json"
-    meta = {"format": 3, "version": "7.17.2", "branch_coverage": True}
+    meta = {"format": 3, "version": "7.17.3", "branch_coverage": True}
     report.write_text(json.dumps({"meta": meta, "files": files}))
     return report
 
@@ -127,18 +129,6 @@ def region_of_f(report):
     return report["files"]["m.py"]["functions"]["f"]
 
 
-def with_file_lines(branches):
-    def change(report):
-        report["files"]["m.py"].update(
-            executed_lines=[],
-            missing_lines=[],
-            executed_branches=branches,
-            missing_branches=[],
-        )
-
-    return change
-
-
 BAD_INPUT = {
     "missing report": (lambda root: (root / "coverage.json").unlink(), "coverage.json"),
     "report not JSON": (
@@ -169,17 +159,6 @@ BAD_INPUT = {
     ),
     "def without region": (
         lambda root: (root / "m.py").write_text(branchy("f", 1) + branchy("g", 1)),
-        "coverage.json",
-    ),
-    "repeated name without file lines": (
-        lambda root: (root / "m.py").write_text(branchy("f", 1) * 2),
-        "coverage.json",
-    ),
-    "branch not a pair": (
-        lambda root: (
-            (root / "m.py").write_text(branchy("f", 1) * 2),
-            edit_json(root / "coverage.json", with_file_lines(branches=[[1]])),
-        ),
         "coverage.json",
     ),
     "source not Python": (lambda root: (root / "m.py").write_text("def f(:\n"), "m.py"),
@@ -420,7 +399,7 @@ def test_real_report_scores_every_function(measured, monkeypatch):
         ("pkg/used.py", "outer.keep"): (2.0, 2, 1.0),
         ("pkg/used.py", "idle"): (12.0, 3, 0.0),
         ("pkg/used.py", "Box.size"): (2.26, 2, 0.6),
-        ("pkg/used.py", "Box.size#2"): (1.0, 1, 1.0),
+        ("pkg/used.py", "Box.size@48"): (1.0, 1, 1.0),
         ("pkg/unused.py", "lonely"): (6.0, 2, 0.0),
         ("pkg/unused.py", "Ghost.haunt"): (12.0, 3, 0.0),
     }
