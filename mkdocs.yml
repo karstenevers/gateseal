@@ -46,6 +46,7 @@ hooks:
 
 nav:
   - Home: index.md
+  - Why gateseal: why-gateseal.md
   - Get started:
       - Install gateseal: install.md
       - Try gateseal: demo.md
