@@ -10,7 +10,7 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `prettier`, `eslint`, and `tsc`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `tsc`, and `knip`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
 
 ## Shared fields
 
@@ -24,6 +24,7 @@ See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions e
 | `hooks.<id>` | At least one hook. |
 | `history.args` | Optional arguments of the tool's executable for a CI history scan, for a `release-binary`, `uv-project` or `npm-package` tool. Include `{range}` exactly once. |
 | `choices.<name>` | Optional choice in the tool configuration. It needs a `toml` configuration. |
+| `network` | Optional `true` for a tool that asks a service on the network. A `release-binary` tool then also gets `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, their lower-case names, `SSL_CERT_FILE` and `SSL_CERT_DIR`. Defaults to `false`. |
 
 An unsupported kind or value gives `unsupported_tool_definition`. Unknown fields are invalid.
 
@@ -118,7 +119,7 @@ The repository needs `pyproject.toml` and `uv.lock` at its root, with `uv.lock` 
 
 A hook with the `project` scope and no `types_or` runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. With `types_or`, it runs only when a changed file has one of those types. A change that only deletes such files does not start it, because pre-commit matches no hook against a deleted file. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. At a push, pre-commit hides nothing, so the tool reads the checked-out files, also when the push names another branch. The CI gate checks a new clone.
 
-Release binaries run through `mise --no-config exec --deny-env`. A hook of any other kind receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. A `uv-project` hook sets `UV_PROJECT_ENVIRONMENT` itself. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
+Release binaries run through `mise --no-config exec --deny-env`, which passes on only the variables that mise keeps, such as `HOME` and `PATH`, and with `network`, the proxy and certificate variables. A hook of any other kind receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. A `uv-project` hook sets `UV_PROJECT_ENVIRONMENT` itself. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
 
 ## Tools from npm
 

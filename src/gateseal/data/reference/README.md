@@ -18,7 +18,8 @@ this README and every other file.
 - `node` at the top of `policy.toml` pins the Node that every tool from npm
   runs on. The `typescript` capability runs ESLint and then Prettier on it.
   The `typescript-types` capability runs tsc on it in the repository's own npm
-  or pnpm project, whose lockfile pins the packages that tsc reads. Each
+  or pnpm project, whose lockfile pins the packages that tsc reads. The
+  `typescript-unused` capability runs knip there too. Each
   tool's `packages` table pins the npm packages that it installs beside
   itself, such as the parser that the ESLint rules name.
 - `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
@@ -43,6 +44,13 @@ this README and every other file.
   `[audit]` as `ignore`. Give each one's reason in a comment. configure copies
   it to `.gateseal/uv-audit.toml`, and uv reads only this file, so a
   repository cannot ignore an advisory.
+- `rules/osv-scanner.toml` lists the advisories that the audit of
+  `package-lock.json` ignores, each as an `[[IgnoredVulns]]` table with `id`
+  and `reason`. configure copies it to `.gateseal/osv-scanner.toml`, and
+  OSV-Scanner reads only this file.
+- `rules/knip.toml` holds knip's settings, as keys of knip's configuration.
+  configure copies it to `.gateseal/knip.toml`. knip reads no settings of
+  the repository.
 - `gateseal policy add <tool> <version>` reviews a new version, and
   `gateseal policy pin <tool> <version>` makes a reviewed version the pin.
   Both edit only their own lines of `policy.toml` and keep its comments.

@@ -99,6 +99,8 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
         "python-dependencies",
         "typescript",
         "typescript-types",
+        "typescript-audit",
+        "typescript-unused",
     )
     unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
     assert review.catalogs["ruff"].requires == unrequired | {

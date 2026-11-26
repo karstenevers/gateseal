@@ -438,7 +438,8 @@ class ToolDefinition:
     executable has one.
     choices holds the Policy Choices the definition declares, by name; only a
     definition with a toml configuration declares any, since each renders into
-    it.
+    it. network is true for a tool that asks a service, so its hooks get the
+    caller's proxy and certificate settings.
     """
 
     name: str
@@ -452,6 +453,7 @@ class ToolDefinition:
     source: Source
     history: tuple[str, ...] | None
     choices: Mapping[str, Choice]
+    network: bool
 
     @property
     def owned(self) -> tuple[str, ...]:
@@ -723,7 +725,7 @@ def parse_definition(
         document,
         shared
         | (
-            {"configuration", "executable", "files", "history", "choices"}
+            {"configuration", "executable", "files", "history", "choices", "network"}
             & set(document)
         ),
         field,
@@ -739,6 +741,9 @@ def parse_definition(
         else None
     )
     choices = _choices(document.get("choices", {}), f"{field}.choices", configuration)
+    network = document.get("network", False)
+    if not isinstance(network, bool):
+        raise GatesealError("invalid_field", f"{field}.network must be true or false.")
     return ToolDefinition(
         name=name,
         origin=origin,
@@ -751,6 +756,7 @@ def parse_definition(
         source=source,
         history=history,
         choices=choices,
+        network=network,
     )
 
 

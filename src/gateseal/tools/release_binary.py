@@ -17,7 +17,8 @@ Guarantees this module owns, whatever a definition says:
   repository or of the user changes the archive or turns the install off.
 - Clean environment: mise exec --deny-env passes the executable only the
   variables that mise keeps, such as HOME and PATH, and those that the caller
-  names with --allow-env.
+  names with --allow-env. A tool that asks a service also gets the proxy and
+  certificate variables, which say how to reach a host, not what to check.
 - Closed failure: a wrong checksum, a missing archive or a platform without
   an archive stops the hook.
 
@@ -80,6 +81,18 @@ if TYPE_CHECKING:
 
 MISE_EXEC = (*MISE, "--deny-env")
 """Start an executable with only the variables that mise keeps and the caller names."""
+
+NETWORK = (
+    "HTTPS_PROXY",
+    "https_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+)
+"""The proxy and certificate variables that a tool which asks a service gets."""
 
 PROGRAM = "executable_sha256"
 """The record field of the executable's SHA-256 in an archive, for a check at commit."""
@@ -399,6 +412,7 @@ class BinaryTool:
 
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
         """Return the command that installs the tool if needed and starts it."""
+        variables = (*variables, *(NETWORK if self.definition.network else ()))
         flags = (flag for name in variables for flag in ("--allow-env", name))
         return (*MISE_EXEC, *flags, self.mise_request, "--", self.executable.name)
 

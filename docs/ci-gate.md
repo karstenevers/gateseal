@@ -15,7 +15,7 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 Step 5 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 5 runs the repository's tests when the change has a Python file. Before `tsc` or another tool that reads the Node project, step 5 installs the project's packages from its lockfile.
 
-With the [dependency audit](python-dependencies.md#the-audit), step 5 asks a vulnerability service about each locked package. The service gives live data, not data that the policy pins. So a new advisory can fail a run, such as the weekly run, without any commit.
+With the dependency audit of [Python](python-dependencies.md#the-audit) or of [TypeScript](typescript.md#the-audit), step 5 asks a vulnerability service about each locked package. The service gives live data, not data that the policy pins. So a new advisory can fail a run, such as the weekly run, without any commit.
 
 ## What the gate checks
 
@@ -42,7 +42,7 @@ A hosted machine meets them. A runner or agent of your own needs:
 - Linux on x86-64 with glibc.
 - bash, curl, tar, sha256sum, and Git 2.54.0 or later.
 - Network access to GitHub for uv, mise, gateseal and the hook repositories.
-- Network access to `api.osv.dev` if the repository selects `python-audit`.
+- Network access to `api.osv.dev` if the repository selects `python-audit` or `typescript-audit`. Behind a proxy, set `HTTPS_PROXY` in the job.
 
 On another system or architecture, the first step stops and names this requirement.
 

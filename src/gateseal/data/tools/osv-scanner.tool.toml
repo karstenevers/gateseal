@@ -1,0 +1,38 @@
+# The audit sends each package and version in package-lock.json to the OSV
+# service, so its answer can change without a commit. It runs only in the
+# gate. --config makes OSV-Scanner read only the policy's file, so an
+# osv-scanner.toml of the repository cannot ignore an advisory. OSV-Scanner
+# exits 1 for a vulnerability and 127 when it cannot check, such as when the
+# service cannot be reached or package-lock.json is missing or invalid, and
+# 128 when it finds no package, such as when npm-shrinkwrap.json makes it skip
+# package-lock.json. Both stop the gate, so the audit never passes unread.
+# network gives it the proxy and certificate settings of the machine.
+kind = "release-binary"
+stages = ["ci"]
+scope = "project"
+network = true
+
+[source]
+repository = "https://github.com/google/osv-scanner"
+tag = "v{version}"
+archive = "osv-scanner_{platform}"
+checksums = "osv-scanner_SHA256SUMS"
+
+[source.platforms]
+linux-x64 = "linux_amd64"
+macos-arm64 = "darwin_arm64"
+
+[configuration]
+format = "toml"
+
+[executable]
+name = "osv-scanner"
+
+[hooks.osv-scanner]
+name = "osv-scanner"
+args = [
+  "scan", "source", "--config", "{configuration}",
+  "--lockfile", "package-lock.json", "--verbosity", "error",
+]
+output = "plain"
+finding_exit_codes = [1]

@@ -190,6 +190,17 @@ change the manifest, policy or lock format, and its entry says how to move.
   The bundled policy's new `typescript-types` capability runs it, pinned to
   TypeScript 6.0.3, the version of its ESLint packages, and also reviews
   7.0.2 and 5.9.3. A repository that does not select it gets no new check.
+- TypeScript dependency checks, as two opt-in capabilities of the bundled
+  policy. `typescript-unused` runs knip 6.46.1 in the repository's npm or
+  pnpm project at `git push` and in the CI gate, and names each unused file,
+  export and dependency. knip reads only the policy's `rules/knip.toml`, not
+  `knip.json` or the `knip` field of `package.json`. `typescript-audit` runs
+  OSV-Scanner 2.7.1 on `package-lock.json` in the CI gate only. It asks
+  `api.osv.dev` about each package, so a new advisory can fail a weekly run
+  without a commit. It reaches the service through the machine's proxy and
+  certificate settings. The policy's `rules/osv-scanner.toml` lists the
+  ignored advisories, and a repository cannot add one. A repository that
+  selects neither gets no new check.
 - The install of a Node project's packages in `run --json` and `gate --json`,
   as a `hook` entry with the hook `gateseal-node-packages`, the tool
   `gateseal` and the origin `built-in`.
@@ -220,9 +231,9 @@ change the manifest, policy or lock format, and its entry says how to move.
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
 - The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
-  `uv-audit`, `deptry`, `eslint`, `prettier` and `tsc`, and the names
-  `pyright`, `uv lock check`, `uv audit`, `deptry`, `eslint`, `prettier` and
-  `tsc`. A Manifest with a repository hook of such an ID or name stops with
+  `uv-audit`, `deptry`, `eslint`, `prettier`, `tsc`, `knip` and
+  `osv-scanner`, and the names `pyright`, `uv lock check`, `uv audit`,
+  `deptry`, `eslint`, `prettier`, `tsc`, `knip` and `osv-scanner`. A Manifest with a repository hook of such an ID or name stops with
   `duplicate_identifier`, also when it does not select the hook's capability.
   Rename the repository hook.
 - gateseal reserves the hook IDs `gateseal-node-packages` and
