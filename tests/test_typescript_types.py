@@ -17,7 +17,6 @@ import hashlib
 import io
 import json
 import re
-import shlex
 import tarfile
 from dataclasses import dataclass
 from datetime import date, timedelta
@@ -26,7 +25,6 @@ from string import Template
 
 import pytest
 from conftest import BUNDLED_TOOLS, on_machine
-from gateseal.compiler_release import NODE_PACKAGES_HOOK
 from gateseal.validation import canonical
 from installation import clone, process, success
 from node_projects import (
@@ -293,31 +291,42 @@ snapshots:
 """The lockfile of one tarball in vendor, as npm 11 and pnpm 10 write it."""
 
 
-def vendor(project, name, declaration):
-    """Pack money 1.0.0 with declaration as vendor/name, and make it the project's
-    only dependency."""
+def pack(project, name, manifest, files):
+    """Write an npm tarball of manifest and files as vendor/name, and return its
+    integrity."""
     packed = io.BytesIO()
     with tarfile.open(fileobj=packed, mode="w:gz") as archive:
-        manifest = {"name": "money", "version": "1.0.0", "types": "index.d.ts"}
-        for member, text in {
-            "package/package.json": json.dumps(manifest),
-            "package/index.d.ts": declaration,
-        }.items():
+        members = {"package/package.json": json.dumps(manifest)}
+        members |= {f"package/{member}": text for member, text in files.items()}
+        for member, text in members.items():
             info = tarfile.TarInfo(member)
             info.size = len(text.encode())
             archive.addfile(info, io.BytesIO(text.encode()))
     (project.clone / "vendor").mkdir(exist_ok=True)
     (project.clone / "vendor" / name).write_bytes(packed.getvalue())
-    source = f"file:vendor/{name}"
     digest = base64.b64encode(hashlib.sha512(packed.getvalue()).digest()).decode()
+    return f"sha512-{digest}"
+
+
+def vendor(project, name, declaration, scripts=None):
+    """Pack money 1.0.0 with declaration and scripts as vendor/name, and make it
+    the project's only dependency."""
+    manifest = {"name": "money", "version": "1.0.0", "types": "index.d.ts"}
+    if scripts:
+        manifest["scripts"] = scripts
+    integrity = pack(project, name, manifest, {"index.d.ts": declaration})
+    source = f"file:vendor/{name}"
     package = json.loads(project.manager.package_json(PINNED))
     package["dependencies"] = {"money": source}
     (project.clone / "package.json").write_text(json.dumps(package, indent=2))
-    (project.clone / project.manager.lockfile).write_text(
-        VENDORED[project.manager.name].substitute(
-            source=source, integrity=f"sha512-{digest}"
-        )
+    lockfile = VENDORED[project.manager.name].substitute(
+        source=source, integrity=integrity
     )
+    if scripts and project.manager is NPM:
+        written = json.loads(lockfile)
+        written["packages"]["node_modules/money"]["hasInstallScript"] = True
+        lockfile = json.dumps(written, indent=2)
+    (project.clone / project.manager.lockfile).write_text(lockfile)
 
 
 def test_a_push_replaces_a_package_whose_new_tarball_keeps_its_version(project):
@@ -339,6 +348,36 @@ def test_a_push_replaces_a_package_whose_new_tarball_keeps_its_version(project):
     ) in shown
 
 
+LIFECYCLE = ("preinstall", "install", "postinstall", "prepare")
+
+
+def leaves(name):
+    """Return a script that leaves a file named name in the folder of the push."""
+    write = f"require('fs').writeFileSync(process.env.INIT_CWD + '/{name}', '')"
+    return f'node -e "{write}"'
+
+
+def test_no_install_script_runs_of_a_package_or_the_project(project):
+    """pnpm-workspace.yaml lets pnpm run the scripts of money."""
+    (project.clone / "src" / "shop.ts").unlink()
+    scripts = {stage: leaves(f"money-{stage}") for stage in LIFECYCLE}
+    vendor(project, "money.tgz", "export type Cents = number;\n", scripts)
+    package = json.loads((project.clone / "package.json").read_text())
+    package["scripts"] = {stage: leaves(f"project-{stage}") for stage in LIFECYCLE}
+    project.commit(
+        {
+            "package.json": json.dumps(package, indent=2),
+            "pnpm-workspace.yaml": "onlyBuiltDependencies:\n  - money\n",
+            "src/price.ts": PRICE,
+        }
+    )
+    code, shown = project.push()
+    assert code == 0, shown
+    assert project.installed("money") == "1.0.0"
+    names = [path.name for path in project.clone.iterdir()]
+    assert [name for name in names if name.startswith(("money-", "project-"))] == []
+
+
 def test_a_lockfile_that_names_another_tarball_of_the_version_stops_the_push(
     project,
 ):
@@ -350,6 +389,45 @@ def test_a_lockfile_that_names_another_tarball_of_the_version_stops_the_push(
     package = project.clone / "package.json"
     package.write_text(package.read_text().replace("money-a.tgz", "money-b.tgz"))
     project.commit({"src/price.ts": PRICE})
+    code, shown = project.push()
+    assert code != 0, shown
+    assert (status(INSTALL, shown), status("tsc", shown)) == ("Failed", None), shown
+    assert project.pushed() == project.git("rev-parse", "adopted")
+
+
+@pytest.mark.parametrize("module_project", [NPM], ids=["npm"], indirect=True)
+@pytest.mark.parametrize("kind", ["dev", "optional", "peer"])
+def test_npm_checks_the_tarball_of_a_kind_of_dependency_that_a_setting_omits(
+    project, kind
+):
+    """wallet, a dependency, needs money 1.0.0, so omit leaves money in the
+    install. npm ls would skip the source of money, a dependency of kind, and
+    npm install would install the tarball that package.json names."""
+    (project.clone / "src" / "shop.ts").unlink()
+    vendor(project, "money-b.tgz", "export type Cents = number;\n")
+    vendor(project, "money-a.tgz", "export type Cents = string;\n")
+    wallet = {"name": "wallet", "version": "1.0.0", "dependencies": {"money": "1.0.0"}}
+    integrity = pack(project, "wallet.tgz", wallet, {})
+    lockfile = json.loads((project.clone / "package-lock.json").read_text())
+    packages = lockfile["packages"]
+    packages["node_modules/wallet"] = {
+        "version": "1.0.0",
+        "resolved": "file:vendor/wallet.tgz",
+        "integrity": integrity,
+        "dependencies": {"money": "1.0.0"},
+    }
+    package = json.loads((project.clone / "package.json").read_text())
+    for manifest, money in ((packages[""], "a"), (package, "b")):
+        manifest["dependencies"] = {"wallet": "file:vendor/wallet.tgz"}
+        manifest[f"{kind}Dependencies"] = {"money": f"file:vendor/money-{money}.tgz"}
+    project.commit(
+        {
+            ".npmrc": f"omit={kind}\n",
+            "package.json": json.dumps(package, indent=2),
+            "package-lock.json": json.dumps(lockfile, indent=2),
+            "src/price.ts": PRICE,
+        }
+    )
     code, shown = project.push()
     assert code != 0, shown
     assert (status(INSTALL, shown), status("tsc", shown)) == ("Failed", None), shown
@@ -376,22 +454,23 @@ def test_a_push_without_a_root_tsconfig_stops_at_tsc_whatever_is_above(project):
 
 
 NPM_SETTINGS = {
-    "lockfile-off": "package-lock=false\ndry-run=true\n"
-    "omit[]=dev\nomit[]=optional\nomit[]=peer\nusage=true\nglobal=true\n",
-    "lockfile-only": "package-lock-only=true\nlocation=global\n",
+    "lockfile-off": "package-lock=false\ndry-run=true\nusage=true\n",
+    "lockfile-only": "package-lock-only=true\n",
+    "global": "location=global\n",
 }
-"""Settings of .npmrc that each make npm leave out part of the lockfile or stop.
+"""Settings of .npmrc that each make npm install ignore the lockfile, install
+nothing or install into the global prefix.
 
 package-lock-only=true in an .npmrc makes npm read the lockfile even when the
 command line turns package-lock-only off, so it would hide package-lock=false.
-global=true and location=global each make both npm commands work on the global
-folder of Node instead of the project.
 """
 
 
 @pytest.mark.parametrize("module_project", [NPM], ids=["npm"], indirect=True)
 @pytest.mark.parametrize("npmrc", NPM_SETTINGS.values(), ids=NPM_SETTINGS.keys())
-def test_npm_installs_all_that_the_lockfile_pins_whatever_npmrc_says(project, npmrc):
+def test_npm_installs_what_the_lockfile_pins_under_settings_that_skip_it(
+    project, npmrc
+):
     write_package(project.clone, NPM, EACH_KIND)
     project.commit({".npmrc": npmrc})
     code, shown = project.push()
@@ -417,6 +496,22 @@ def test_npm_installs_no_peer_that_a_lockfile_without_peers_leaves_out(project):
     pins = {"zod": ZOD, "@types/react-dom": "19.2.3"} | DEVELOPMENT | OPTIONAL
     pins |= dict.fromkeys([*PEER, "csstype"])
     assert {name: project.installed(name) for name in pins} == pins
+
+
+@pytest.mark.parametrize("module_project", [NPM], ids=["npm"], indirect=True)
+def test_npm_stops_at_a_lockfile_without_a_dependency_of_a_dependency(project):
+    """usage=true makes npm ci print its usage and pass. npm ls then passes, and
+    npm install would install csstype, which the lockfile does not pin."""
+    lockfile = json.loads(NPM.locks[EACH_KIND])
+    del lockfile["packages"]["node_modules/csstype"]
+    write_package(project.clone, NPM, EACH_KIND, lockfile=False)
+    project.commit(
+        {".npmrc": "usage=true\n", "package-lock.json": json.dumps(lockfile)}
+    )
+    code, shown = project.push()
+    assert code != 0, shown
+    assert (status(INSTALL, shown), status("tsc", shown)) == ("Failed", None), shown
+    assert project.installed("csstype") is None
 
 
 MARKER = """\
@@ -496,39 +591,19 @@ def test_npm_runs_no_program_that_an_npmrc_names_for_git_dependencies(
     assert (project.installed("outer"), project.installed("inner")) == ("1.0.0",) * 2
 
 
-PNPM_SETTINGS = """\
-only=prod
-dev=true
-production=true
-optional=false
-lockfile-only=true
-lockfile=false
-lockfile-dir=..
-use-store-server=true
-modules-dir=nm
-enable-modules-dir=false
-symlink=false
-node-version=1.0.0
-package-import-method=clone
-"""
-"""Settings of .npmrc that each make pnpm install leave out part of the lockfile.
-
-use-store-server=true runs the pnpmfile in a store server, which keeps the push
-waiting. package-import-method=clone fails where the file system cannot clone.
-"""
+PNPM_SETTINGS = {
+    "install-nothing": "lockfile-only=true\nlockfile-dir=..\nmodules-dir=nm\n",
+    "store-server": "use-store-server=true\n",
+}
+"""Settings of .npmrc that each make pnpm install nothing into node_modules, or
+start a store server, which pnpm starts without --ignore-pnpmfile."""
 PNPM_WORKSPACE = """\
 filter:
   - nothing
 filterProd:
   - nothing
-resolutionOnly: true
-update: true
 """
-"""Settings of pnpm-workspace.yaml that make pnpm install no project.
-
-resolutionOnly makes pnpm refuse the frozen install instead, and update makes it
-install newer releases than the lockfile pins.
-"""
+"""Settings of pnpm-workspace.yaml that make pnpm install no project."""
 PNPMFILE = """\
 require("fs").writeFileSync(`${__dirname}/pnpmfile-ran`, "");
 module.exports = { hooks: {} };
@@ -536,11 +611,12 @@ module.exports = { hooks: {} };
 
 
 @pytest.mark.parametrize("module_project", [PNPM], ids=["pnpm"], indirect=True)
-def test_pnpm_installs_all_that_the_lockfile_pins_and_runs_no_pnpmfile(project):
+@pytest.mark.parametrize("npmrc", PNPM_SETTINGS.values(), ids=PNPM_SETTINGS.keys())
+def test_pnpm_installs_what_the_lockfile_pins_and_runs_no_pnpmfile(project, npmrc):
     write_package(project.clone, PNPM, EACH_KIND)
     project.commit(
         {
-            ".npmrc": PNPM_SETTINGS,
+            ".npmrc": npmrc,
             "pnpm-workspace.yaml": PNPM_WORKSPACE,
             ".pnpmfile.cjs": PNPMFILE,
         }
@@ -553,19 +629,51 @@ def test_pnpm_installs_all_that_the_lockfile_pins_and_runs_no_pnpmfile(project):
     assert {name: project.installed(name) for name in pins} == pins
 
 
+LEAVE_NODE_MODULES = {
+    "enable-modules-dir": "enable-modules-dir=false\n",
+    "symlink": "symlink=false\n",
+}
+"""Settings of .npmrc that each make pnpm keep a package at the top of
+node_modules that another install left. enable-modules-dir=false makes pnpm
+leave node_modules as it is. symlink=false makes pnpm install into its virtual
+store and link no package at the top."""
+
+
+@pytest.mark.parametrize("module_project", [PNPM], ids=["pnpm"], indirect=True)
+@pytest.mark.parametrize(
+    "npmrc", LEAVE_NODE_MODULES.values(), ids=LEAVE_NODE_MODULES.keys()
+)
+def test_pnpm_replaces_a_package_that_another_install_left(project, npmrc):
+    zod = project.clone / "node_modules" / "zod"
+    zod.mkdir(parents=True)
+    (zod / "package.json").write_text('{"name": "zod", "version": "4.0.0"}')
+    project.commit({".npmrc": npmrc})
+    code, shown = project.push()
+    assert project.installed("zod") == ZOD
+    assert code == 0, shown
+
+
+NO_SAVE = "saveLockfile: false\n"
 STALE_LOCKFILE_SETTINGS = {
     "git-branch-lockfile": (".npmrc", "git-branch-lockfile=true\n"),
     "gitBranchLockfile": ("pnpm-workspace.yaml", "gitBranchLockfile: true\n"),
+    "mergeGitBranchLockfiles": (
+        "pnpm-workspace.yaml",
+        "mergeGitBranchLockfiles: true\n" + NO_SAVE,
+    ),
     "ignorePackageManifest": ("pnpm-workspace.yaml", "ignorePackageManifest: true\n"),
-    "fixLockfile": ("pnpm-workspace.yaml", "fixLockfile: true\n"),
-    "dedupe": ("pnpm-workspace.yaml", "dedupe: true\n"),
+    "dedupe": ("pnpm-workspace.yaml", "dedupe: true\n" + NO_SAVE),
+    "fixLockfile": ("pnpm-workspace.yaml", "fixLockfile: true\n" + NO_SAVE),
+    "update": ("pnpm-workspace.yaml", "update: true\nsave: false\n" + NO_SAVE),
 }
 """Settings that each make pnpm pass over a pnpm-lock.yaml behind package.json.
 
-A branch lockfile makes pnpm read pnpm-lock.main.yaml on the branch main in
-place of pnpm-lock.yaml. ignorePackageManifest makes pnpm install from the
-lockfile without a look at package.json. fixLockfile and dedupe make pnpm
-rewrite pnpm-lock.yaml to match package.json.
+A branch lockfile makes pnpm read an untracked pnpm-lock.main.yaml on the
+branch main in place of pnpm-lock.yaml, and a merge of branch lockfiles adds it
+to pnpm-lock.yaml. ignorePackageManifest makes pnpm leave node_modules as it is,
+without a look at package.json. dedupe, fixLockfile and update make pnpm
+resolve anew. saveLockfile: false keeps pnpm-lock.yaml as it is, so no changed
+file stops the hook.
 """
 
 
@@ -574,7 +682,8 @@ rewrite pnpm-lock.yaml to match package.json.
 def test_pnpm_stops_at_a_pnpm_lock_yaml_behind_package_json(project, setting):
     write_package(project.clone, PNPM, NEWER, lockfile=False)
     name, text = STALE_LOCKFILE_SETTINGS[setting]
-    project.commit({name: text, "pnpm-lock.main.yaml": PNPM.locks[NEWER]})
+    project.commit({name: text})
+    (project.clone / "pnpm-lock.main.yaml").write_text(PNPM.locks[NEWER])
     code, shown = project.push()
     assert code != 0, shown
     assert (status(INSTALL, shown), status("tsc", shown)) == ("Failed", None), shown
@@ -582,32 +691,36 @@ def test_pnpm_stops_at_a_pnpm_lock_yaml_behind_package_json(project, setting):
     assert project.git("status", "--porcelain", "pnpm-lock.yaml") == ""
 
 
-def pnpm(project, *arguments):
-    """Run the pnpm that the install hook starts, with the project's environment."""
-    config = json.loads((project.clone / ".pre-commit-config.yaml").read_text())
-    hooks = [hook for repo in config["repos"] for hook in repo["hooks"]]
-    [hook] = [hook for hook in hooks if hook["id"] == NODE_PACKAGES_HOOK]
-    [start] = [a.removeprefix("pnpm=") for a in hook["args"] if a.startswith("pnpm=")]
-    success([*shlex.split(start), *arguments], project.clone, project.env)
-
-
 @pytest.mark.parametrize("module_project", [PNPM], ids=["pnpm"], indirect=True)
-def test_pnpm_replaces_node_modules_without_development_dependencies(project):
-    """pnpm would ask before it recreates node_modules, and a push has no terminal."""
-    write_package(project.clone, PNPM, EACH_KIND)
-    project.commit()
-    pnpm(project, "install", "--prod", "--frozen-lockfile", "--ignore-scripts")
-    assert project.installed("is-number") is None
+def test_pnpm_stops_at_a_pnpm_lock_yaml_that_a_setting_turns_off(project):
+    """lockfile=false makes pnpm read no pnpm-lock.yaml, so a package.json without
+    dependencies would pass while the lockfile still pins zod."""
+    package = json.loads(PNPM.package_json(PINNED))
+    del package["dependencies"]
+    project.commit({".npmrc": "lockfile=false\n", "package.json": json.dumps(package)})
+    code, shown = project.push()
+    assert code != 0, shown
+    assert (status(INSTALL, shown), status("tsc", shown)) == ("Failed", None), shown
+
+
+LEAVE_OUT_DEVELOPMENT = {"npm": "omit=dev\n", "pnpm": "production=true\n"}
+
+
+def test_the_install_obeys_a_setting_that_leaves_out_development_dependencies(
+    project,
+):
+    write_package(project.clone, project.manager, EACH_KIND)
+    project.commit({".npmrc": LEAVE_OUT_DEVELOPMENT[project.manager.name]})
     code, shown = project.push()
     assert code == 0, shown
-    pins = {"zod": ZOD} | DEVELOPMENT | OPTIONAL
+    pins = {"zod": ZOD} | dict.fromkeys(DEVELOPMENT)
     assert {name: project.installed(name) for name in pins} == pins
 
 
 def test_a_lockfile_behind_package_json_stops_the_push_and_the_gate_before_tsc(
     installed, project
 ):
-    """usage=true would make npm ci print its usage and pass without a check."""
+    """usage=true makes npm ci print its usage and pass, and npm ls still checks."""
     name, lockfile = project.manager.name, project.manager.lockfile
     write_package(project.clone, project.manager, NEWER, lockfile=False)
     project.commit({".npmrc": "usage=true\n"})

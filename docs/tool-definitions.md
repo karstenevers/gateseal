@@ -155,30 +155,28 @@ The repository needs `package.json` and exactly one of `package-lock.json` and `
 - **npm.** `npm ci --dry-run` checks that the lockfile matches the versions in `package.json`. `npm ls --package-lock-only` checks that it matches the source of each dependency, such as a tarball. Then `npm install --no-save` installs only what changed. The hook runs the npm of the pinned Node's install, with that install's folder first on `PATH`. Without that install, the hook stops with status 1.
 - **pnpm.** `pnpm install --frozen-lockfile` does both. gateseal installs pnpm 10.28.0 once on the pinned Node, checked against its integrity hash, and starts it from that install, as it starts an `npm-package` tool. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
 
-The hook runs these commands:
+The hook obeys the settings of the project and the user, in `.npmrc`, `pnpm-workspace.yaml` and the environment, as `npm install` or `pnpm install` in a terminal does. It makes this promise:
+
+> A project or user setting can make the hook fail. No setting can make the hook pass with packages that differ from the packages that the lockfile pins.
+
+A setting can leave out packages, such as `omit=dev`. If `tsc` needs such a package, `tsc` stops the push. See [A setting of npm or pnpm stops a push](troubleshooting.md#a-setting-of-npm-or-pnpm-stops-a-push). The hook runs these commands:
 
 ```sh
-npm ci --dry-run --no-global --location=project \
-  --no-usage --ignore-scripts --no-audit --no-fund
-npm ls --package-lock-only --package-lock --no-global --location=project \
-  --include=dev --include=optional --include=peer \
-  --no-usage --ignore-scripts --no-audit --no-fund
+npm ci --dry-run --no-usage --ignore-scripts
+npm ls --package-lock-only --include=dev --include=optional --include=peer \
+  --no-usage
 npm install --no-save --package-lock --no-package-lock-only --no-dry-run \
-  --no-global --location=project --include=dev --include=optional --include=peer \
-  --no-usage --ignore-scripts --no-audit --no-fund
-pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile \
-  --no-use-store-server --no-prod --no-dev --no-only --optional \
-  --lockfile --no-lockfile-only --lockfile-dir=. \
+  --no-usage --ignore-scripts --no-audit
+pnpm install --frozen-lockfile --lockfile --ignore-scripts --ignore-pnpmfile \
+  --no-use-store-server --no-lockfile-only --lockfile-dir=. \
   --config.git-branch-lockfile=false --config.merge-git-branch-lockfiles=false \
-  --config.ignore-package-manifest=false --config.resolution-only=false \
-  --config.fix-lockfile=false --config.dedupe=false --config.update=false \
-  --modules-dir=node_modules --package-import-method=auto \
-  --config.enable-modules-dir=true --config.confirm-modules-purge=false \
-  --config.symlink=true --config.node-version=null \
+  --config.ignore-package-manifest=false --config.fix-lockfile=false \
+  --config.dedupe=false --config.update=false --modules-dir=node_modules \
+  --config.enable-modules-dir=true --config.symlink=true \
   --config.filter=null --config.filter-prod=null
 ```
 
-An option on the command line wins over `.npmrc`, `pnpm-workspace.yaml` and the environment. The hook overrides only the settings that would make the install differ from the lockfile's: whether npm or pnpm reads the lockfile and which file it reads, which kinds of dependency it installs, whether it installs at all, whether it installs into the project or into the global folder of Node, where `node_modules` is, and which code runs. Every other setting of the project and of the user applies, such as the registry, the login, hoisting and `legacy-peer-deps`, because `tsc` must read the packages as the project's own install lays them out. `pnpm install` has no option for some settings, so `--config.<setting>` sets them, and `null` restores the default. pnpm reads only `pnpm-lock.yaml`, never a lockfile of a git branch. If `node_modules` holds an install with other settings, such as an install without development dependencies, pnpm recreates `node_modules` and asks no question. npm also gets `npm_config_git=git` and `npm_config_node_options=null` in its environment. For a git dependency with a script, npm runs npm again in a clone of the dependency, and only the environment reaches that npm. So git comes from `PATH`, Node gets no options, and no `.npmrc` names a program to run. No install script and no pnpmfile runs. A lockfile that does not match `package.json` stops the hook. Its `Next:` line names the install to run and the lockfile to commit. When the install fails, pre-commit runs no later hook of that stage, because a tool gives a wrong result without the packages.
+An option on the command line wins over a setting. The options turn off only the settings that would make the hook pass with other packages: a setting that makes npm or pnpm ignore the lockfile, read or merge another lockfile, skip the check of `package.json` or of the sources of one kind of dependency, resolve the packages anew, print its usage in place of a check, install no project, or leave `node_modules` as it is or link no package at its top. `--no-use-store-server` also keeps pnpm from starting a store server, because pnpm starts the server without `--ignore-pnpmfile`. `pnpm install` has no option for some settings, so `--config.<setting>` sets them, and `null` restores the default. npm also gets `npm_config_git=git`, `npm_config_node_options=null`, `npm_config_location=project` and `npm_config_global=false` in its environment. For a git dependency with a script, npm runs npm again in a clone of the dependency, and only the environment reaches that npm. So git comes from `PATH`, Node gets no options, the install stays in the project, and no `.npmrc` of a package names a program to run or installs into the global prefix. No install script runs, also none of the project, and no pnpmfile runs. A lockfile that does not match `package.json` stops the hook. Its `Next:` line names the install to run and the lockfile to commit. When the install fails, pre-commit runs no later hook of that stage, because a tool gives a wrong result without the packages.
 
 | Code | Meaning |
 | --- | --- |

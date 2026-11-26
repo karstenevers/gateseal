@@ -33,17 +33,15 @@ sys.exit(fail.exists() and fail.read_text() in sys.argv)
 """
 
 PNPM_INSTALL = [
-    *("install", "--frozen-lockfile", "--ignore-scripts", "--ignore-pnpmfile"),
-    *("--no-use-store-server", "--no-prod", "--no-dev", "--no-only", "--optional"),
-    *("--lockfile", "--no-lockfile-only", "--lockfile-dir=."),
+    *("install", "--frozen-lockfile", "--lockfile", "--ignore-scripts"),
+    *("--ignore-pnpmfile",),
+    *("--no-use-store-server", "--no-lockfile-only", "--lockfile-dir=."),
     *("--config.git-branch-lockfile=false",),
     *("--config.merge-git-branch-lockfiles=false",),
-    *("--config.ignore-package-manifest=false", "--config.resolution-only=false"),
-    *("--config.fix-lockfile=false", "--config.dedupe=false", "--config.update=false"),
-    *("--modules-dir=node_modules", "--package-import-method=auto"),
-    *("--config.enable-modules-dir=true", "--config.confirm-modules-purge=false"),
-    *("--config.symlink=true", "--config.node-version=null"),
-    *("--config.filter=null", "--config.filter-prod=null"),
+    *("--config.ignore-package-manifest=false", "--config.fix-lockfile=false"),
+    *("--config.dedupe=false", "--config.update=false"),
+    *("--modules-dir=node_modules", "--config.enable-modules-dir=true"),
+    *("--config.symlink=true", "--config.filter=null", "--config.filter-prod=null"),
 ]
 
 
@@ -93,28 +91,21 @@ def test_an_npm_project_proves_its_lockfile_then_installs_what_changed(
     assert on_node(monkeypatch, root, node) == 0
     assert started(node) == [
         {
-            "arguments": [
-                *("npm", "ci", "--dry-run", "--no-global", "--location=project"),
-                *("--no-usage", "--ignore-scripts", "--no-audit", "--no-fund"),
-            ],
+            "arguments": ["npm", "ci", "--dry-run", "--no-usage", "--ignore-scripts"],
             "folder": str(root),
         },
         {
             "arguments": [
-                *("npm", "ls", "--package-lock-only", "--package-lock"),
-                *("--no-global", "--location=project", "--include=dev"),
+                *("npm", "ls", "--package-lock-only", "--include=dev"),
                 *("--include=optional", "--include=peer", "--no-usage"),
-                *("--ignore-scripts", "--no-audit", "--no-fund"),
             ],
             "folder": str(root),
         },
         {
             "arguments": [
                 *("npm", "install", "--no-save", "--package-lock"),
-                *("--no-package-lock-only", "--no-dry-run", "--no-global"),
-                *("--location=project", "--include=dev"),
-                *("--include=optional", "--include=peer", "--no-usage"),
-                *("--ignore-scripts", "--no-audit", "--no-fund"),
+                *("--no-package-lock-only", "--no-dry-run", "--no-usage"),
+                *("--ignore-scripts", "--no-audit"),
             ],
             "folder": str(root),
         },
@@ -197,7 +188,13 @@ import os
 import sys
 from pathlib import Path
 
-names = ("npm_config_git", "npm_config_node_options", "GATESEAL_TEST_KEPT")
+names = (
+    "npm_config_git",
+    "npm_config_node_options",
+    "npm_config_location",
+    "npm_config_global",
+    "GATESEAL_TEST_KEPT",
+)
 start = {"command": sys.argv[2], "environment": [os.environ.get(n) for n in names]}
 with (Path(__file__).parent / "started.jsonl").open("a") as log:
     log.write(json.dumps(start) + "\\n")
@@ -205,7 +202,7 @@ with (Path(__file__).parent / "started.jsonl").open("a") as log:
 """A stand-in for npm that logs the settings that its environment holds."""
 
 
-def test_npm_and_the_npm_it_starts_take_git_from_path_and_no_node_options(
+def test_npm_and_the_npm_it_starts_take_git_from_path_and_install_in_the_project(
     tmp_path, node, monkeypatch
 ):
     """npm starts npm again for a git dependency, and only the environment reaches
@@ -213,11 +210,13 @@ def test_npm_and_the_npm_it_starts_take_git_from_path_and_no_node_options(
     (node / "node.py").write_text(LOGS_ITS_ENVIRONMENT)
     monkeypatch.setenv("npm_config_git", "./git-marker")
     monkeypatch.setenv("npm_config_node_options", "--require=./marker.cjs")
+    monkeypatch.setenv("npm_config_location", "global")
+    monkeypatch.setenv("npm_config_global", "true")
     monkeypatch.setenv("GATESEAL_TEST_KEPT", "kept")
     root = project(tmp_path, "package.json", "package-lock.json")
     assert on_node(monkeypatch, root, node) == 0
     assert started(node) == [
-        {"command": command, "environment": ["git", "null", "kept"]}
+        {"command": command, "environment": ["git", "null", "project", "false", "kept"]}
         for command in ("ci", "ls", "install")
     ]
 

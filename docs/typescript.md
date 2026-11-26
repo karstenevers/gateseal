@@ -156,7 +156,28 @@ The install is different for each package manager:
 - **npm.** `npm ci --dry-run` checks that `package-lock.json` matches the versions in `package.json`. `npm ls --package-lock-only` checks that it matches the source of each dependency, such as a tarball. Then `npm install --no-save` installs only what changed. npm is the one of the pinned Node's install, never an npm on `PATH`. Without that install, the hook stops.
 - **pnpm.** `pnpm install --frozen-lockfile` does both in one step. gateseal installs pnpm 10.28.0 once on the pinned Node, checked against its integrity hash, and starts it from that install, outside the repository. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
 
-The hook sets its options on the command line, so a setting in `.npmrc` or `pnpm-workspace.yaml` cannot leave out the lockfile, the development dependencies or the install itself, and cannot move the install out of the project. Registry, proxy and login settings still apply. See [the commands that the hook runs](tool-definitions.md#tools-that-read-the-node-project). No install script of a package runs. A lockfile that does not match `package.json` stops the push. The checks after the install do not run then, so the push shows one error. Run `npm install` or `pnpm install`, commit the lockfile, and push again.
+The hook obeys the settings of the project and the user, in `.npmrc`, `pnpm-workspace.yaml` and the environment, as `npm install` or `pnpm install` in a terminal does. It makes this promise:
+
+> A project or user setting can make the hook fail. No setting can make the hook pass with packages that differ from the packages that the lockfile pins.
+
+So a setting such as `omit=dev` leaves out the development dependencies. If `tsc` needs one of them, `tsc` stops the push. No install script of a package or of the project runs, and no pnpmfile. npm sends no audit request, so the registry does not learn the names of private packages. A lockfile that does not match `package.json` stops the push. The checks after the install do not run then, so the push shows one error. Run `npm install` or `pnpm install`, commit the lockfile, and push again. The hook runs these commands:
+
+```sh
+npm ci --dry-run --no-usage --ignore-scripts
+npm ls --package-lock-only --include=dev --include=optional --include=peer \
+  --no-usage
+npm install --no-save --package-lock --no-package-lock-only --no-dry-run \
+  --no-usage --ignore-scripts --no-audit
+pnpm install --frozen-lockfile --lockfile --ignore-scripts --ignore-pnpmfile \
+  --no-use-store-server --no-lockfile-only --lockfile-dir=. \
+  --config.git-branch-lockfile=false --config.merge-git-branch-lockfiles=false \
+  --config.ignore-package-manifest=false --config.fix-lockfile=false \
+  --config.dedupe=false --config.update=false --modules-dir=node_modules \
+  --config.enable-modules-dir=true --config.symlink=true \
+  --config.filter=null --config.filter-prod=null
+```
+
+The options turn off only the settings that would make the hook pass with other packages than the lockfile pins. See [the commands that the hook runs](tool-definitions.md#tools-that-read-the-node-project), and [A setting of npm or pnpm stops a push](troubleshooting.md#a-setting-of-npm-or-pnpm-stops-a-push).
 
 A type error also stops the push. `tsc` names the file, the line and the error, such as `src/total.ts(3,46): error TS2322`.
 
@@ -201,7 +222,7 @@ Run `gateseal configure` and commit the changed files. A team policy reviews ano
 
 - No install script runs. Some projects get types from an install or generate step, such as a `postinstall` code generator. `tsc` then reports missing types. Commit the generated files, so that each push and the CI gate find them.
 - No pnpmfile runs: not `.pnpmfile.cjs`, not one that a setting names, and not one from a config dependency. pnpm records a pnpmfile's checksum in `pnpm-lock.yaml`. So when the lockfile was written with a pnpmfile, the install stops with `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH`. Move what the pnpmfile changes into `overrides` or `packageExtensions` in `pnpm-workspace.yaml`. Then delete the pnpmfile, run `pnpm install` and commit the lockfile.
-- npm's `legacy-peer-deps` applies as the project or the user sets it. With it, npm installs no package that only a peer dependency asks for, even when the lockfile pins it. So write the lockfile with the setting that the push uses.
+- Your npm and pnpm settings apply, such as `omit=dev` or npm's `legacy-peer-deps`. With `legacy-peer-deps`, npm installs no package that only a peer dependency asks for, even when the lockfile pins it. So write the lockfile with the settings that the push uses.
 - pnpm keeps a folder at the top of `node_modules` that it did not make, such as a package from an earlier npm install or from an install with `node-linker=hoisted`. `tsc` can then find a package that `package.json` does not name, so a push can pass that the CI gate stops. After a change of the package manager or of `node-linker`, delete `node_modules` one time.
 - The generated CI file gives npm and pnpm no registry token. So the CI gate can install only packages that need no login.
 - The built-in `tsc` takes its options from the project's `tsconfig.json`, so a project can turn strict checks off. A team policy can own them with [its own tool and strict flags](add-a-tool.md#check-a-second-tsconfig-with-strict-tsc-flags).
