@@ -2,19 +2,23 @@
 
 Each version's Policy Lock record is npm's lockfile of the tool's package and
 its packages, which configure writes as an owned output, and the rules of the
-presets that an ESLint rule file names, which eslint_presets reads. Each hook is one
-command that node.Node.launch renders, and excludes every file that gateseal
-writes, so a formatter never rewrites one. The Lock records each tool in
-components under its name, and its Node once in native_artifacts.
+presets that an ESLint rule file names, which eslint_presets reads. Each hook is
+gateseal's own hook, npm_tool, with the tool's name and its executable's, and
+excludes every file that gateseal writes, so a formatter never rewrites one.
+The Lock records each tool in components under its name, and its Node once in
+native_artifacts.
 """
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, replace
 from typing import ClassVar
 
+from gateseal import npm_tool
 from gateseal.ci_providers import PROVIDERS
+from gateseal.compiler_release import NPM_TOOL_HOOK, GatesealPin
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import CONFIG, LOCK, MANIFEST
 from gateseal.tools import eslint_presets
@@ -33,7 +37,6 @@ from gateseal.tools.model import (
     ToolUse,
     Upstream,
     exclusion,
-    local_repository,
 )
 from gateseal.tools.node import Node, Tree, package_name, read_tree
 from gateseal.validation import fields, mapping, nested
@@ -184,7 +187,7 @@ class NpmTool:
 
     @property
     def lockfile(self) -> str:
-        return f"{OWNED}/{self.definition.name}.package-lock.json"
+        return npm_tool.LOCKFILE.format(tool=self.definition.name)
 
     def select(self, version: str) -> NpmTool:
         return replace(self, version=version)
@@ -192,19 +195,43 @@ class NpmTool:
     def using(self, hooks: tuple[Hook, ...]) -> NpmTool:
         return replace(self, use=replace(self.use, hooks=hooks))
 
+    @property
+    def hook_args(self) -> tuple[str, str]:
+        """Return what gateseal's hook needs to start the tool: its name and
+        its executable's. The hook reads the rest from the Lock."""
+        return self.definition.name, self.executable.name
+
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...]:
-        """Return the command that installs the tree if needed and starts the tool.
+        """Return the command that starts the tool as its hooks do, in the
+        gateseal that runs.
 
-        mise passes the caller's whole environment on, so variables adds nothing.
+        The command runs in the consumer's repository, so Python starts the
+        hook's file in isolated mode: no module of the working folder or of
+        PYTHONPATH loads in place of gateseal's. The hook needs only the
+        standard library. The caller's whole environment passes on, so
+        variables adds nothing.
         """
-        return self.node.launch(self.tree, self.lockfile, self.executable.name)
+        return (sys.executable, "-I", npm_tool.__file__, *self.hook_args)
 
-    def entry(self, exclude: str | None) -> dict[str, object]:
-        """Return the local repository, whose hooks never get a generated file."""
+    def entry(self, exclude: str | None, pin: GatesealPin) -> dict[str, object]:
+        """Return gateseal's repository with its hook once for each hook.
+
+        Each one keeps its ID as the alias, and never gets a generated file.
+        pre-commit starts one process of a hook at a time, because two first
+        starts of one program at once would both install it.
+        """
         pattern = GENERATED if exclude is None else f"{GENERATED}|{exclude}"
         definition = self.definition
-        return local_repository(
-            self.program(), self.use.hooks, pattern, definition.stages, definition.scope
+        return pin.repository_with(
+            [
+                hook.base_entry(pattern, definition.stages, definition.scope)
+                | {
+                    "id": NPM_TOOL_HOOK,
+                    "alias": hook.id,
+                    "args": [*self.hook_args, *hook.args],
+                }
+                for hook in self.use.hooks
+            ]
         )
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:

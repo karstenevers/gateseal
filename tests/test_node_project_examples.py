@@ -7,7 +7,6 @@ would ask nodejs.org and npm.
 """
 
 import json
-import shlex
 import tomllib
 
 from doc_examples import example
@@ -17,7 +16,6 @@ from node_policy import VERSION, lockfile
 from node_project_policy import (
     HEADER,
     TYPESCRIPT,
-    install_arguments,
     registry,  # noqa: F401
 )
 from test_npm_package import GENERATED
@@ -46,7 +44,9 @@ def app_policy(tmp_path):
 def own_hooks(locked):
     config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
     return config["repos"][0]["hooks"], {
-        hook["id"]: hook for repo in config["repos"][1:] for hook in repo["hooks"]
+        hook.get("alias", hook["id"]): hook
+        for repo in config["repos"][1:]
+        for hook in repo["hooks"]
     }
 
 
@@ -67,25 +67,23 @@ def test_the_tsc_app_example_runs_at_a_push_after_the_install(tmp_path, registry
     authoring.lock(root)
     policy = load_policy_tree(root)
     locked, compiled = consumer(policy, ("app-types",))
-    node = policy.tools["tsc-app"].node
     own, hooks = own_hooks(locked)
     assert own[-1] == {
         "id": "gateseal-node-packages",
-        "args": install_arguments(node),
         "stages": ["pre-push", "manual"],
     }
-    tree = policy.tools["tsc-app"].tree
-    launch = shlex.join(node.launch(tree, ".gateseal/tsc-app.package-lock.json", "tsc"))
     assert hooks["tsc-app"] == {
-        "id": "tsc-app",
+        "id": "gateseal-npm-tool",
+        "alias": "tsc-app",
         "name": "Check the types of the app with tsc",
         "stages": ["pre-push", "manual"],
         "always_run": True,
         "pass_filenames": False,
         "exclude": GENERATED,
-        "language": "unsupported",
-        "entry": f"{launch} --noEmit --project tsconfig.app.json --strict",
-        "require_serial": True,
+        "args": [
+            *("tsc-app", "tsc"),
+            *("--noEmit", "--project", "tsconfig.app.json", "--strict"),
+        ],
     }
     assert compiled["native_artifacts"]["node"]["version"] == VERSION
 

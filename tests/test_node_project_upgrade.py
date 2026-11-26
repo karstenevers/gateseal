@@ -47,5 +47,6 @@ def test_a_move_to_a_node_project_tool_needs_the_project_first(
     (consumer / "package-lock.json").write_text("{}")
     assert upgrade.run(worktree, typed).code == "upgraded"
     config = json.loads((consumer / ".pre-commit-config.yaml").read_bytes())
-    ids = [hook["id"] for repo in config["repos"] for hook in repo["hooks"]]
+    hooks = [hook for repo in config["repos"] for hook in repo["hooks"]]
+    ids = [hook.get("alias", hook["id"]) for hook in hooks]
     assert ids.index("gateseal-node-packages") < ids.index("tsc")

@@ -23,3 +23,9 @@
   pass_filenames: false
   always_run: true
   fail_fast: true
+- id: gateseal-npm-tool
+  name: Start a tool from npm on the pinned Node
+  description: Start a tool from npm on the Node that gateseal.lock pins, from the packages that the tool's lockfile pins. The first argument is the tool's name, the second its executable's, and the rest are the tool's own.
+  entry: python -I -m gateseal.npm_tool
+  language: python
+  require_serial: true

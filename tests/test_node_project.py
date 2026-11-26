@@ -7,7 +7,6 @@ the policy's release to configure.
 """
 
 import json
-import shlex
 import subprocess
 
 import pytest
@@ -24,7 +23,6 @@ from node_project_policy import (
     TYPESCRIPT,
     VUE_TSC_DEFINITION,
     adopt,
-    install_arguments,
     new_origin,
     project,
     publish,
@@ -46,7 +44,11 @@ def configuration(locked):
 def hooks(locked):
     """Return the hooks of each repository in the generated configuration."""
     config = configuration(locked)
-    return {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
+    return {
+        hook.get("alias", hook["id"]): hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+    }
 
 
 def own_hooks(locked):
@@ -107,33 +109,21 @@ def test_a_typescript_release_the_registry_lacks_stops_the_lock(
 def test_a_consumer_compiles_tsc_on_the_node_and_labels_it(tmp_path, registry):  # noqa: F811
     policy = locked_policy(tmp_path)
     locked, compiled = consumer(policy, ("hygiene", "typescript-types"))
-    node = policy.tools["tsc"].node
     assert hooks(locked)["tsc"] == {
-        "id": "tsc",
+        "id": "gateseal-npm-tool",
+        "alias": "tsc",
         "name": "tsc",
         "stages": ["pre-push", "manual"],
         "always_run": True,
         "pass_filenames": False,
         "exclude": GENERATED,
-        "language": "unsupported",
-        "entry": shlex.join(
-            [
-                *node.launch(
-                    policy.tools["tsc"].tree, ".gateseal/tsc.package-lock.json", "tsc"
-                ),
-                "--noEmit",
-                "--project",
-                "tsconfig.json",
-            ]
-        ),
-        "require_serial": True,
+        "args": ["tsc", "tsc", "--noEmit", "--project", "tsconfig.json"],
     }
     assert own_hooks(locked) == [
         {"id": "gateseal-check"},
         {"id": "gateseal-lfs-check"},
         {
             "id": "gateseal-node-packages",
-            "args": install_arguments(node),
             "stages": ["pre-push", "manual"],
         },
     ]
@@ -314,7 +304,6 @@ def test_one_install_runs_in_every_stage_of_a_node_project_tool(
     assert installs == [
         {
             "id": "gateseal-node-packages",
-            "args": install_arguments(policy.tools["vue-tsc"].node),
             "stages": stages,
         }
     ]

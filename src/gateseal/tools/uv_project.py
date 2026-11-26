@@ -61,6 +61,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, cast
 
+from gateseal.compiler_release import GatesealPin
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import MANIFEST
 from gateseal.tools.model import (
@@ -292,7 +293,7 @@ class ProjectTool:
             self.executable.name,
         )
 
-    def entry(self, exclude: str | None) -> dict[str, object]:
+    def entry(self, exclude: str | None, pin: GatesealPin) -> dict[str, object]:
         definition = self.definition
         return local_repository(
             self.program(), self.use.hooks, exclude, definition.stages, definition.scope

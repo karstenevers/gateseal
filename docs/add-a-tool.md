@@ -224,11 +224,17 @@ name = "prettier"
 [configuration]
 format = "toml"
 
+[files.ignore]
+extension = "txt"
+content = """
+# This file lists no file, so Prettier skips none.
+"""
+
 [hooks.prettier-markdown]
 name = "Format Markdown with Prettier"
 args = [
   "--config", "{configuration}",
-  "--no-editorconfig", "--ignore-path", "/dev/null",
+  "--no-editorconfig", "--ignore-path", "{ignore}",
   "--write", "--no-error-on-unmatched-pattern", "--",
 ]
 types_or = ["markdown"]
@@ -268,7 +274,7 @@ Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock c
 A repository that adopts the release selects the tool with `--capability docs`. Each commit then formats the staged Markdown files:
 
 - mise installs the pinned Node at the first commit and checks its archive. npm installs Prettier into its own cache, outside the repository.
-- `--no-editorconfig` and `--ignore-path /dev/null` keep the repository's `.editorconfig`, `.prettierignore` and `.gitignore` from changing the result.
+- `--no-editorconfig` and `--ignore-path` keep the repository's `.editorconfig`, `.prettierignore` and `.gitignore` from changing the result. The ignore path is the fixed file `files.ignore`, which gateseal writes as `.gateseal/prettier-markdown-ignore.txt`. It lists no file, and it exists on every platform.
 - `--no-error-on-unmatched-pattern` lets a commit pass when Prettier skips every staged file, such as one in `node_modules`.
 - `--` ends the options, so Prettier formats a file named like an option as a file.
 

@@ -6,12 +6,14 @@ gateseal policy lock and add would ask nodejs.org and npm.
 """
 
 import json
-import shlex
+import os
 import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
-from gateseal import authoring, checks, lock
+from conftest import PIN
+from gateseal import authoring, checks, lock, npm_tool
 from gateseal.ci import Scope
 from gateseal.lock import describe
 from gateseal.policy import load_policy_tree, review_policy
@@ -39,10 +41,10 @@ from test_team_tools import CAVEAT, POLICY, consumer, team, upstream  # noqa: F4
 DEPENDENCIES = {"prettier": PRETTIER, **PACKAGES}
 RECORD = {"lockfile": lockfile(DEPENDENCIES)}
 STALE_LOCK = "Run gateseal policy lock in the policy directory."
-ARGS = (
-    "--config .gateseal/prettier-docs.toml --no-editorconfig --ignore-path "
-    "/dev/null --write --ignore-unknown --"
-)
+ARGS = [
+    *("--config", ".gateseal/prettier-docs.toml", "--no-editorconfig"),
+    *("--ignore-path", "/dev/null", "--write", "--ignore-unknown", "--"),
+]
 GENERATED = (
     r"^(?:\.gateseal(?:/|$)|\.github/workflows/gateseal\.yml(?:/|$)|"
     r"\.pre-commit-config\.yaml(?:/|$)|azure-pipelines-gateseal\.yml(?:/|$)|"
@@ -71,7 +73,11 @@ def edit_record(root, edit):
 def hooks(locked):
     """Return the hooks of each repository in the generated configuration."""
     config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
-    return {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
+    return {
+        hook.get("alias", hook["id"]): hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+    }
 
 
 def test_policy_lock_records_npm_s_lockfile_of_the_package_and_its_packages(
@@ -299,23 +305,27 @@ def test_only_a_tool_on_node_takes_packages(tmp_path, upstream):  # noqa: F811
     )
 
 
-def test_a_consumer_compiles_one_launch_on_the_node(tmp_path, releases):  # noqa: F811
+def test_a_consumer_compiles_gateseal_s_hook_under_the_tool_s_hook_id(
+    tmp_path,
+    releases,  # noqa: F811
+):
     policy = load_policy_tree(locked_policy(tmp_path))
     locked, compiled = consumer(policy, ("hygiene", "docs"))
     tool = policy.tools["prettier-docs"]
-    request = tool.node.prefix[3]
-    entry = hooks(locked)["prettier-docs"]
-    program = f"{shlex.join(tool.program()[5:])} {ARGS}"
-    assert entry == {
-        "id": "prettier-docs",
+    start = ["prettier-docs", "prettier"]
+    assert hooks(locked)["prettier-docs"] == {
+        "id": "gateseal-npm-tool",
+        "alias": "prettier-docs",
         "name": "prettier docs",
         "stages": ["pre-commit", "manual"],
         "types_or": ["markdown", "yaml"],
         "exclude": GENERATED,
-        "language": "unsupported",
-        "entry": f"mise --no-config exec {shlex.quote(request)} -- {program}",
-        "require_serial": True,
+        "args": [*start, *ARGS],
     }
+    config = json.loads(locked.snapshot.outputs[".pre-commit-config.yaml"])
+    own = {"repo": PIN.repository, "rev": PIN.commit}
+    assert [repo | own == repo for repo in config["repos"]] == [True, False, True]
+    assert tool.program() == (sys.executable, "-I", npm_tool.__file__, *start)
     assert "exclude" not in hooks(locked)["check-yaml"]
     assert compiled["components"]["prettier-docs"] == {
         "package": "prettier",
@@ -328,8 +338,6 @@ def test_a_consumer_compiles_one_launch_on_the_node(tmp_path, releases):  # noqa
     assert outputs[".gateseal/prettier-docs.toml"] == RULES.encode()
     lockfile_output = outputs[".gateseal/prettier-docs.package-lock.json"]
     assert lockfile_output == canonical(RECORD["lockfile"])
-    copy = "cat .gateseal/prettier-docs.package-lock.json > "
-    assert f'{copy}"$new/package-lock.json"' in entry["entry"]
     assert [note.message for note in describe(locked) if note.category == "tool"] == [
         "Tool pre-commit-hooks 6.0.0 for hygiene: built-in, pre-commit-repository.",
         f"Tool prettier-docs {PRETTIER} for docs: team-defined, npm-package on Node "
@@ -363,8 +371,7 @@ def test_a_version_exception_changes_only_the_tools_version(
     path = ".gateseal/prettier-docs.package-lock.json"
     older = lockfile(DEPENDENCIES | {"prettier": "3.9.0"})
     assert locked.snapshot.outputs[path] == canonical(older)
-    entry = hooks(locked)["prettier-docs"]["entry"]
-    assert entry != hooks(pinned)["prettier-docs"]["entry"]
+    assert hooks(locked)["prettier-docs"] == hooks(pinned)["prettier-docs"]
     assert compiled["components"]["prettier-docs"]["version"] == "3.9.0"
     assert compiled["components"]["prettier-docs"]["packages"] == PACKAGES
 
@@ -512,6 +519,28 @@ def test_run_and_gate_name_the_node_of_each_hook_on_node(
     gate = checks.gate(None, locked, Scope(None, None, None, "Checked every file."))
     found = [(e["category"], e["hook"], e.get("node")) for e in gate.entries[1:]]
     assert found == named
+
+
+def test_the_history_scan_starts_the_hook_of_the_gateseal_that_runs(
+    tmp_path,
+    releases,  # noqa: F811
+):
+    """The scan runs in the consumer's repository, where a folder gateseal
+    can hold another npm_tool, and so can a folder on PYTHONPATH."""
+    program = load_policy_tree(locked_policy(tmp_path)).tools["prettier-docs"].program()
+    repository = tmp_path / "repository"
+    (repository / "gateseal").mkdir(parents=True)
+    (repository / "gateseal/__init__.py").write_text("")
+    (repository / "gateseal/npm_tool.py").write_text("print('planted')\n")
+    env = os.environ | {"PYTHONPATH": str(repository)}
+    ran = subprocess.run(
+        program, cwd=repository, env=env, capture_output=True, text=True
+    )
+    assert (ran.returncode, ran.stdout, ran.stderr) == (
+        npm_tool.STOPPED,
+        "",
+        "gateseal.lock does not record the pinned Node. Run gateseal configure.\n",
+    )
 
 
 def test_a_history_finding_names_the_node_of_its_tool(

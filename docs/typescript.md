@@ -21,6 +21,7 @@ Besides the Manifest, the Lock and `.pre-commit-config.yaml`, configure writes s
 - `eslint-loader.mjs`, the file that gives the rules to ESLint.
 - `eslint-suppressions.json`, an empty list that the hook gives to ESLint in place of the repository's own `eslint-suppressions.json`.
 - `prettier.toml`, the Prettier options.
+- `prettier-ignore.txt`, an ignore file that lists no file, which the hook gives to Prettier in place of the repository's `.prettierignore` and `.gitignore`.
 - `eslint.package-lock.json` and `prettier.package-lock.json`, npm's lockfile of each tool, which `policy.lock` records and the hooks install exactly.
 
 Review the files and commit them together, as [Configure a repository](configure-a-repository.md) shows. To see the versions that the hooks run, run `gateseal status`. Its output includes lines like this:

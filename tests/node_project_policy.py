@@ -7,12 +7,8 @@ no project. A fake upstream serves nodejs.org, npm and the policy's other
 tools, where gateseal policy lock would reach the network.
 """
 
-import shlex
-
 import pytest
 from gateseal import authoring, lock
-from gateseal.tools.node import Node
-from gateseal.tools.package_managers import PNPM
 from node_policy import (
     DEFINITION,
     RULES,
@@ -69,12 +65,6 @@ pin = "{VUE_TSC}"
 reviewed = ["{VUE_TSC}"]
 
 {TABLE}"""
-
-
-def install_arguments(node: Node) -> list[str]:
-    """Return the arguments of gateseal's install hook on node: npm's, then pnpm's."""
-    pnpm = node.launch(PNPM.tree, None, "pnpm")
-    return [f"npm={shlex.join(node.included('npm'))}", f"pnpm={shlex.join(pnpm)}"]
 
 
 def upstream():

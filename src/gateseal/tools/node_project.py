@@ -25,7 +25,6 @@ packages. Each version's Policy Lock record and the Lock's record are an
 npm-package tool's.
 """
 
-import shlex
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,13 +34,8 @@ from gateseal.compiler_release import NODE_PACKAGES_HOOK, NODE_PACKAGES_HOOK_NAM
 from gateseal.managed_files import MANIFEST
 from gateseal.tools import npm_package
 from gateseal.tools.model import HOOK_STAGES, Hook, Origin, OutputFormat, Stage, Tool
-from gateseal.tools.node import Node
 from gateseal.tools.npm_package import NpmPackage, NpmTool
-from gateseal.tools.package_managers import (
-    PACKAGE_MANAGERS,
-    PackageManager,
-    package_manager,
-)
+from gateseal.tools.package_managers import package_manager
 
 INSTALL = Hook(
     "gateseal",
@@ -91,42 +85,20 @@ def require_project(root: Path, tools: Iterable[Tool]) -> None:
         )
 
 
-def start(node: Node, manager: PackageManager) -> tuple[str, ...]:
-    """Return the words that start manager's own executable on node.
-
-    Node's distribution includes npm, so npm is the one of the pinned install,
-    and the command stops without that install. Any other package manager
-    starts from its pinned lockfile, as every tool from npm starts: gateseal
-    installs it once into its own folder, outside the project. So npm does not
-    read the project's package.json there, whose devEngines field can name
-    another package manager and then stops npm.
-    """
-    if manager.tree is None:
-        return node.included(manager.name)
-    return node.launch(manager.tree, None, manager.name)
-
-
 def install_hook_entries(tools: Iterable[Tool]) -> tuple[dict[str, object], ...]:
     """Return gateseal's hook that installs the project's packages, if tools need it.
 
-    It runs in each stage of a tool of this kind. Its arguments are name=command
-    for each package manager, where command starts that package manager on the
-    policy's Node, which every tool on Node shares. The hook picks one from the
-    lockfile. Without such a tool there is no hook, so no other configuration
-    changes.
+    It runs in each stage of a tool of this kind, and picks the package
+    manager from the lockfile. Without such a tool there is no hook, so no
+    other configuration changes.
     """
     found = _project_tools(tools)
     if not found:
         return ()
-    node = found[0].node
     stages = frozenset[Stage]().union(*(tool.definition.stages for tool in found))
     return (
         {
             "id": NODE_PACKAGES_HOOK,
-            "args": [
-                f"{manager.name}={shlex.join(start(node, manager))}"
-                for manager in PACKAGE_MANAGERS
-            ],
             "stages": list(
                 dict.fromkeys(HOOK_STAGES[stage] for stage in Stage if stage in stages)
             ),

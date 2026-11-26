@@ -20,6 +20,11 @@ pre-commit runs hooks, mise installs release binaries, and CI runs the gate, as
 the [vision's principles](VISION.md#principles) say. A change that makes
 gateseal do one of those itself is declined.
 
+There is one exception. gateseal's own hook `gateseal-npm-tool` starts each
+tool from npm on the pinned Node. So the hook's entry in
+`.pre-commit-config.yaml` is one short line, and it runs the same on every
+platform. pre-commit still runs the hook, and mise still installs Node.
+
 For anything bigger than a fix, open an issue first, so the design is agreed
 before the code is written.
 

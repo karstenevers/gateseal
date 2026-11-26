@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
+from gateseal.compiler_release import GatesealPin
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.choices import Choice, parse_choices
 from gateseal.tools.configurations import (
@@ -111,9 +112,8 @@ class Starts(Enum):
 
     The hooks of an UPSTREAM_HOOKS kind come from the tool's own repository,
     so its definition has no executable. The hooks of an EXECUTABLE kind
-    start the tool's own executable, as local_repository renders them. A
-    RECORDED_EXECUTABLE kind does the same and records what the commit check
-    compares an installed executable with.
+    start the tool's own executable. A RECORDED_EXECUTABLE kind does the same
+    and records what the commit check compares an installed executable with.
     """
 
     UPSTREAM_HOOKS = auto()
@@ -434,8 +434,8 @@ class ToolDefinition:
     stages is one of STAGE_SETS' sets, which every hook's stages render, and
     scope says whether its hooks get file names. history holds the arguments
     of the tool's executable that scan a revision range, one of which holds
-    RANGE, where the CI gate puts the range; only a kind whose hooks are local
-    has one.
+    RANGE, where the CI gate puts the range; only a kind that starts its own
+    executable has one.
     choices holds the Policy Choices the definition declares, by name; only a
     definition with a toml configuration declares any, since each renders into
     it.
@@ -518,7 +518,7 @@ def _executable(value: object, field: str) -> Executable:
 def _source_executable(value: object, tool: str, source: Source) -> Executable | None:
     """Return the executable a definition names, as its kind allows one.
 
-    A kind whose hooks are local needs an executable, and only such a kind
+    A kind that starts its own executable needs one, and only such a kind
     has one. Only a kind that records the installed program checks it at
     commit.
     """
@@ -706,7 +706,7 @@ def parse_definition(
 
     The caller has read kind. The other closed values are read before any
     other field, so a newer compiler's value stops with the step to use it.
-    A kind whose hooks are local needs an executable, and only such a kind
+    A kind that starts its own executable needs one, and only such a kind
     has one.
     """
     field = f"tools.{name}"
@@ -829,14 +829,17 @@ class Tool(Protocol):
     def program(self, variables: Collection[str] = ()) -> tuple[str, ...] | None:
         """Return the command that starts the tool's executable, or None.
 
-        Only a kind whose hooks are local has one. variables names the caller's
-        environment variables that the executable also gets. The gate starts a
+        Only a kind that starts its own executable has one. variables names the
+        caller's environment variables that the executable also gets. The gate starts a
         history scan with it.
         """
         ...
 
-    def entry(self, exclude: str | None) -> dict[str, object]:
-        """Return its one repository in the native pre-commit configuration."""
+    def entry(self, exclude: str | None, pin: GatesealPin) -> dict[str, object]:
+        """Return its one repository in the native pre-commit configuration.
+
+        pin is the gateseal whose own hook starts a tool from npm.
+        """
         ...
 
     def lock_entry(self) -> tuple[LockSection, str, dict[str, object]]:

@@ -6,7 +6,6 @@ nodejs.org serves the release files from a dictionary.
 """
 
 import json
-import re
 
 import pytest
 from gateseal import authoring, upgrade
@@ -161,7 +160,6 @@ def test_a_record_reads_back_as_the_node_that_starts_programs():
         f"{DIST}{MACOS},platforms_macos_arm64_checksum="
         f"sha256:{record['macos-arm64']['sha256']}]@{VERSION}"
     )
-    assert node.prefix == ("mise", "--no-config", "exec", request, "--")
 
 
 ESLINT = {"eslint": "10.15.0", "@typescript-eslint/parser": "8.73.0"}
@@ -173,46 +171,16 @@ def test_a_tree_starts_the_program_by_its_path_in_the_package():
     assert tree == Tree(canonical(record), "node_modules/eslint/bin/cli.js")
 
 
-def test_launch_installs_the_tree_on_the_node_that_mise_installed():
-    node = read_node(VERSION, node_record())
-    tree = read_tree(lockfile(ESLINT), ESLINT, "eslint", "eslint", "eslint 10.15.0")
-    request = node.prefix[3]
-    install = f"{request.partition('[')[0]}@{VERSION}"
-    assert re.fullmatch(r"http:node-[0-9a-f]{12}@24\.22\.3", install)
-    command = node.launch(tree, ".gateseal/eslint.package-lock.json", "eslint")
-    assert command[: len(node.prefix)] == node.prefix
-    script = command[len(node.prefix) :]
-    assert script[:2] == ("/bin/sh", "-c") and script[3:] == ("eslint",)
-    assert f"mise --no-config where {install} " in script[2]
-    assert "cat .gateseal/eslint.package-lock.json >" in script[2]
-    assert '"$dir/"node_modules/eslint/bin/cli.js "$@"' in script[2]
-
-
-def folder(version, dependencies):
-    node = Node(version, read_node(VERSION, node_record()).platforms)
-    tree = read_tree(lockfile(dependencies), dependencies, "eslint", "eslint", "x")
-    script = node.launch(tree, "lock", "eslint")[-2]
-    return re.search(r"/(node-[^;]*); ", script)[1]
-
-
-def test_each_node_and_each_lockfile_has_its_own_install_folder():
-    assert re.fullmatch(r"node-24\.22\.3/[0-9a-f]{16}", folder(VERSION, ESLINT))
-    assert folder("24.22.2", ESLINT) == folder(VERSION, ESLINT).replace(
-        VERSION, "24.22.2"
-    )
-    other = ESLINT | {"eslint": "10.15.1"}
-    assert folder(VERSION, other).split("/")[1] != folder(VERSION, ESLINT).split("/")[1]
-
-
 MISE = """#!/bin/sh
 case $2 in
 version) cat "$FAKE/version" 2>/dev/null || echo "2026.10.19 linux-x64" ;;
-where) echo "$FAKE/node" ;;
+where) [ ! -e "$FAKE/uninstalled" ] || exit 1; echo "$FAKE/node" ;;
 exec) shift 4; exec "$@" ;;
 esac
 """
 """mise --no-config version, where INSTALL, and exec REQUEST -- PROGRAM ARGS.
-Beside a file version, it reports the version that the file holds."""
+Beside a file version, it reports the version that the file holds. Beside a
+file uninstalled, where finds no install."""
 
 NPM_LOCK = """#!/bin/sh
 printf '%s\\n' "$@" > "$FAKE/arguments"
@@ -259,7 +227,7 @@ def test_lock_runs_npm_on_the_pinned_node_from_an_empty_configuration(
         "--userconfig",
         f"{folder}/.npmrc",
         "--globalconfig",
-        "/dev/null",
+        f"{folder}/.npmrc-global",
         "--cache",
         f"{folder}/.npm",
         "--ignore-scripts",
@@ -303,6 +271,19 @@ def test_a_failed_npm_names_the_tool_version_and_npm_s_report(
         )
 
 
+def test_lock_without_the_pinned_node_names_it_and_runs_no_npm(tmp_path, monkeypatch):
+    lock, fake = lock_on_node(tmp_path, monkeypatch)
+    (fake / "uninstalled").touch()
+    failure = refused(lock)
+    assert (failure.code, failure.exit_code) == ("upstream_unavailable", 4)
+    assert str(failure) == (
+        f"mise has no install of Node {VERSION}, the pinned Node. "
+        "Turn the auto-install of mise on."
+    )
+    assert failure.next_step == "Then rerun gateseal policy lock."
+    assert not (fake / "arguments").exists()
+
+
 NPM_CI = """#!/bin/sh
 printf '%s\\n' "$@" > "$FAKE/arguments"
 [ ! -e "$FAKE/report" ] || { cat "$FAKE/report" >&2; exit 1; }
@@ -310,12 +291,12 @@ cp "$3/package.json" "$3/package-lock.json" "$FAKE/"
 """
 """npm ci --prefix FOLDER ...: it keeps FOLDER's package files, or fails."""
 
-NODE = """#!/bin/sh
-printf '%s\\n' "$@" > "$FAKE/node-arguments"
+PROGRAM = """printf '%s\\n' "$@" > "$FAKE/node-arguments"
 [ ! -e "$FAKE/node-report" ] || { cat "$FAKE/node-report" >&2; exit 1; }
 printf '{"read": true}'
 """
-"""node PROGRAM FOLDER ARGUMENT, as mise exec starts it: it prints JSON or fails."""
+"""The program FOLDER ARGUMENT, which the stand-in node runs with sh: it prints
+JSON or fails."""
 
 LOCKED = {"packages": {"": {"dependencies": {"eslint": "10.15.0"}}}}
 
@@ -324,12 +305,12 @@ def evaluate_on_node(tmp_path, monkeypatch, report=None, failure=None):
     """Run a program in an install of ESLint 10.15.0 with stand-ins, and the fakes."""
     lock, fake = lock_on_node(tmp_path, monkeypatch, report)
     executable(fake / "node/bin/npm", NPM_CI)
-    executable(fake / "bin/node", NODE)
     if failure is not None:
         (fake / "node-report").write_text(failure)
     npm = authoring.Releases("git", tmp_path / "scratch", "gateseal policy lock")
     npm.node = read_node(VERSION, node_record())
     program = tmp_path / "program.mjs"
+    program.write_text(PROGRAM)
     return lambda: npm.evaluate(LOCKED, program, {"a": [1]}, "eslint", "10.15.0"), fake
 
 
@@ -349,7 +330,6 @@ def test_evaluate_installs_the_lockfile_and_runs_the_program_on_node(
         folder,
     ]
     assert (fake / "node-arguments").read_text().splitlines() == [
-        str(tmp_path / "program.mjs"),
         folder,
         '{"a": [1]}',
     ]

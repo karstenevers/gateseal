@@ -1,13 +1,13 @@
 """The gateseal-node-packages hook installs a Node project's packages.
 
-The hook's arguments start each package manager on the pinned Node. Each test
-passes Python and a script in their place, and the script logs what it was
-asked to start. A real install runs in no test.
+The hook starts the package manager on the Node that the Lock pins. A stand-in
+for mise names a folder as that Node's install, and its node passes each
+package manager's start to a script, which logs what it was asked to start. A
+real install runs in no test.
 """
 
 import json
 import os
-import shlex
 import sys
 from pathlib import Path
 
@@ -15,6 +15,7 @@ import pytest
 import yaml
 from gateseal import node_packages
 from gateseal.compiler_release import NODE_PACKAGES_HOOK, NODE_PACKAGES_HOOK_NAME
+from gateseal.tools.package_managers import PNPM
 from stand_ins import executable
 
 STAND_IN = """\
@@ -62,20 +63,37 @@ def project(tmp_path, *names):
     return root
 
 
-def hook(monkeypatch, root, *arguments):
+NODE = """\
+#!{python}
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+program, *arguments = sys.argv[1:]
+if program == "-e" or "--prefix" in arguments:
+    sys.exit(0)
+script = Path(__file__).parents[1] / "node.py"
+name = Path(program).name.removesuffix(".cjs")
+sys.exit(subprocess.run([sys.executable, script, name, *arguments]).returncode)
+"""
+"""The pinned Node: it passes a package manager's start to the script node.py
+with the package manager's name first. The launcher's own first install of
+pnpm, npm ci and its check, does nothing."""
+
+LOCK = {"native_artifacts": {"node": {"version": "24.22.3", "platforms": {}}}}
+
+
+def on_node(monkeypatch, root, node, mise="echo '{node}'", lock=LOCK):
+    """Run the hook in root, with node as the install that mise names."""
+    (root / "gateseal.lock").write_text(json.dumps(lock))
+    executable(node / "bin/node", NODE.format(python=sys.executable))
+    executable(node / "mise/mise", f"#!/bin/sh\n{mise.format(node=node)}\n")
+    monkeypatch.setenv("PATH", f"{node / 'mise'}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("XDG_CACHE_HOME", str(node / "cache"))
     monkeypatch.chdir(root)
-    monkeypatch.setattr(sys, "argv", ["gateseal-node-packages", *arguments])
+    monkeypatch.setattr(sys, "argv", ["gateseal-node-packages"])
     return node_packages.main()
-
-
-def on_node(monkeypatch, root, node):
-    stand_in = [sys.executable, str(node / "node.py")]
-    return hook(
-        monkeypatch,
-        root,
-        f"npm={shlex.join([*stand_in, 'npm'])}",
-        f"pnpm={shlex.join([*stand_in, 'pnpm'])}",
-    )
 
 
 def started(node):
@@ -237,7 +255,7 @@ def test_an_npm_lockfile_that_does_not_match_stops_before_the_install(
     )
 
 
-def test_a_pnpm_project_starts_pnpm_with_the_command_of_its_argument(
+def test_a_pnpm_project_starts_pnpm_from_its_pinned_lockfile(
     tmp_path, node, monkeypatch
 ):
     root = project(tmp_path, "package.json", "pnpm-lock.yaml")
@@ -248,6 +266,9 @@ def test_a_pnpm_project_starts_pnpm_with_the_command_of_its_argument(
             "folder": str(root),
         }
     ]
+    [install] = (node / "cache/gateseal/npm").glob("*/node-24.22.3/*")
+    assert (install / "package-lock.json").read_bytes() == PNPM.tree.lockfile
+    assert not list(root.glob("*npmrc*"))
 
 
 def test_a_failed_pnpm_install_names_pnpm_and_its_lockfile(
@@ -286,58 +307,32 @@ def test_a_repository_without_a_lockfile_starts_nothing(
     )
 
 
-def test_a_missing_program_of_the_prefix_is_a_missing_prerequisite(
-    tmp_path, monkeypatch, capfd
-):
-    root = project(tmp_path, "package.json", "package-lock.json")
-    assert hook(monkeypatch, root, "npm=gateseal-test-missing-mise exec -- npm") == 1
-    assert capfd.readouterr() == (
-        "",
-        "gateseal: Install the documented gateseal-test-missing-mise prerequisite.\n"
-        "Next: Install the program that the message names and put it on PATH, then "
-        "run the command again.\n",
-    )
+NO_NODE = '[ "$2" = exec ] || exit 1'
+"""mise with its auto-install off: exec installs nothing, and where fails."""
 
 
-@pytest.mark.parametrize(
-    ("lockfile", "arguments", "name"),
-    [
-        ("package-lock.json", [], "npm"),
-        ("pnpm-lock.yaml", ["npm=gateseal-test-missing-mise exec -- npm"], "pnpm"),
-    ],
-)
-def test_a_package_manager_without_an_argument_stops_the_hook(
-    tmp_path, node, monkeypatch, capfd, lockfile, arguments, name
+@pytest.mark.parametrize("lockfile", ["package-lock.json", "pnpm-lock.yaml"])
+def test_without_the_pinned_node_the_hook_stops_and_names_it(
+    tmp_path, node, monkeypatch, capfd, lockfile
 ):
-    """gateseal configure writes an argument for each package manager, so none
-    starts from PATH."""
-    executable(node / f"bin/{name}", f"#!{sys.executable}\n{STAND_IN}")
-    monkeypatch.setenv("PATH", str(node / "bin"))
     root = project(tmp_path, "package.json", lockfile)
-    assert hook(monkeypatch, root, *arguments) == 1
-    assert started(node / "bin") == []
-    assert capfd.readouterr() == (
-        "",
-        f"gateseal: gateseal-node-packages has no argument that starts {name}.\n"
-        "Next: Run gateseal configure, which writes the hook's arguments. Then push "
-        "again.\n",
+    assert on_node(monkeypatch, root, node, NO_NODE) == 1
+    assert started(node) == []
+    assert capfd.readouterr().err.endswith(
+        "mise has no install of Node 24.22.3, the pinned Node. "
+        "Turn the auto-install of mise on.\n"
     )
 
 
-@pytest.mark.parametrize("argument", ["pnpm", "pnpm=", "pnpm= ", "pnpm='mise exec"])
-def test_an_argument_without_a_command_stops_the_hook_before_it_starts_anything(
-    tmp_path, node, monkeypatch, capfd, argument
+def test_without_a_lock_that_records_node_the_hook_stops(
+    tmp_path, node, monkeypatch, capfd
 ):
     root = project(tmp_path, "package.json", "package-lock.json")
-    stand_in = shlex.join([sys.executable, str(node / "node.py"), "npm"])
-    assert hook(monkeypatch, root, f"npm={stand_in}", argument) == 1
+    assert on_node(monkeypatch, root, node, lock={}) == 1
     assert started(node) == []
     assert capfd.readouterr() == (
         "",
-        "gateseal: Each argument of gateseal-node-packages must be a package "
-        f"manager's name, =, and the command that starts it, not {argument!r}.\n"
-        "Next: Run gateseal configure, which writes the hook's arguments. Then push "
-        "again.\n",
+        "gateseal.lock does not record the pinned Node. Run gateseal configure.\n",
     )
 
 

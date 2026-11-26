@@ -14,16 +14,11 @@ from gateseal.manifest import BundledSource, parse_manifest, render, resolve
 from gateseal.policy import load_bundled_policy
 from gateseal.tools import built_in_tools
 
-NPM_ENTRY = "a short hook entry for each tool from npm"
 EMPTY_IGNORE_FILE = "an empty ignore file of gateseal's own"
 WINDOWS = "the Windows port"
 
 KNOWN_UNIX_ONLY = {
-    ("eslint", "eslint", "/bin/sh"): NPM_ENTRY,
-    ("prettier", "prettier", "/bin/sh"): NPM_ENTRY,
-    ("tsc", "tsc", "/bin/sh"): NPM_ENTRY,
     ("betterleaks", "betterleaks", "/dev/null"): EMPTY_IGNORE_FILE,
-    ("prettier", "prettier", "/dev/null"): EMPTY_IGNORE_FILE,
     ("coverage", "coverage-erase", "env"): WINDOWS,
     ("coverage", "coverage-run", "env"): WINDOWS,
     ("coverage", "coverage-json", "env"): WINDOWS,
@@ -90,14 +85,18 @@ def built_in_entries():
         for name, definition in built_in_tools().items()
         for hook in definition.hooks
     }
-    hooks = [hook for repository in config["repos"] for hook in repository["hooks"]]
-    assert set(tools) <= {hook["id"] for hook in hooks}, (
+    hooks = {
+        hook.get("alias", hook["id"]): hook
+        for repository in config["repos"]
+        for hook in repository["hooks"]
+    }
+    assert set(tools) <= set(hooks), (
         "the bundled policy runs every hook of every Built-in Tool"
     )
     return [
-        (tools[hook["id"]], hook["id"], words(hook))
-        for hook in hooks
-        if hook["id"] in tools
+        (tools[name], name, words(hook))
+        for name, hook in hooks.items()
+        if name in tools
     ]
 
 
@@ -120,7 +119,7 @@ def test_a_new_unix_only_word_and_a_removed_known_case_both_fail():
     }
     entries = [(tool, hook, words(value)) for (tool, hook), value in hooks.items()]
     known = {
-        ("prettier", "prettier", "/bin/sh"): NPM_ENTRY,
+        ("prettier", "prettier", "/bin/sh"): WINDOWS,
         ("prettier", "prettier", "/dev/null"): EMPTY_IGNORE_FILE,
         ("deptry", "deptry", "env"): WINDOWS,
     }

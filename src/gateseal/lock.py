@@ -105,7 +105,7 @@ def compile_outputs(
     """
     repositories = [
         pin.hook_repository(selection.pushes, *install_hook_entries(selection.tools)),
-        *(tool.entry(_exclude(selection, tool)) for tool in selection.tools),
+        *(tool.entry(_exclude(selection, tool), pin) for tool in selection.tools),
     ]
     if selection.repository_hooks:
         repositories.append(repository_entry(selection.repository_hooks))

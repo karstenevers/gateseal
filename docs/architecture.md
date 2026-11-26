@@ -97,7 +97,7 @@ target_version = "py312"                      # default: replaced by this value
 ```mermaid
 flowchart TD
     accTitle: How gateseal checks a commit
-    accDescr: git commit starts pre-commit. pre-commit runs gateseal-check first, which compares the staged generated files with the staged Lock. If it passes, pre-commit runs each tool's hook. A Python hook runs in the environment that pre-commit built. A release binary starts through mise, which installs it at first use and checks its archive. A project tool starts through uv run, which installs the packages that the repository's uv.lock pins and the pinned tool. A tool from npm starts through mise on the pinned Node, which mise installs at first use and checks against its archive. npm installs the locked packages once into the user's cache folder.
+    accDescr: git commit starts pre-commit. pre-commit runs gateseal-check first, which compares the staged generated files with the staged Lock. If it passes, pre-commit runs each tool's hook. A Python hook runs in the environment that pre-commit built. A release binary starts through mise, which installs it at first use and checks its archive. A project tool starts through uv run, which installs the packages that the repository's uv.lock pins and the pinned tool. A tool from npm starts through gateseal-npm-tool, which reads the pinned Node and the tool's lockfile from gateseal.lock. mise installs that Node at first use and checks its archive. npm installs the locked packages once into the user's cache folder.
     git["git commit"] -- "starts" --> precommit["pre-commit"]
     precommit -- "1. runs first" --> check["gateseal-check<br/>staged files against the staged Lock"]
     precommit -- "2. runs each Python hook" --> python["Python hooks, such as Ruff"]
@@ -105,8 +105,8 @@ flowchart TD
     mise -- "installs at first use,<br/>checks the archive, starts" --> binary["Release binaries,<br/>such as Betterleaks"]
     precommit -- "2. runs each project hook" --> uv["uv run"]
     uv -- "installs the locked packages<br/>and the pinned tool, starts" --> project["Project tools,<br/>such as Pyright"]
-    precommit -- "2. runs each npm hook" --> node["mise exec<br/>pinned Node"]
-    node -- "installs Node at first use, checks the archive;<br/>npm installs the locked packages once, starts" --> npmtool["Tools from npm,<br/>such as ESLint and Prettier"]
+    precommit -- "2. runs each npm hook" --> node["gateseal-npm-tool<br/>pinned Node from mise"]
+    node -- "has mise install Node at first use, checks the archive;<br/>installs the locked packages once, starts" --> npmtool["Tools from npm,<br/>such as ESLint and Prettier"]
 ```
 
 The first commit hook compares staged generated files with the staged Lock. When it fails, pre-commit runs no other hook. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI. The CI job and `gateseal fetch` make these downloads before the first hook runs.
