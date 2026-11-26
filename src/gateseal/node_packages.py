@@ -6,7 +6,9 @@ hooks run. No install script runs, because a package's script is code that no
 one reviewed. npm checks before it installs: the dry run of npm ci proves that
 package-lock.json matches the versions in package.json, and npm ls
 --package-lock-only that it matches their sources. npm install --no-save then
-installs only what changed. pnpm's frozen install does both in one step.
+installs only what changed. pnpm's frozen install does both in one step. A
+setting of the project or the user can make the hook fail, but cannot make it
+pass with other packages than the lockfile pins.
 
 The hook picks the package manager when it runs, from the lockfile that the
 repository commits, because the generated configuration must be the same for an

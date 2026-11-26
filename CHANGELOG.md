@@ -157,7 +157,10 @@ change the manifest, policy or lock format, and its entry says how to move.
   `gateseal-node-packages` installs what `package-lock.json` or
   `pnpm-lock.yaml` pins into `node_modules`, without install scripts, in each
   stage that runs such a tool. A lockfile that does not match `package.json`
-  stops the hook, and no later hook of that stage runs. `gateseal configure`
+  stops the hook, and no later hook of that stage runs. The install obeys the
+  npm and pnpm settings of the project and the user, such as `omit=dev`. A
+  setting can make the hook fail, but no setting can make it pass with other
+  packages than the lockfile pins. `gateseal configure`
   and `gateseal check` stop with `missing_project` in a repository without
   `package.json` or a lockfile, and with `ambiguous_project` in one with both
   lockfiles or with `npm-shrinkwrap.json` beside `package-lock.json`. Yarn

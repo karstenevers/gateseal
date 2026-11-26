@@ -47,29 +47,14 @@ NPM = PackageManager(
     "package-lock.json",
     None,
     (
-        (
-            "ci",
-            "--dry-run",
-            "--no-global",
-            "--location=project",
-            "--no-usage",
-            "--ignore-scripts",
-            "--no-audit",
-            "--no-fund",
-        ),
+        ("ci", "--dry-run", "--no-usage", "--ignore-scripts"),
         (
             "ls",
             "--package-lock-only",
-            "--package-lock",
-            "--no-global",
-            "--location=project",
             "--include=dev",
             "--include=optional",
             "--include=peer",
             "--no-usage",
-            "--ignore-scripts",
-            "--no-audit",
-            "--no-fund",
         ),
     ),
     (
@@ -78,19 +63,18 @@ NPM = PackageManager(
         "--package-lock",
         "--no-package-lock-only",
         "--no-dry-run",
-        "--no-global",
-        "--location=project",
-        "--include=dev",
-        "--include=optional",
-        "--include=peer",
         "--no-usage",
         "--ignore-scripts",
         "--no-audit",
-        "--no-fund",
     ),
     "node_modules/.package-lock.json",
     ("npm-shrinkwrap.json",),
-    (("npm_config_git", "git"), ("npm_config_node_options", "null")),
+    (
+        ("npm_config_git", "git"),
+        ("npm_config_node_options", "null"),
+        ("npm_config_location", "project"),
+        ("npm_config_global", "false"),
+    ),
 )
 """npm, which Node's distribution includes.
 
@@ -99,21 +83,28 @@ lockfile matches package.json, and fails when it does not. It compares only
 versions, so npm ls --package-lock-only then fails when a dependency in
 package.json comes from another source than the lockfile names, such as
 another tarball of the same version. npm install --no-save then installs only
-what changed, and leaves the lockfile as it is.
-Options on the command line win over an .npmrc and the environment, so npm
-installs every package that the lockfile pins, development dependencies
-included, and works on the project rather than the global folder of Node. The
-dry run also rewrites npm's record of node_modules to what the lockfile pins,
-though it installs nothing. npm install would trust that record and keep a
-stale package, so the hook puts the record back as it was. npm install then
-replaces each package whose source changed, also at the same version, such as
-a tarball that the lockfile names anew.
+what changed, and leaves the lockfile as it is. The dry run also rewrites
+npm's record of node_modules to what the lockfile pins, though it installs
+nothing. npm install would trust that record and keep a stale package, so the
+hook puts the record back as it was. npm install then replaces each package
+whose source changed, also at the same version.
+
+The settings of the project and the user apply, as to npm install in a
+terminal, and a setting can make the hook fail. The options turn off only the
+settings that would make it pass with other packages than the lockfile pins:
+an install that ignores the lockfile or leaves node_modules as it is, and a
+check that prints its usage in place of the check or skips a kind of
+dependency. npm install leaves out a kind that a setting omits, but installs a
+package of that kind from package.json when a dependency of another kind needs
+it, so npm ls checks every kind. No script runs, also none of the project,
+which the dry run would run. npm install sends no audit request, which would
+tell the registry the name and version of each package, also of a private one.
 
 For a git dependency with a script, npm starts npm again in a clone of the
 dependency, where the clone's .npmrc applies. That npm gets npm's settings only
 from the environment, which wins over every .npmrc. So the environment takes git
-from PATH and gives Node no options, and no .npmrc names a program or code to
-run.
+from PATH, gives Node no options and keeps the install in the project, and no
+.npmrc names a program or code to run or installs into the global prefix.
 """
 
 PNPM = PackageManager(
@@ -127,29 +118,21 @@ PNPM = PackageManager(
     (
         "install",
         "--frozen-lockfile",
+        "--lockfile",
         "--ignore-scripts",
         "--ignore-pnpmfile",
         "--no-use-store-server",
-        "--no-prod",
-        "--no-dev",
-        "--no-only",
-        "--optional",
-        "--lockfile",
         "--no-lockfile-only",
         "--lockfile-dir=.",
         "--config.git-branch-lockfile=false",
         "--config.merge-git-branch-lockfiles=false",
         "--config.ignore-package-manifest=false",
-        "--config.resolution-only=false",
         "--config.fix-lockfile=false",
         "--config.dedupe=false",
         "--config.update=false",
         "--modules-dir=node_modules",
-        "--package-import-method=auto",
         "--config.enable-modules-dir=true",
-        "--config.confirm-modules-purge=false",
         "--config.symlink=true",
-        "--config.node-version=null",
         "--config.filter=null",
         "--config.filter-prod=null",
     ),
@@ -161,17 +144,17 @@ PNPM = PackageManager(
 
 That release switches to the version in the project's packageManager field.
 A frozen install already installs only what changed, and fails when the
-lockfile no longer matches package.json. Options on the command line win over
-an .npmrc, pnpm-workspace.yaml and the environment, so pnpm installs every
-package that the lockfile pins, development dependencies included, and runs no
-pnpmfile. pnpm reads pnpm-lock.yaml alone, and no lockfile of a git branch.
-pnpm-workspace.yaml can set any option of pnpm install, so the options also
-turn off those that skip the check of package.json, rewrite the lockfile,
-update packages, or resolve without an install.
-When node_modules holds another install, such as one without development
-dependencies, pnpm recreates it without a question, which it cannot ask without
-a terminal. pnpm install has no option for some settings, so --config sets
-them, and null restores a setting's default.
+lockfile no longer matches package.json. The settings of the project and the
+user apply, from .npmrc, pnpm-workspace.yaml and the environment, and a setting
+can make the hook fail. The options turn off only the settings that would make
+it pass with other packages than pnpm-lock.yaml pins: no lockfile, a lockfile
+in another folder, of a git branch or merged with one, an install without a look at
+package.json or that resolves the packages anew, and an install that leaves
+node_modules as it is or links no package at its top, where the packages of
+another install would stay. No install script and no pnpmfile runs, and no
+store server starts, because pnpm would start it without --ignore-pnpmfile.
+pnpm install has no option for some settings, so --config sets them, and null
+restores a setting's default.
 """
 
 PACKAGE_MANAGERS = (NPM, PNPM)

@@ -59,6 +59,15 @@ The hook `gateseal-node-packages` installs the packages that the lockfile pins b
 
 If `tsc` reports missing types after the install, check whether an install script or a code generator makes them. No install script runs. Commit the generated files. If it reports `error TS5101` or `error TS5102`, `tsconfig.json` sets an option that TypeScript 7 removed, such as `baseUrl`. See [Which TypeScript runs](typescript.md#which-typescript-runs).
 
+## A setting of npm or pnpm stops a push
+
+The hook `gateseal-node-packages` obeys the settings of the project and the user, in `.npmrc`, `pnpm-workspace.yaml` and the environment, as `npm install` or `pnpm install` in a terminal does. A setting can stop the push, but it cannot make the push pass with other packages than the lockfile pins. Run `npm config list` or `pnpm config list` in the repository to see the settings.
+
+- `tsc` reports `error TS2307: Cannot find module`: a setting leaves out a package that `tsc` needs, such as `omit=dev` or `production=true`. Remove the setting, or move the package into `dependencies`.
+- pnpm reports `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`: `node_modules` holds an install with other settings, such as one from `pnpm install --prod`. pnpm asks before it removes `node_modules`, and a push has no terminal for the question. Run `pnpm install` in a terminal and answer yes.
+
+Then push again.
+
 ## A generated file differs
 
 `gateseal.toml` is the Manifest that selects the policy and checks. To change checks, edit the Manifest. Run `gateseal configure`. Review the Manifest, Lock, and generated files. Commit them together. If the Lock was deleted by mistake, restore it from Git. If `ownership_conflict` names an edited generated file, save any changes you need. Restore the generated file before retrying.

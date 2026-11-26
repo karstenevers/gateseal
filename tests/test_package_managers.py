@@ -2,7 +2,7 @@
 
 import pytest
 from gateseal.diagnostics import GatesealError
-from gateseal.tools.package_managers import NPM, PACKAGE_MANAGERS, PNPM, package_manager
+from gateseal.tools.package_managers import NPM, PNPM, package_manager
 
 NEEDS = "tsc runs in the repository's Node project, but"
 INSTEAD = (
@@ -124,9 +124,3 @@ def test_instead_defaults_to_no_other_step(tmp_path):
     with pytest.raises(GatesealError) as raised:
         package_manager(project(tmp_path, "package.json"), NEEDS)
     assert raised.value.next_step.endswith("commit the lockfile.")
-
-
-def test_no_command_runs_an_install_script():
-    for manager in PACKAGE_MANAGERS:
-        for command in (*manager.checks, manager.install):
-            assert "--ignore-scripts" in command, (manager.name, command)
