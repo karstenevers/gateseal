@@ -1,7 +1,8 @@
 """TypeScript sources and team variants of the bundled typescript capability.
 
 The variants are copies of the bundled policy that team_policy.publish
-commits: one pins another Node, one widens Prettier's types to JSON and YAML.
+commits: one pins another Node, one widens Prettier's types to JSON and YAML,
+and one names typescript-eslint's strict preset in place of recommended.
 """
 
 import json
@@ -81,3 +82,14 @@ def widen_prettier(data):
     lock = json.loads((data / "policy.lock").read_bytes())
     lock["components"]["prettier-wide"] = lock["components"].pop("prettier")
     (data / "policy.lock").write_bytes(canonical(lock))
+
+
+def name_strict(data, lock):
+    """Name typescript-eslint's strict preset in the policy copy in data; lock it."""
+    rules = data / "rules/eslint.toml"
+    text = rules.read_text()
+    assert '"@typescript-eslint/recommended"' in text
+    rules.write_text(
+        text.replace('"@typescript-eslint/recommended"', '"@typescript-eslint/strict"')
+    )
+    lock(data)

@@ -26,6 +26,7 @@ from typescript_policy import (
     FORMATTED,
     NODE,
     OTHER_NODE,
+    name_strict,
     pin_other_node,
     widen_prettier,
     wrong_path,
@@ -135,9 +136,14 @@ def adopted(module_adopted):
 def test_configure_writes_the_policy_s_eslint_data(adopted):
     consumer, _ = adopted
     rules = tomllib.loads((bundled_root() / "rules/eslint.toml").read_text())
-    data = json.loads((consumer / ".gateseal/eslint.json").read_bytes())
-    assert data == rules
-    assert data["rules"]["@typescript-eslint/no-explicit-any"] == "error"
+    text = (consumer / ".gateseal/eslint.json").read_text()
+    data = json.loads(text)
+    assert "presets" not in data and "recommended" not in text
+    assert {key: data[key] for key in ("files", "parser", "plugins")} == {
+        key: rules[key] for key in ("files", "parser", "plugins")
+    }
+    assert data["layers"][-1] == {"files": rules["files"], "rules": rules["rules"]}
+    assert data["layers"][2]["rules"]["@typescript-eslint/no-explicit-any"] == "error"
     committed = success(["git", "ls-files", ".gateseal"], consumer).stdout.split()
     assert committed == [
         ".gateseal/eslint-loader.mjs",
@@ -226,7 +232,7 @@ def test_the_loader_takes_a_package_from_the_root_of_the_install(adopted, tmp_pa
     for folder, copy in {"node_modules": "pinned", nested: "of ESLint"}.items():
         (root / folder / "espree").mkdir(parents=True)
         (root / folder / "espree/index.js").write_text(f'module.exports = "{copy}";\n')
-    data = {"files": [], "parser": "espree", "plugins": {}, "rules": {}}
+    data = {"files": [], "layers": [], "parser": "espree", "plugins": {}}
     (root / "eslint.json").write_text(json.dumps(data))
     loader = root / "eslint-loader.mjs"
     loader.write_bytes((consumer / ".gateseal/eslint-loader.mjs").read_bytes())
@@ -237,6 +243,164 @@ def test_the_loader_takes_a_package_from_the_root_of_the_install(adopted, tmp_pa
         " console.log(loaded.default[0].languageOptions.parser));\n"
     )
     assert on_node(consumer, "eslint", program) == "pinned"
+
+
+RECOMMENDED = (
+    "@typescript-eslint/ban-ts-comment",
+    "@typescript-eslint/no-array-constructor",
+    "@typescript-eslint/no-duplicate-enum-values",
+    "@typescript-eslint/no-empty-object-type",
+    "@typescript-eslint/no-explicit-any",
+    "@typescript-eslint/no-extra-non-null-assertion",
+    "@typescript-eslint/no-misused-new",
+    "@typescript-eslint/no-namespace",
+    "@typescript-eslint/no-non-null-asserted-optional-chain",
+    "@typescript-eslint/no-require-imports",
+    "@typescript-eslint/no-this-alias",
+    "@typescript-eslint/no-unnecessary-type-constraint",
+    "@typescript-eslint/no-unsafe-declaration-merging",
+    "@typescript-eslint/no-unsafe-function-type",
+    "@typescript-eslint/no-unused-expressions",
+    "@typescript-eslint/no-unused-vars",
+    "@typescript-eslint/no-wrapper-object-types",
+    "@typescript-eslint/prefer-as-const",
+    "@typescript-eslint/prefer-namespace-keyword",
+    "@typescript-eslint/triple-slash-reference",
+    "for-direction",
+    "no-async-promise-executor",
+    "no-case-declarations",
+    "no-compare-neg-zero",
+    "no-cond-assign",
+    "no-constant-binary-expression",
+    "no-constant-condition",
+    "no-control-regex",
+    "no-debugger",
+    "no-delete-var",
+    "no-dupe-else-if",
+    "no-duplicate-case",
+    "no-empty",
+    "no-empty-character-class",
+    "no-empty-pattern",
+    "no-empty-static-block",
+    "no-ex-assign",
+    "no-extra-boolean-cast",
+    "no-fallthrough",
+    "no-global-assign",
+    "no-invalid-regexp",
+    "no-irregular-whitespace",
+    "no-loss-of-precision",
+    "no-misleading-character-class",
+    "no-nonoctal-decimal-escape",
+    "no-octal",
+    "no-prototype-builtins",
+    "no-regex-spaces",
+    "no-self-assign",
+    "no-shadow-restricted-names",
+    "no-sparse-arrays",
+    "no-unassigned-vars",
+    "no-unsafe-finally",
+    "no-unsafe-optional-chaining",
+    "no-unused-labels",
+    "no-unused-private-class-members",
+    "no-useless-assignment",
+    "no-useless-backreference",
+    "no-useless-catch",
+    "no-useless-escape",
+    "no-var",
+    "prefer-const",
+    "prefer-rest-params",
+    "prefer-spread",
+    "preserve-caught-error",
+    "require-yield",
+    "use-isnan",
+    "valid-typeof",
+)
+"""The rules that the bundled policy turned on for a .ts file by name, rule by
+rule, before it named presets."""
+
+PRESETS = """\
+import {{ createRequire }} from "node:module";
+import {{ pathToFileURL }} from "node:url";
+
+const tool = createRequire({install});
+const load = async (name) => {{
+  const module = await import(pathToFileURL(tool.resolve(name)).href);
+  return module.default ?? module;
+}};
+const {{ builtinRules }} = await load("eslint/use-at-your-own-risk");
+const typescript = await load("@typescript-eslint/eslint-plugin");
+const files = ["**/*.ts", "**/*.tsx"];
+export default [
+  {{
+    files,
+    rules: Object.fromEntries(
+      [...builtinRules]
+        .filter(([, rule]) => rule.meta.docs?.recommended)
+        .map(([name]) => [name, "error"]),
+    ),
+  }},
+  ...typescript.configs["flat/{preset}"].map((config) => ({{ files, ...config }})),
+  {{ files, rules: {rules} }},
+];
+"""
+"""ESLint's own configuration of eslint/recommended and a typescript-eslint
+preset, loaded from the hook's install, then the policy's rules."""
+
+
+def eslint_rules(root, env, config):
+    """Return the rules that ESLint turns on for src/app.ts with config."""
+    eslint = install_of(root, env, "eslint") / "node_modules/eslint/bin/eslint.js"
+    out = on_node(
+        root, "eslint", eslint, "--config", config, "--print-config", "src/app.ts"
+    )
+    rules = json.loads(out)["rules"]
+    return {name: value for name, value in rules.items() if value[0] != 0}
+
+
+def preset_rules(root, env, preset, tmp_path):
+    """Return what eslint_rules returns with the real presets of the policy."""
+    install = install_of(root, env, "eslint") / "package.json"
+    rules = json.loads((root / ".gateseal/eslint.json").read_bytes())["layers"][-1]
+    config = tmp_path / "presets.mjs"
+    config.write_text(
+        PRESETS.format(
+            install=json.dumps(str(install)),
+            preset=preset,
+            rules=json.dumps(rules["rules"]),
+        )
+    )
+    return eslint_rules(root, env, config)
+
+
+def test_the_loader_turns_on_the_recorded_rules_of_the_presets(adopted, tmp_path):
+    consumer, env = adopted
+    loaded = eslint_rules(consumer, env, ".gateseal/eslint-loader.mjs")
+    assert tuple(sorted(loaded)) == RECOMMENDED
+    assert loaded == preset_rules(consumer, env, "recommended", tmp_path)
+
+
+def test_a_commit_runs_no_code_of_a_preset(adopted):
+    consumer, env = adopted
+    entry = install_of(consumer, env, "eslint") / (
+        "node_modules/@typescript-eslint/eslint-plugin/dist/index.js"
+    )
+    kept = entry.read_bytes()
+    trap = (
+        '\nObject.defineProperty(module.exports, "configs", { get() '
+        '{ throw new Error("a preset ran"); } });\n'
+    )
+    entry.write_bytes(kept + trap.encode())
+    prefix = shlex.split(hook_entries(consumer)["eslint"]["entry"])[:5]
+    read = [*prefix, "node", "-e", f"require({json.dumps(str(entry))}).configs"]
+    try:
+        assert "a preset ran" in process(read, consumer).stderr
+        stage(consumer, "src/count.ts", DEFECT)
+        result, output = commit(consumer, env)
+    finally:
+        entry.write_bytes(kept)
+    assert result.returncode == 1, output
+    assert "@typescript-eslint/no-explicit-any" in output
+    assert "a preset ran" not in output
 
 
 def test_each_hook_keeps_its_packages_in_a_folder_of_its_own(adopted):
@@ -504,6 +668,7 @@ def team(installed, tmp_path_factory):
     with on_machine(installed):
         publish(origin, "v1", lambda data: pin_other_node(data, lock))
         publish(origin, "v2", widen_prettier)
+        publish(origin, "v3", lambda data: name_strict(data, lock))
     return origin
 
 
@@ -551,3 +716,20 @@ def test_prettier_on_json_and_yaml_leaves_every_generated_file(
     assert set(shown.split()) == {*written, "data.json"}
     assert {name: (consumer / name).read_bytes() for name in written} == written
     assert installed.cli(consumer, "check", env=env)["code"] == "consistent"
+
+
+def test_a_team_preset_locked_for_real_gives_its_rules_at_a_commit(
+    installed, team, tmp_path
+):
+    env = dict(environment(installed, team), PATH=wrong_path(tmp_path / "wrong node"))
+    consumer = clone(tmp_path / "origin", tmp_path / "consumer")
+    source = ("--policy", URL, "--policy-path", "policy", "--policy-tag", "v3")
+    adopt(installed, consumer, env, *source)
+    loaded = eslint_rules(consumer, env, ".gateseal/eslint-loader.mjs")
+    assert loaded == preset_rules(consumer, env, "strict", tmp_path)
+    assert "@typescript-eslint/no-non-null-assertion" in loaded
+    assert "@typescript-eslint/no-non-null-assertion" not in RECOMMENDED
+    stage(consumer, "src/count.ts", DEFECT)
+    result, output = commit(consumer, env)
+    assert result.returncode == 1, output
+    assert "@typescript-eslint/no-explicit-any" in output

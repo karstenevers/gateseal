@@ -147,7 +147,9 @@ def lockfile(dependencies):
 class Releases:
     """Tags, nodejs.org and npm, recording each URL and package set a lock asks for.
 
-    npm lacks each name@version in missing.
+    npm lacks each name@version in missing. A program that evaluate runs prints
+    presets: for each package that the argument names, its configs, each preset
+    of presets under flat/<name> and <name>, and each requested one it has.
     """
 
     def __init__(self, files, tags=None):
@@ -156,6 +158,8 @@ class Releases:
         self.downloaded = []
         self.resolved = []
         self.missing = set()
+        self.evaluated = []
+        self.presets = {}
 
     def tagged(self, repository, tag):
         return self.tags.get((repository, tag))
@@ -176,6 +180,24 @@ class Releases:
                 version,
             )
         return lockfile(dependencies)
+
+    def evaluate(self, lockfile, program, argument, tool, version):
+        self.evaluated.append((program.name, tool, version, argument))
+        return {
+            package: {
+                "configs": [
+                    key
+                    for name in self.presets[package]
+                    for key in (f"flat/{name}", name)
+                ],
+                "presets": {
+                    name: self.presets[package][name]
+                    for name in names
+                    if name in self.presets[package]
+                },
+            }
+            for package, names in argument["presets"].items()
+        }
 
 
 @pytest.fixture

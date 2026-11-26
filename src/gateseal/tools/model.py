@@ -15,14 +15,20 @@ import json
 import re
 import shlex
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from enum import Enum, StrEnum, auto
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal, Protocol, TypeVar
 
 from gateseal import __version__
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.choices import Choice, parse_choices
-from gateseal.tools.configurations import FORMATS, Configuration, ConfigurationFormat
+from gateseal.tools.configurations import (
+    FORMATS,
+    Configuration,
+    ConfigurationFormat,
+    Presets,
+)
 from gateseal.validation import fields, mapping, sequence, string, version_key
 
 if TYPE_CHECKING:
@@ -284,11 +290,15 @@ class Release:
     """One reviewed version of a tool. Each kind adds its Policy Lock facts.
 
     requires names the oldest version of each other tool that this one works
-    with.
+    with. presets holds the blocks of the presets that the tool's ESLint rule
+    file names, as the Policy Lock records them for this version; it is empty
+    for every other tool. The format renders them.
     """
 
     version: str
     requires: Mapping[str, str]
+    _: KW_ONLY
+    presets: Presets = ()
 
 
 @dataclass(frozen=True)
@@ -338,6 +348,24 @@ class Upstream(Protocol):
         """Return npm's lockfile of dependencies, or fail with MissingUpstream."""
         ...
 
+    def evaluate(
+        self,
+        lockfile: Mapping[str, object],
+        program: Path,
+        argument: object,
+        tool: str,
+        version: str,
+    ) -> object:
+        """Return the JSON that program prints on the policy's Node, in an install.
+
+        npm installs the packages of lockfile into a new folder, without
+        install scripts, and fails as lockfile does. program, an ES module of
+        gateseal, then runs once with that folder and argument as JSON, so it
+        loads exactly those packages. Its failure is tool_failed. tool and
+        version name the install in a failure.
+        """
+        ...
+
 
 class Source(Protocol):
     """A definition's [source] table as its kind parsed it, and the kind's rules.
@@ -375,6 +403,7 @@ class Source(Protocol):
     def lock(
         self,
         definition: ToolDefinition,
+        use: ToolUse,
         catalog: Catalog,
         version: str,
         recorded: object,
@@ -382,6 +411,9 @@ class Source(Protocol):
     ) -> dict[str, object]:
         """Return a reviewed version's Policy Lock record, resolved from upstream.
 
+        use is how the policy uses the tool, as offer gets it; a kind whose
+        record also holds facts of the tool's configuration, such as an ESLint
+        rule file's presets, reads it.
         catalog is the tool as policy.toml lists it. recorded is the record
         the lock holds for the version, or None. Each fact it records must
         equal upstream's, or the version fails with upstream_changed. Only a

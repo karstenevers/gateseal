@@ -303,6 +303,76 @@ def test_a_failed_npm_names_the_tool_version_and_npm_s_report(
         )
 
 
+NPM_CI = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE/arguments"
+[ ! -e "$FAKE/report" ] || { cat "$FAKE/report" >&2; exit 1; }
+cp "$3/package.json" "$3/package-lock.json" "$FAKE/"
+"""
+"""npm ci --prefix FOLDER ...: it keeps FOLDER's package files, or fails."""
+
+NODE = """#!/bin/sh
+printf '%s\\n' "$@" > "$FAKE/node-arguments"
+[ ! -e "$FAKE/node-report" ] || { cat "$FAKE/node-report" >&2; exit 1; }
+printf '{"read": true}'
+"""
+"""node PROGRAM FOLDER ARGUMENT, as mise exec starts it: it prints JSON or fails."""
+
+LOCKED = {"packages": {"": {"dependencies": {"eslint": "10.15.0"}}}}
+
+
+def evaluate_on_node(tmp_path, monkeypatch, report=None, failure=None):
+    """Run a program in an install of ESLint 10.15.0 with stand-ins, and the fakes."""
+    lock, fake = lock_on_node(tmp_path, monkeypatch, report)
+    executable(fake / "node/bin/npm", NPM_CI)
+    executable(fake / "bin/node", NODE)
+    if failure is not None:
+        (fake / "node-report").write_text(failure)
+    npm = authoring.Releases("git", tmp_path / "scratch", "gateseal policy lock")
+    npm.node = read_node(VERSION, node_record())
+    program = tmp_path / "program.mjs"
+    return lambda: npm.evaluate(LOCKED, program, {"a": [1]}, "eslint", "10.15.0"), fake
+
+
+def test_evaluate_installs_the_lockfile_and_runs_the_program_on_node(
+    tmp_path, monkeypatch
+):
+    evaluate, fake = evaluate_on_node(tmp_path, monkeypatch)
+    assert evaluate() == {"read": True}
+    assert json.loads((fake / "package-lock.json").read_bytes()) == LOCKED
+    assert json.loads((fake / "package.json").read_bytes()) == {
+        "dependencies": {"eslint": "10.15.0"}
+    }
+    folder = (fake / "arguments").read_text().splitlines()[2]
+    assert (fake / "arguments").read_text().splitlines()[:3] == [
+        "ci",
+        "--prefix",
+        folder,
+    ]
+    assert (fake / "node-arguments").read_text().splitlines() == [
+        str(tmp_path / "program.mjs"),
+        folder,
+        '{"a": [1]}',
+    ]
+
+
+def test_evaluate_fails_as_npm_or_the_program_fails(tmp_path, monkeypatch):
+    evaluate, _ = evaluate_on_node(tmp_path, monkeypatch, "npm error code E404\n")
+    missing = refused(evaluate)
+    assert (missing.code, str(missing)) == (
+        "upstream_release_missing",
+        "npm cannot install the packages of eslint 10.15.0: npm error code E404",
+    )
+    evaluate, _ = evaluate_on_node(tmp_path / "node", monkeypatch, failure="boom\n")
+    failure = refused(evaluate)
+    assert (failure.code, failure.exit_code, str(failure), failure.next_step) == (
+        "tool_failed",
+        4,
+        "Node cannot run program.mjs on the packages of eslint 10.15.0: boom",
+        f"Check that the packages of eslint 10.15.0 load on Node {VERSION}, then "
+        "rerun gateseal policy lock.",
+    )
+
+
 def test_lock_needs_a_mise_that_installs_node_by_url(tmp_path, monkeypatch):
     lock, fake = lock_on_node(tmp_path, monkeypatch)
     (fake / "version").write_text("2026.10.18 linux-x64\n")

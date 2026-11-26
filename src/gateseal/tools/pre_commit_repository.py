@@ -81,6 +81,7 @@ class PreCommitRepository:
     def lock(
         self,
         definition: ToolDefinition,
+        use: ToolUse,
         catalog: Catalog,
         version: str,
         recorded: object,

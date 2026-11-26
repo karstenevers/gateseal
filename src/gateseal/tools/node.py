@@ -254,10 +254,10 @@ class Node:
         )
         return (*self.prefix, "/bin/sh", "-c", script, executable)
 
-    def write_lockfile(self) -> tuple[str, ...]:
-        """Return the command that locks the package.json of the folder that it gets."""
+    def npm(self, *arguments: str) -> tuple[str, ...]:
+        """Return the command that runs npm with arguments in the folder it gets."""
         script = (REQUIRE_NODE + NPM).format(install=self.install, node=self.version)
-        script += 'npm_in "$1" install --package-lock-only >/dev/null'
+        script += f'npm_in "$1" {shlex.join(arguments)} >/dev/null'
         return (*self.prefix, "/bin/sh", "-c", script, "npm")
 
     def included(self, program: str) -> tuple[str, ...]:
