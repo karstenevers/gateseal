@@ -1,6 +1,6 @@
 # Install gateseal
 
-Repository maintainers use gateseal to configure and upgrade checks. Teammates can [install the commit hook](work-in-a-configured-repository.md) without installing gateseal.
+Repository maintainers use gateseal to configure and upgrade checks. Teammates do not need gateseal to commit, as [Work in a configured repository](work-in-a-configured-repository.md) shows.
 
 Install [uv](https://docs.astral.sh/uv/). Then run:
 
@@ -8,7 +8,7 @@ Install [uv](https://docs.astral.sh/uv/). Then run:
 uv tool install gateseal
 ```
 
-In a configured repository, install the version under `gateseal.version` in `gateseal.lock`. Replace `VERSION` with that value:
+In a configured repository, install the version that `gateseal.lock` names under `gateseal.version`. Replace `VERSION` with it:
 
 ```sh
 uv tool install "gateseal==VERSION"
@@ -23,25 +23,25 @@ uv tool install "gateseal==VERSION"
 | pre-commit | 4.7.0 or later for commits when installed separately. |
 | mise | 2026.10.19 or later for release binaries such as Betterleaks, and for tools from npm such as ESLint. These need no Node or npm on the machine. |
 
-The supported platforms are macOS on arm64 and Linux on x86-64 with glibc. Windows is unsupported. WSL, Intel Mac, Linux arm64, and Linux with musl are untested. Git submodules are not covered.
+gateseal supports macOS on arm64 and Linux on x86-64 with glibc. It does not support Windows. WSL, Intel Mac, Linux on arm64, and Linux with musl are not tested. Git submodules are not covered.
 
 ## Set up pre-commit on this machine
 
-`gateseal setup` installs pre-commit once per machine and adds the commit hook to every new clone. It is optional. Teammates can also commit with their own pre-commit and `pre-commit install`. Run:
+`gateseal setup` is optional. It installs pre-commit once on the machine and adds the commit hook to each new clone:
 
 ```sh
 gateseal setup
 ```
 
-New clones get the commit hook. For a clone you made before setup, run this in the clone:
+For a clone that you made before setup, run this in the clone:
 
 ```sh
 gateseal setup --refresh
 ```
 
-A repository with [checks at a push](work-in-a-configured-repository.md#checks-at-a-push) needs that command in each clone, new or old. New clones get the commit hook alone, so that Git LFS can install its push hook.
+A repository with [checks at a push](work-in-a-configured-repository.md#checks-at-a-push) needs that command in each clone, new or old. A new clone gets only the commit hook, so that Git LFS can install its push hook.
 
-After setup, `gateseal run` checks all files with that pre-commit. `gateseal status` also reports whether it is ready.
+After setup, `gateseal run` checks all files, and `gateseal status` reports whether setup is ready.
 
 To use your own pre-commit instead, run `pre-commit install` in each clone. If `core.hooksPath` is set, see [Troubleshoot gateseal](troubleshooting.md#git-uses-a-different-hooks-directory).
 

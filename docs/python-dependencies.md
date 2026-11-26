@@ -48,7 +48,7 @@ To update the lockfile, run `uv lock`.
 
 Run `uv lock`, stage `uv.lock`, and commit again.
 
-The hook runs the uv that the policy pins, not the uv on your machine. pre-commit installs that uv from PyPI at the first commit. When `uv.lock` is current, the check needs no installed package and no network. It took 0.05 seconds on gateseal's own project.
+The hook runs the uv that the policy pins, not the uv on your machine. pre-commit installs that uv from PyPI at the first commit. When `uv.lock` is current, the check needs no installed package and no network, so it is fast.
 
 ## deptry
 
@@ -72,8 +72,6 @@ In a uv workspace, deptry checks the files of every member against the dependenc
 DEP003 = ["idna"]
 ```
 
-deptry took 0.14 seconds on gateseal's own project, where Pyright takes 3.5 seconds.
-
 ## The audit
 
 The hook runs `uv audit` with the uv that the policy pins. It sends the name and version of each locked package to the vulnerability service at `https://api.osv.dev`. It fails when a package has a known vulnerability. The output names the package, the advisory and the fixed version:
@@ -85,8 +83,6 @@ idna 3.6 has 1 known vulnerability:
 
   Fixed in: 3.7
 ```
-
-uv marks `uv audit` as experimental. So the policy pins uv, and a new uv version is a change that the Policy Author reviews.
 
 The audit runs only in the CI gate, at each run, such as for a pull request or in the weekly run. It never runs at a commit, at a push or in `gateseal run`.
 

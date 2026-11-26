@@ -1,4 +1,4 @@
-# Check a repository in GitHub CI
+# Check a repository in GitHub Actions
 
 The generated GitHub Actions workflow runs [the CI gate](ci-gate.md) on the proposed merge. An administrator can require its `gateseal` check before merging.
 
@@ -19,7 +19,7 @@ git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
   .github/workflows/gateseal.yml
 ```
 
-If `git status` shows new files under `.gateseal/`, stage them too. Python, Pyright, the dependency audit, secrets, TypeScript and the test checks write files there. Review the changes. Commit them together. `gateseal.toml` is the Manifest that selects the policy and checks. `gateseal.lock` is the Lock that records the selection and generated files.
+If `git status` shows new files under `.gateseal/`, stage them too. Review the changes. Commit them together.
 
 To turn CI off, remove `[ci]`. Run `gateseal configure`. Commit the changes, including the removal of the generated workflow.
 

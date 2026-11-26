@@ -1,6 +1,6 @@
 # Configure a repository
 
-Add the bundled checks to a Git repository. If it already has `gateseal.lock`, follow [Work in a configured repository](work-in-a-configured-repository.md).
+Add the bundled checks to a Git repository. If it already has `gateseal.lock`, follow [Work in a configured repository](work-in-a-configured-repository.md) instead.
 
 [Install gateseal](install.md), pre-commit, and mise first. From the repository root, select the hygiene and secrets checks and GitHub Actions:
 
@@ -9,9 +9,30 @@ gateseal configure --capability hygiene --capability secrets --ci github
 pre-commit install
 ```
 
-`hygiene` checks whitespace, file endings, and YAML. `secrets` runs Betterleaks, which mise installs. Its built-in rules find cloud keys, private keys, passwords and many service tokens, and the bundled policy adds a rule for an AWS access key ID alone. In a Python repository, add `--capability python` for Ruff. When you commit Python files, Ruff can change their formatting. In a uv project, add `--capability python-types` for Pyright in strict mode. Pyright runs at every commit in the project's own environment, so the repository needs a `uv.lock`. To run the tests at each push, follow [Check Python tests](python-tests.md). To check `uv.lock`, unused dependencies and known vulnerabilities, follow [Check Python dependencies](python-dependencies.md). In a TypeScript repository, add `--capability typescript` for ESLint and Prettier, as [Check TypeScript](typescript.md) shows. In an npm or pnpm project, add `--capability typescript-types` for `tsc` at each push, as [Type checks at push](typescript.md#type-checks-at-push) shows. For Azure Pipelines, use `--ci azure` and follow [Azure Pipelines](azure-pipelines.md). Omit `--ci` if you use neither. The first command writes `gateseal.toml`, the Manifest that selects the policy and checks. It also writes `gateseal.lock`, the Lock that records the selection and generated files.
+The command writes `gateseal.toml`, the Manifest, which selects the policy and checks. It also writes `gateseal.lock`, the Lock, which records the selection and the generated files. See [an example Manifest](policy-contract.md#example-with-the-bundled-policy).
 
-See [an example Manifest](policy-contract.md#example-with-the-bundled-policy) for how it looks. Review the Manifest, Lock, `.pre-commit-config.yaml`, and the CI file if generated. If you omitted `--ci`, omit `.github/workflows/gateseal.yml` from the next command. With `--ci azure`, add `azure-pipelines-gateseal.yml` in its place. Then commit them:
+## Select checks
+
+Add one `--capability` option for each group of checks:
+
+| Capability | What it checks | Needs |
+| --- | --- | --- |
+| `hygiene` | Whitespace, file endings, and YAML. | |
+| `secrets` | Secrets, with Betterleaks. Its rules find cloud keys, private keys, passwords, and many service tokens. | mise |
+| `python` | Python lint and format, with Ruff. A commit can change the format of a Python file. | |
+| `python-types` | Python types, with Pyright in strict mode, at every commit. | A uv project with `uv.lock` |
+| `typescript` | TypeScript lint and format, with ESLint and Prettier. See [Check TypeScript](typescript.md). | mise |
+| `typescript-types` | TypeScript types, with `tsc`, at each push. See [Type checks at push](typescript.md#type-checks-at-push). | An npm or pnpm project, and mise |
+
+To run the tests at each push, follow [Check Python tests](python-tests.md). To check `uv.lock`, unused dependencies, and known vulnerabilities, follow [Check Python dependencies](python-dependencies.md).
+
+## Select CI
+
+`--ci github` writes a GitHub Actions workflow. For Azure Pipelines, use `--ci azure` and follow [Azure Pipelines](azure-pipelines.md). Leave out `--ci` if you use neither.
+
+## Commit the files
+
+Review the Manifest, the Lock, `.pre-commit-config.yaml`, the files under `.gateseal/`, and the CI file. Then commit them together:
 
 ```sh
 git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
@@ -19,14 +40,16 @@ git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
 git commit -m 'Adopt gateseal checks'
 ```
 
-The first commit downloads the hook environments. If a hook changes a file, review the change. Stage it. Retry the commit. See [Troubleshoot gateseal](troubleshooting.md) if a check stops.
+Without `--ci`, leave out `.github/workflows/gateseal.yml`. With `--ci azure`, add `azure-pipelines-gateseal.yml` in its place.
+
+The first commit downloads the hook environments. If a hook changes a file, review the change. Stage it. Commit again. If a check stops, see [Troubleshoot gateseal](troubleshooting.md).
 
 ## Change the checks
 
-Each `--capability` option adds one capability. Without `secrets`, `typescript` and `typescript-types`, the repository needs no mise. To change the selection later, edit `capabilities` in `gateseal.toml`. For example, set it to `['hygiene', 'python']` to drop `secrets` and add Ruff. Then run:
+To change the selection later, edit `capabilities` in `gateseal.toml`. For example, set it to `['hygiene', 'python']` to drop `secrets` and add Ruff. Then run:
 
 ```sh
 gateseal configure
 ```
 
-Review the Manifest, Lock, and generated files. Commit them together. Python, Pyright, secrets, TypeScript and the test checks also generate files under `.gateseal/`. See [Adjust a setup](adjust-a-setup.md) for repository hooks and policy choices.
+Review the changed files. Commit them together. See [Adjust a setup](adjust-a-setup.md) for repository hooks and policy choices.

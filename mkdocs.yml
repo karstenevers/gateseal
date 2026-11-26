@@ -47,31 +47,32 @@ hooks:
 nav:
   - Home: index.md
   - Why gateseal: why-gateseal.md
+  - How gateseal works: architecture.md
   - Get started:
       - Install gateseal: install.md
       - Try gateseal: demo.md
       - Configure a repository: configure-a-repository.md
-      - Check TypeScript: typescript.md
       - Work in a configured repository: work-in-a-configured-repository.md
-      - How gateseal works: architecture.md
-      - Troubleshooting: troubleshooting.md
-  - Manage checks:
+      - Troubleshoot: troubleshooting.md
+  - Checks:
       - Adjust a setup: adjust-a-setup.md
       - Check Python tests: python-tests.md
       - Check Python dependencies: python-dependencies.md
-      - The CI gate: ci-gate.md
-      - GitHub CI: github-ci.md
-      - Azure Pipelines: azure-pipelines.md
+      - Check TypeScript: typescript.md
       - Upgrade and roll back: upgrade.md
+  - CI:
+      - The CI gate: ci-gate.md
+      - GitHub Actions: github-ci.md
+      - Azure Pipelines: azure-pipelines.md
   - Team policies:
       - Adopt a team policy: adopt-a-team-policy.md
       - Author a team policy: author-a-policy.md
       - Add a tool: add-a-tool.md
   - Reference:
-      - Policy format: policy-format.md
-      - Manifest and Lock: policy-contract.md
-      - Tool definitions: tool-definitions.md
       - Commands and results: commands-and-results.md
+      - Manifest and Lock: policy-contract.md
+      - Policy format: policy-format.md
+      - Tool definitions: tool-definitions.md
       - Glossary: glossary.md
 
 markdown_extensions:

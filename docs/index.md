@@ -32,11 +32,6 @@ gateseal keeps one reviewed set of commit checks in every repository, on develop
 gateseal configure --capability hygiene --capability secrets --ci github
 ```
 
-In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for ESLint and Prettier, as [Check TypeScript](typescript.md) shows.
+In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for ESLint and Prettier.
 
-- [Try the checks](demo.md) in a scratch repository.
-- [Work in a configured repository](work-in-a-configured-repository.md) or [troubleshoot](troubleshooting.md).
-- [Adjust checks](adjust-a-setup.md), enable CI on [GitHub](github-ci.md) or [Azure Pipelines](azure-pipelines.md), or [upgrade](upgrade.md).
-- [Adopt a team policy](adopt-a-team-policy.md) or [author one](author-a-policy.md).
-- Look up [commands](commands-and-results.md), [repository configuration](policy-contract.md), and [policy fields](policy-format.md).
-- Read [how gateseal works](architecture.md).
+To see a check work first, [try gateseal](demo.md) in a scratch repository. If your repository already uses gateseal, see [Work in a configured repository](work-in-a-configured-repository.md).

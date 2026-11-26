@@ -1,6 +1,6 @@
 # Adjust a setup
 
-Change checks in `gateseal.toml`, the Manifest that selects the policy and checks. Run `gateseal configure` after each edit. Review the Manifest, `gateseal.lock`, and generated files. Commit them together. The Lock records the selected policy and generated files.
+Change checks in `gateseal.toml`, the Manifest. Run `gateseal configure` after each edit. Review the Manifest, the Lock (`gateseal.lock`), and the generated files. Commit them together.
 
 ## Add a repository hook
 
@@ -30,7 +30,13 @@ A script that checks or rebuilds the whole project, such as a code generator, sh
 scope = "project"
 ```
 
-It then runs once when a checked file matches `files`: a staged file at a commit, a changed file in a CI gate run on a range, or any tracked file in `gateseal run` and in a CI run that checks all files. See [project hooks](policy-contract.md#repository-hooks).
+It then runs once when a checked file matches `files`. The checked files are:
+
+- At a commit, the staged files.
+- In a CI gate run on a range, the changed files.
+- In `gateseal run`, and in a CI run that checks all files, every tracked file.
+
+See [project hooks](policy-contract.md#repository-hooks).
 
 ## Skip an optional hook
 

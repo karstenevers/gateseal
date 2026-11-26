@@ -1,6 +1,6 @@
 # Upgrade and roll back
 
-Use `gateseal upgrade` to change a policy release, a reviewed tool version, or the gateseal release. Run it from the repository root. `gateseal.toml` is the Manifest that selects the checks. `gateseal.lock` is the Lock that records the selection and generated files.
+Use `gateseal upgrade` to change a policy release, a reviewed tool version, or the gateseal release. Run it from the repository root.
 
 To adopt a new tag of the same team policy, replace the example tag. Run:
 
@@ -19,7 +19,7 @@ To return to the policy's pinned version, supply its exact version. A bare compo
 
 To move gateseal itself, run `gateseal upgrade` using the target release. A bundled policy change can require `--policy bundled`. Change other policy and tool selections afterwards.
 
-Review the changed Manifest, Lock, and generated files, such as the CI file. Stage the files. Commit them together. A later commit builds any newly selected hook environments. If the release needs a newer pre-commit, each developer updates pre-commit or runs setup for that release.
+Review the changed Manifest (`gateseal.toml`), Lock (`gateseal.lock`), and generated files, such as the CI file. Stage the files. Commit them together. A later commit builds any newly selected hook environments. If the release needs a newer pre-commit, each developer updates pre-commit or runs setup for that release.
 
 ## Recover from an interrupted upgrade
 

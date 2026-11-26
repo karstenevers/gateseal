@@ -71,15 +71,7 @@ pytestmut 0.1.0 skips a changed file whose path has a character outside ASCII, s
 
 ## Push time
 
-The shared run saves two of three test runs. The table gives the median of 5 runs of each setup's hook commands. Each run checked a one-line change to gateseal's own code, which has 1,181 unit tests. pytest ran on one core of a 4-core Linux machine.
-
-| Setup | Time |
-| --- | --- |
-| A test hook, a coverage hook and a CRAP hook that each run the tests | 164 s |
-| `python-tests` and `python-crap`: one run under coverage.py | 58 s |
-| `python-mutation`: pytestmut, in both setups | 123 s more |
-
-pytestmut runs the tests twice: once to time them, and once to find the tests that run each line.
+The tests, the coverage report, and the CRAP scores share one test run. Separate hooks would run the tests three times. On a project with 1,181 tests, the shared run took 58 seconds instead of 164. pytestmut added 123 seconds. It runs the tests twice, once to time them and once to find the tests that run each line.
 
 pytestmut bounds its own time at a push. By default it tries at most 40 code changes, first one on each changed line. After 180 seconds it tries no new change and passes. Change these limits in `[tool.pytestmut.diff]`:
 
