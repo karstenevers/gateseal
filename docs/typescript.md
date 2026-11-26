@@ -231,3 +231,24 @@ Run `gateseal configure` and commit the changed files. A team policy reviews ano
 - The built-in `tsc` takes its options from the project's `tsconfig.json`, so a project can turn strict checks off. A team policy can own them with [its own tool and strict flags](add-a-tool.md#check-a-second-tsconfig-with-strict-tsc-flags).
 - Yarn is not supported. Neither are workspaces nor project references. The check reads one lockfile and one `tsconfig.json`, both at the repository root.
 - `gateseal gate --json` lists no `tsc` error by file and line. The hook's entry says that it failed, and the text output shows the report of `tsc`.
+
+## gateseal and pre-commit's Node hooks
+
+Without gateseal, a repository can run ESLint and Prettier as pre-commit hooks with `language: node`. pre-commit then installs Node and the packages into an environment of each hook. The table compares the two setups. Its last five rows show where pre-commit is equal or better.
+
+| | gateseal | pre-commit `language: node` |
+| --- | --- | --- |
+| What you write for ESLint and Prettier | One capability name in `gateseal.toml` | A hook block for each tool, with its version and packages, and each tool's own configuration file |
+| Node version | The policy's pin | The hook's `language_version`. Without one, the Node on `PATH`, or else the latest release |
+| Checksum of Node | SHA-256 in the Lock | None |
+| Copies of Node | One for each Node version | One for each hook and Node version |
+| Lock of the tool's packages | npm's lockfile for each tool version | None. npm resolves the packages again at each install |
+| Integrity of every package | Checked against the lockfile | Not pinned |
+| Install scripts of packages | Never run | Run |
+| Your npm settings at the tool's install | Only proxy, CA and registry settings | All. For example, `workspace` in `~/.npmrc` stops the install |
+| Packages that `tsc` reads | The packages that the project's lockfile pins, installed at each push. A setting can make the push fail, but none can make it pass with other packages. After a change of package manager, delete `node_modules` once, as [What the type check cannot do](#what-the-type-check-cannot-do) says | The packages in `node_modules`. Nothing installs them, so `tsc` fails in a new clone |
+| Later commits | A little slower, because gateseal's hook starts before each tool | A little faster |
+| ESLint plugins | Each plugin that the policy pins | Each plugin in `additional_dependencies`. An ES module configuration, such as `eslint.config.mjs`, cannot import it, so the project installs it too |
+| ESLint presets | `eslint/recommended` and each preset of a pinned plugin, with its rules only, and none with rules that need type information | Each preset that the ESLint configuration loads, with all its settings |
+| ESLint rules that need type information | None | Possible, when `node_modules` holds the project's packages |
+| Hook entry and name of a failed hook | One short line. A failed hook shows `hook id: gateseal-npm-tool` below the tool's name, and `SKIP=prettier` still works | One short line. A failed hook shows `hook id: prettier` |

@@ -117,6 +117,6 @@ A local user can bypass hooks with `git commit --no-verify`. A repository admini
 
 ## Alternatives and costs
 
-For one or two repositories, a pre-commit configuration and a CI job that runs `pre-commit run --all-files` cover most needs. gateseal adds policy releases, drift checks, and pinned release binaries across repositories. A copy script or an agent can copy configuration once, but it does not check for later drift.
+For one or two repositories, a pre-commit configuration and a CI job that runs `pre-commit run --all-files` cover most needs. gateseal adds policy releases, drift checks, and pinned release binaries across repositories. A copy script or an agent can copy configuration once, but it does not check for later drift. [Why gateseal](why-gateseal.md) compares gateseal with other options.
 
 The team maintains a policy repository and adds a Manifest and Lock to each repository. The first use of a hook needs network access to install dependencies. A private policy needs Git read access when gateseal fetches it. See [Adopt a team policy](adopt-a-team-policy.md).
