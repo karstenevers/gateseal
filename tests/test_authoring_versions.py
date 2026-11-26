@@ -6,10 +6,11 @@ Git's global configuration is a file of each test's own.
 """
 
 import json
+import platform
 
 import pytest
 from conftest import BUNDLED_TOOLS
-from gateseal import authoring
+from gateseal import __version__, authoring
 from gateseal.diagnostics import GatesealError
 from gateseal.policy import load_policy_tree
 from team_policy import git
@@ -167,3 +168,45 @@ def test_pin_refuses_a_version_that_another_pin_rules_out(started):
     assert all(value in str(error) for value in named)
     assert all(value in error.next_step for value in ("requires", "policy.toml"))
     assert files(started) == before
+
+
+@pytest.mark.parametrize("command", ["lock", "add"])
+@pytest.mark.parametrize(
+    "release",
+    ["3.11.17", "3.12.15", "3.13.17", "3.14.9", "3.15.1", "3.15.2rc1", "3.16.0a1"],
+)
+def test_a_python_that_trusts_the_compromised_certificates_reads_no_upstream(
+    offline, tmp_path, monkeypatch, command, release
+):
+    root = team(tmp_path)
+    call = (authoring.lock, root)
+    if command == "add":
+        authoring.lock(root)
+        call = (authoring.add, root, "pre-commit-hooks", "5.0.0")
+    before = files(root)
+    missing = (tmp_path / "missing").as_uri()
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", f"url.{missing}.insteadOf")
+    monkeypatch.setattr(platform, "python_version", lambda: release)
+    error = refused(*call)
+    assert (error.code, error.exit_code) == ("untrusted_python", 4)
+    assert str(error) == (
+        f"Python {release} trusts compromised certificates, "
+        "so gateseal reads nothing from upstream with it."
+    )
+    assert error.next_step == (
+        "Run uv tool install --reinstall --python 3.14.10 "
+        f"gateseal=={__version__}, then rerun gateseal policy {command}"
+        + (" pre-commit-hooks 5.0.0." if command == "add" else ".")
+    )
+    assert files(root) == before
+
+
+@pytest.mark.parametrize(
+    "release",
+    ["3.11.18", "3.12.16", "3.13.18", "3.14.10", "3.14.10+", "3.15.2", "3.16.0"],
+)
+def test_a_python_that_blocks_the_compromised_certificates_locks(
+    offline, tmp_path, monkeypatch, release
+):
+    monkeypatch.setattr(platform, "python_version", lambda: release)
+    assert authoring.lock(team(tmp_path)).code == "locked"

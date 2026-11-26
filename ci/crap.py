@@ -76,12 +76,6 @@ def as_object(value: object, path: str, where: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def as_list(value: object, path: str, where: str) -> list[object]:
-    if not isinstance(value, list):
-        raise InputError(path, f"{where} is not a JSON array")
-    return cast(list[object], value)
-
-
 def as_count(value: object, path: str, where: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise InputError(path, f"{where} is not a count")
@@ -95,16 +89,13 @@ def load_json(path: str) -> object:
         raise InputError(path, f"cannot read JSON: {error}") from error
 
 
-def parse_source(path: str) -> dict[str, list[Definition]]:
-    """Return each def in path under the dotted name coverage.py gives its region."""
+def parse_source(path: str) -> dict[tuple[str, int], Definition]:
+    """Return each def in path under its dotted name and the line of its def."""
     try:
         tree = ast.parse(Path(path).read_bytes(), filename=path)
     except (OSError, SyntaxError, ValueError) as error:
         raise InputError(path, f"cannot parse Python source: {error}") from error
-    named: dict[str, list[Definition]] = {}
-    for name, node in definitions(tree, ""):
-        named.setdefault(name, []).append(node)
-    return named
+    return {(name, node.lineno): node for name, node in definitions(tree, "")}
 
 
 def definitions(node: ast.AST, scope: str) -> Iterator[tuple[str, Definition]]:
@@ -116,56 +107,6 @@ def definitions(node: ast.AST, scope: str) -> Iterator[tuple[str, Definition]]:
         if not isinstance(child, ast.ClassDef):
             yield name, child
         yield from definitions(child, name + ".")
-
-
-def body_lines(function: Definition) -> set[int]:
-    last = function.body[-1]
-    return set(range(function.body[0].lineno, (last.end_lineno or last.lineno) + 1))
-
-
-def own_lines(function: Definition) -> set[int]:
-    """Return the lines coverage.py counts in function: its body less nested defs."""
-    nested = (
-        node
-        for node in ast.walk(function)
-        if node is not function
-        and isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-    )
-    return body_lines(function).difference(*map(body_lines, nested))
-
-
-def branch_sources(value: object, path: str, where: str) -> list[int]:
-    """Return the line each branch of a coverage.py branch list leaves from."""
-    sources: list[int] = []
-    for arc in as_list(value, path, where):
-        pair = as_list(arc, path, where)
-        if len(pair) != 2:
-            raise InputError(path, f"{where} holds a branch that is not a pair")
-        sources.append(as_count(pair[0], path, where))
-    return sources
-
-
-def lines_coverage(
-    entry: dict[str, object], lines: set[int], path: str, file: str
-) -> float:
-    """Return the share of lines' statements and branches that the file's data ran."""
-    executed, missing = (
-        {
-            as_count(line, path, f"{file} {name}")
-            for line in as_list(entry.get(name), path, f"{file} {name}")
-        }
-        for name in ("executed_lines", "missing_lines")
-    )
-    hit, missed = (
-        branch_sources(entry.get(name), path, f"{file} {name}")
-        for name in ("executed_branches", "missing_branches")
-    )
-    return share(
-        len(executed & lines),
-        len((executed | missing) & lines),
-        sum(line in lines for line in hit),
-        sum(line in lines for line in hit + missed),
-    )
 
 
 def region_coverage(summary: dict[str, object], path: str, where: str) -> float:
@@ -192,8 +133,14 @@ def share(covered: int, statements: int, covered_branches: int, branches: int) -
 def score_file(
     file: str, entry: dict[str, object], report_path: str
 ) -> Iterator[Score]:
+    """Score each def from its own region.
+
+    coverage.py names a region after its def and the scopes around it. When
+    defs share that name, such as a property's getter and setter, the later
+    ones get "@" and their line, as in Box.size@48.
+    """
     functions = as_object(entry.get("functions"), report_path, f"{file} functions")
-    named = parse_source(str(Path.cwd() / file))
+    defs = parse_source(str(Path.cwd() / file))
     for name, value in functions.items():
         if name == "":
             continue
@@ -201,44 +148,19 @@ def score_file(
         region = as_object(value, report_path, where)
         line = as_count(region.get("start_line"), report_path, f"{where} start_line")
         summary = as_object(region.get("summary"), report_path, f"{where} summary")
-        found = named.pop(name, [])
-        if line not in {node.lineno for node in found}:
+        node = defs.pop((name.partition("@")[0], line), None)
+        if node is None:
             raise InputError(
                 report_path, f"{where} starts on line {line}, not a def of that name"
             )
-        yield from name_scores(file, name, found, entry, summary, report_path)
-    if named:
-        name, found = min(named.items(), key=lambda item: item[1][0].lineno)
-        raise InputError(
-            report_path, f"{file} line {found[0].lineno} defines {name} with no region"
-        )
-
-
-def name_scores(
-    file: str,
-    name: str,
-    found: list[Definition],
-    entry: dict[str, object],
-    summary: dict[str, object],
-    report_path: str,
-) -> Iterator[Score]:
-    """Score the defs that share name; later ones are named name#2, name#3.
-
-    coverage.py reports one region per name, the last def's, so when defs
-    share a name, such as a property's getter and setter, each is measured
-    from the file's lines instead.
-    """
-    shares = (
-        [region_coverage(summary, report_path, f"{file} function {name}")]
-        if len(found) == 1
-        else [
-            lines_coverage(entry, own_lines(node), report_path, file) for node in found
-        ]
-    )
-    for index, (node, share) in enumerate(zip(found, shares, strict=True), 1):
         count = complexity(node)
-        key = name if index == 1 else f"{name}#{index}"
-        yield Score(file, key, crap(count, share), count, share)
+        covered = region_coverage(summary, report_path, where)
+        yield Score(file, name, crap(count, covered), count, covered)
+    if defs:
+        name, line = min(defs, key=lambda key: key[1])
+        raise InputError(
+            report_path, f"{file} line {line} defines {name} with no region"
+        )
 
 
 def read_report(path: str) -> list[Score]:

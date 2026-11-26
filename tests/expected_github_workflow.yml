@@ -37,7 +37,7 @@ jobs:
           GATESEAL_UV_SHA256: "f29c3e94ffabd7e6f3ba521dba169a9b7ec12100bf3257087f0f24f6123f3645"
           GATESEAL_MISE_URL: "https://github.com/jdx/mise/releases/download/v2026.10.19/mise-v2026.10.19-linux-x64"
           GATESEAL_MISE_SHA256: "3162760f40b6b5f706c60641e4ef5ee7322bc6c54f72fc26a7111b337aa18d9d"
-          GATESEAL_PYTHON: "3.14"
+          GATESEAL_PYTHON: "~=3.14.10"
           GATESEAL_REPOSITORY: "https://github.com/karstenevers/gateseal"
           GATESEAL_COMMIT: "5ea1000000000000000000000000000000000000"
         run: |

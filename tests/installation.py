@@ -13,7 +13,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from gateseal.setup import PYTHON
+from gateseal.setup import python_request
 
 PACKAGE = Path(__file__).resolve().parents[1]
 
@@ -71,7 +71,7 @@ def share_uv_pythons(home):
     """
     shared = Path(os.environ["UV_PYTHON_INSTALL_DIR"]).resolve()
     success(
-        ["uv", "python", "install", "--no-bin", PYTHON],
+        ["uv", "python", "install", "--no-bin", python_request()],
         home,
         dict(os.environ, UV_PYTHON_INSTALL_DIR=str(shared)),
     )
