@@ -21,7 +21,7 @@ git add gateseal.toml gateseal.lock .pre-commit-config.yaml \
   azure-pipelines-gateseal.yml
 ```
 
-If `git status` shows new files under `.gateseal/`, stage them too. Python, Pyright, the dependency audit, secrets and the test checks write files there. Review the changes. Commit them together, and push them to `default_branch`.
+If `git status` shows new files under `.gateseal/`, stage them too. Review the changes. Commit them together, and push them to `default_branch`.
 
 To turn CI off, remove `[ci]`. Run `gateseal configure`. Commit the changes, including the removal of the generated pipeline file. Then delete the pipeline and the build validation policy in Azure DevOps.
 

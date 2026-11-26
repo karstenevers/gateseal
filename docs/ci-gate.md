@@ -1,6 +1,6 @@
 # The CI gate
 
-The generated CI file checks each proposed merge with the selected tool versions. You do not have to write or maintain this logic. To turn it on, see [GitHub CI](github-ci.md) or [Azure Pipelines](azure-pipelines.md).
+The generated CI file checks each proposed merge with the selected tool versions. You do not have to write or maintain this logic. To turn it on, see [GitHub Actions](github-ci.md) or [Azure Pipelines](azure-pipelines.md).
 
 ## What each run does
 
@@ -8,12 +8,10 @@ Each run uses a hosted `ubuntu-24.04` machine or a [machine of your own](#machin
 
 1. Check out the repository with its full history.
 2. Check the machine. Download uv and mise, and check their SHA-256.
-3. Install the gateseal release that the Lock pins, and check the generated files against the Lock.
+3. Install the gateseal release that the Lock (`gateseal.lock`) pins, and check the generated files against the Lock.
 4. Download each selected release binary, such as Betterleaks, and build the hook environments. A download that fails stops the job here, [before any check](#a-failed-download). On GitHub, a push that deleted its branch skips this step.
 5. Run the selected CI-stage hooks and repository hooks on the files that the event changed. A hook with the `project` scope, such as Pyright, checks the whole project.
 6. Scan the event's commits with each tool that can scan history, such as Betterleaks.
-
-`gateseal.lock` is the Lock. It records the selection and the generated files.
 
 Step 5 includes each hook that runs at `git push`. A push from a clone without the push hook is still checked here. With [Python test checks](python-tests.md#run-the-tests-once-in-ci), step 5 runs the repository's tests when the change has a Python file. Before `tsc` or another tool that reads the Node project, step 5 installs the project's packages from its lockfile.
 
@@ -58,7 +56,7 @@ Git still reads that configuration, such as a proxy setting. Because the job has
 - The `store` credential helper needs `--file`, and Git can change that file. The `cache` credential helper needs `--socket`.
 - OpenSSH still uses `~/.ssh` of the agent's user, and an SSH fetch can add host keys there.
 
-The job ignores the agent's mise settings, the storage folders that the agent sets for pre-commit, uv and mise, and a `SKIP` that would make pre-commit skip hooks.
+The job ignores the agent's mise settings, and the storage folders that the agent sets for pre-commit, uv, and mise. It also ignores a `SKIP` that would make pre-commit skip hooks.
 
 ## Results
 
@@ -85,7 +83,7 @@ Start the job again. If the download fails each time, read the output. For a net
 In GitHub Actions and Azure Pipelines, a failed gate shows what went wrong, so you do not need a local run to find it:
 
 - **The full log, in color.** The job log shows all the output of each failed hook. gateseal removes recognized credentials, such as tokens, from it first. A workflow command in the output, such as `::error`, `##vso[` or `##[group]`, does not run. A local `gateseal gate` still cuts long output at 6,000 characters. Add `--verbose` to see all of it.
-- **Annotations.** Each failed or stopped hook adds an error annotation. When the hook reports a file and line, such as Ruff, the annotation is on that line, and GitHub shows it in the pull request's **Files changed** tab. Other failed hooks annotate the run, and so does a secret that a history scan finds, with its file, line and commit. GitHub shows 10 error annotations of a step, so each failed check gets one before any check gets a second.
+- **Annotations.** Each failed or stopped hook adds an error annotation. When the hook reports a file and line, such as Ruff, the annotation is on that line. GitHub shows it in the pull request's **Files changed** tab. Other failed hooks annotate the run, and so does a secret that a history scan finds, with its file, line and commit. GitHub shows 10 error annotations of a step, so each failed check gets one before any check gets a second.
 - **A run summary.** The summary of the run lists each failed check and the next steps. On Azure Pipelines, it is on the **Extensions** tab of the run.
 - **The changes that hooks made.** When a hook changes a file, the log shows the diff of each changed file:
 

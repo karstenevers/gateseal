@@ -149,7 +149,7 @@ Without `files`, a project hook runs at every commit, also when the commit only 
 
 ### CI
 
-`[ci]` turns on the generated CI file. The keys need gateseal 0.3.0 or later, except `provider` and `default_branch`. See [GitHub CI](github-ci.md) and [Azure Pipelines](azure-pipelines.md).
+`[ci]` turns on the generated CI file. The keys need gateseal 0.3.0 or later, except `provider` and `default_branch`. See [GitHub Actions](github-ci.md) and [Azure Pipelines](azure-pipelines.md).
 
 | Key | Value | Default |
 | --- | --- | --- |

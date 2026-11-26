@@ -28,7 +28,7 @@ If the repository has checks at a push, install the push hook the same way. Pres
 
 ## A command reports needs_setup
 
-Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit that setup installs. If a commit asks for a newer pre-commit, update your separate installation. Alternatively, run setup with the release recorded in `gateseal.lock`. The Lock records the selected policy and generated files.
+Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit that setup installs. If a commit asks for a newer pre-commit, update your own installation, or run setup with the gateseal release that `gateseal.lock` names.
 
 ## A command reports download_failed
 
@@ -36,8 +36,15 @@ Run `gateseal setup`. Then retry. `gateseal run` and `gate` need the pre-commit 
 
 ## The first commit fails
 
+The first commit downloads the hook environments and the selected binaries. Check network access. Then retry. To make these downloads before a commit, run `gateseal fetch`.
 
-The first commit downloads hook environments and selected binaries. Check network access. Then retry. To make these downloads before a commit, run `gateseal fetch`. A release binary such as Betterleaks needs mise 2026.10.19 or later on `PATH`, and so does a tool from npm such as ESLint. Such a tool downloads Node from nodejs.org and its packages from the npm registry, through your proxy, CA and registry settings. If its hook says `npm cannot install the locked packages`, read npm's error above that line. `EINTEGRITY`, or `npm installed no` and a package, means that the registry sent a package whose hash differs from the one that `policy.lock` records, or sent none, so retry, and ask the policy author to investigate if it keeps failing. If its hook says that `.gateseal/<tool>.package-lock.json` `is not the file that gateseal.lock records`, that file changed, so run `gateseal configure`. If its hook says that mise has no install of the pinned Node, turn mise's auto-install on. Pyright needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages. If an archive checksum keeps failing, ask the policy author to investigate the upstream release. Each clone uses the same selected versions.
+- **A release binary or a tool from npm.** Betterleaks, ESLint and other such tools need mise 2026.10.19 or later on `PATH`. A tool from npm downloads Node from nodejs.org and its packages from the npm registry, through your proxy, CA, and registry settings.
+- **`npm cannot install the locked packages`.** Read npm's error above that line.
+- **`EINTEGRITY`, or `npm installed no` and a package.** The registry sent a package whose hash differs from `policy.lock`, or sent none. Retry. If it keeps failing, ask the policy author to investigate.
+- **`.gateseal/<tool>.package-lock.json is not the file that gateseal.lock records`.** The file changed. Run `gateseal configure`.
+- **mise has no install of the pinned Node.** Turn on mise's auto-install.
+- **Pyright.** It needs uv on `PATH` and a current `uv.lock`. Its first run installs the project's packages.
+- **An archive checksum keeps failing.** Ask the policy author to investigate the upstream release.
 
 ## A type checker does not read the project's packages
 
@@ -61,7 +68,7 @@ If `tsc` reports missing types after the install, check whether an install scrip
 
 ## A setting of npm or pnpm stops a push
 
-The hook `gateseal-node-packages` obeys the settings of the project and the user, in `.npmrc`, `pnpm-workspace.yaml` and the environment, as `npm install` or `pnpm install` in a terminal does. A setting can stop the push, but it cannot make the push pass with other packages than the lockfile pins. Run `npm config list` or `pnpm config list` in the repository to see the settings.
+The hook `gateseal-node-packages` obeys the npm and pnpm settings of the project and the user, as `npm install` or `pnpm install` in a terminal does. These settings are in `.npmrc`, `pnpm-workspace.yaml`, and the environment. A setting can stop the push, but it cannot make the push pass with other packages than the lockfile pins. Run `npm config list` or `pnpm config list` in the repository to see the settings.
 
 - `tsc` reports `error TS2307: Cannot find module`: a setting leaves out a package that `tsc` needs, such as `omit=dev` or `production=true`. Remove the setting, or move the package into `dependencies`.
 - pnpm reports `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`: `node_modules` holds an install with other settings, such as one from `pnpm install --prod`. pnpm asks before it removes `node_modules`, and a push has no terminal for the question. Run `pnpm install` in a terminal and answer yes.
@@ -70,7 +77,7 @@ Then push again.
 
 ## A generated file differs
 
-`gateseal.toml` is the Manifest that selects the policy and checks. To change checks, edit the Manifest. Run `gateseal configure`. Review the Manifest, Lock, and generated files. Commit them together. If the Lock was deleted by mistake, restore it from Git. If `ownership_conflict` names an edited generated file, save any changes you need. Restore the generated file before retrying.
+Do not edit generated files. To change checks, edit the Manifest, `gateseal.toml`, and run `gateseal configure`, as [Adjust a setup](adjust-a-setup.md) shows. If the Lock was deleted by mistake, restore it from Git. If `ownership_conflict` names an edited generated file, save any changes you need. Restore the generated file before retrying.
 
 ## A hook changes a file or reports a secret
 

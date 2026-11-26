@@ -1,6 +1,10 @@
 # Work in a configured repository
 
-Install Git 2.54.0 or later and pre-commit 4.7.0 or later. If the policy selects a release binary such as Betterleaks, or a tool from npm such as ESLint, install mise 2026.10.19 or later too. A tool from npm needs no Node or npm on the machine. See [Check TypeScript](typescript.md#what-each-developer-needs). If it selects a tool that runs in the uv project, such as Pyright, install uv 0.13.6 or later too. A tool that reads the Node project, such as `tsc`, needs no npm or pnpm on the machine. A separate gateseal installation is not needed to commit or push.
+You do not need gateseal to commit or push. Install these tools at the versions that [Requirements](install.md#requirements) gives:
+
+- Git and pre-commit.
+- mise, if the checks include a release binary such as Betterleaks, or a tool from npm such as ESLint. You need no Node, npm, or pnpm.
+- uv, if the checks include a tool that runs in the uv project, such as Pyright.
 
 From each clone's root, install the commit hook:
 
@@ -19,7 +23,7 @@ git add example.txt
 git commit -m 'Update example'
 ```
 
-Replace `example.txt` with your changed file. The first hook runs the version recorded in `gateseal.lock`, the Lock. The Lock records the policy selection and generated files. The hook refuses staged generated files that differ from the Lock. The other hooks check staged files. A hook that checks the whole project, such as Pyright, runs at every commit. Stage `.pre-commit-config.yaml` in full. pre-commit stops if it has unstaged changes.
+The first hook refuses staged generated files that differ from `gateseal.lock`, the Lock. The other hooks check the staged files. A hook that checks the whole project, such as Pyright, runs at every commit. Stage `.pre-commit-config.yaml` in full, because pre-commit stops if it has unstaged changes.
 
 To check all tracked files, run:
 
@@ -61,11 +65,11 @@ If the repository later drops its checks at a push, remove the push hook, becaus
 Git LFS uploads files from its own push hook, and the push hook of pre-commit takes its place. Uploads continue in two cases:
 
 - Git LFS was set up before `pre-commit install`. pre-commit keeps the hook of Git LFS as `pre-push.legacy` and runs it first.
-- You ran `gateseal setup --refresh`. With the push hook, it adds a hook to the clone's Git configuration that starts Git LFS at each push, on every branch and in every worktree. The hook does nothing where Git LFS is not set up, or where the clone holds no Git LFS object. Where the clone holds Git LFS objects but `git-lfs` is missing, the hook stops the push. In a clone with the push hook, `git lfs install` reports `Hook already exists: pre-push`. Uploads still work, but Git LFS skips its other hooks, which only files that Git LFS locks need. To add them, run `git lfs update --manual` and add each hook that it prints, except `pre-push`.
+- You ran `gateseal setup --refresh`. With the push hook, it adds a hook to the clone's Git configuration. That hook starts Git LFS at each push, on every branch and in every worktree. The hook does nothing where Git LFS is not set up, or where the clone holds no Git LFS object. Where the clone holds Git LFS objects but `git-lfs` is missing, the hook stops the push. In a clone with the push hook, `git lfs install` reports `Hook already exists: pre-push`. Uploads still work, but Git LFS skips its other hooks, which only files that Git LFS locks need. To add them, run `git lfs update --manual` and add each hook that it prints, except `pre-push`.
 
 In both cases, Git LFS uploads before the checks at a push run. A push that a check stops can leave its LFS objects on the remote, but the remote branch does not change.
 
-If the repository later drops its checks at a push, `gateseal setup --refresh` removes the push hook and the hook that it added to the Git configuration. In a clone that holds Git LFS objects, it then runs `git lfs update`. Git LFS writes its own push hook, so the next push uploads.
+If the repository later drops its checks at a push, `gateseal setup --refresh` removes the push hook and `hook.gateseal-lfs-upload`, the hook that it added to the Git configuration. It keeps `hook.gateseal-lfs-upload` while another push hook keeps Git LFS from writing its own. When it removes both in a clone that holds Git LFS objects, it runs `git lfs update`. Git LFS writes its own push hook, so the next push uploads.
 
 After a plain `pre-commit install`, Git LFS set up later cannot write its hook. A push then stops with this message:
 
@@ -82,7 +86,7 @@ pre-commit install
 
 Those commands replace a push hook that pre-commit kept as `pre-push.legacy`. In a clone with that file, the message names another repair: add the line `git lfs pre-push "$@"` to the file, and make the file executable.
 
-The check also stops a push when the clone tracks no file with Git LFS now, but a commit that the remote lacks holds a Git LFS pointer. It accepts any push hook of Git's configuration that runs `git lfs pre-push`.
+The check also stops a push when a commit that the remote lacks holds a Git LFS pointer, even if the clone tracks no file with Git LFS now. It accepts any push hook of Git's configuration that runs `git lfs pre-push`.
 
 The check runs only on a branch whose configuration has checks at a push. Until you repair the clone, a push from another branch or worktree uploads no LFS object, and nothing stops it.
 

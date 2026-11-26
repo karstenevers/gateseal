@@ -17,7 +17,7 @@ gateseal configure --capability hygiene \
   --policy-path policy --policy-tag team-2026.11
 ```
 
-At adoption, gateseal checks that the tag points to the selected commit. It records that commit in `gateseal.toml`, the Manifest that selects the policy and checks. `gateseal.lock`, the Lock, records the selection and generated files. Review both with the generated files. See [an example Manifest](policy-contract.md#example) and [the policy it selects](policy-format.md#example). Commit them together. A moved tag does not change the recorded commit.
+At adoption, gateseal checks that the tag points to the selected commit. It records that commit in the Manifest (`gateseal.toml`) and the Lock (`gateseal.lock`). Review both with the generated files. See [an example Manifest](policy-contract.md#example) and [the policy it selects](policy-format.md#example). Commit them together. A moved tag does not change the recorded commit.
 
 To select another release from the same policy, use `gateseal upgrade --policy-tag <tag>`. See [Upgrade and roll back](upgrade.md).
 
@@ -33,4 +33,4 @@ The release tag must appear. gateseal fetches without an interactive terminal. E
 
 `status` uses the stored policy without network access. Other repository commands fetch the selected commit if the stored copy is missing or damaged. The server must allow fetching that commit. Keep it reachable from a tag or branch so new clones can fetch it.
 
-For private policies used by CI, see private policy access in [GitHub CI](github-ci.md#private-policy-access) or [Azure Pipelines](azure-pipelines.md#private-policy-access).
+For private policies used by CI, see private policy access in [GitHub Actions](github-ci.md#private-policy-access) or [Azure Pipelines](azure-pipelines.md#private-policy-access).

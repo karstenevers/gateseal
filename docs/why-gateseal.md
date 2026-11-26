@@ -5,7 +5,7 @@ gateseal makes one reviewed set of checks easy to install, pin, and update in ma
 For example, move OpenTofu to a new release in 20 repositories, while 2 of them stay on the old version for now:
 
 - **Without gateseal**, you edit 18 `.pre-commit-config.yaml` files and 18 CI setup steps. The usual OpenTofu hooks run whichever `tofu` is on the PATH. A developer who works in both kinds of repository installs both versions with a version manager and switches before each commit. If they forget, the hook runs the wrong version. Nothing tells you which repository you missed.
-- **With gateseal**, the platform team reviews the new version once in a policy release. 18 repositories run `gateseal upgrade --policy-tag team-2026.12` and commit the result. The other 2 keep their old release. If the policy still reviews the old OpenTofu, they can also take the new release and keep the old OpenTofu as a [Version Exception](policy-contract.md#version-exceptions) with a review date. Each hook runs the OpenTofu from its own repository's Lock, so developers do nothing.
+- **With gateseal**, the platform team reviews the new version once in a policy release. 18 repositories run `gateseal upgrade --policy-tag team-2026.12` and commit the result. The other 2 keep their old release. If the policy still reviews the old OpenTofu, they can also take the new release. They then keep the old OpenTofu as a [Version Exception](policy-contract.md#version-exceptions) with a review date. Each hook runs the OpenTofu from its own repository's Lock, so developers do nothing.
 
 ## Compare the options
 
@@ -30,7 +30,7 @@ A pre-commit config usually names each hook by a tag, and the hook's owner can m
 
 pre-commit does not install itself, Python, or release binaries such as Terraform or TFLint. Each dev machine, CI setup step, and build agent installs them by hand. Over time, these versions drift apart, and a check that passes on one machine fails on another. Some tools, such as Betterleaks, avoid this with a hook that pre-commit builds from source with Go. For ESLint, Prettier and other tools from npm, see [gateseal and pre-commit's Node hooks](typescript.md#gateseal-and-pre-commits-node-hooks).
 
-gateseal records these versions in the Lock, `gateseal.lock`. It generates `.pre-commit-config.yaml` and the CI file from the same Lock, so the two cannot drift apart. The Lock check fails on a hand edit to either file. The generated CI file downloads the pinned uv and mise and checks each against its SHA-256. It installs gateseal from the commit that the Lock names, and that release installs its pinned pre-commit. mise installs each release binary at the Lock's version and checks its archive. On a dev machine, `gateseal setup` installs the pinned pre-commit, or the developer keeps their own at the minimum version.
+gateseal records these versions in the Lock, `gateseal.lock`. It generates `.pre-commit-config.yaml` and the CI file from the same Lock, so the two cannot drift apart. The Lock check fails on a hand edit to either file. In CI and on each dev machine, mise installs each release binary at the Lock's version and checks its archive. The CI file downloads the pinned uv and mise and checks each against its SHA-256. It installs gateseal from the commit that the Lock names, and that release installs its pinned pre-commit. On a dev machine, `gateseal setup` installs the pinned pre-commit, or the developer keeps their own at the minimum version.
 
 ## pre-commit.ci
 
