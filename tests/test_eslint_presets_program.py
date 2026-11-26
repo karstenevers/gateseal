@@ -10,8 +10,10 @@ import os
 
 import pytest
 from conftest import on_machine
+from gateseal import npm_tool
 from gateseal.policy import load_bundled_policy
 from gateseal.tools.eslint_presets import PROGRAM
+from gateseal.tools.mise import archives
 from installation import success
 
 pytestmark = pytest.mark.integration
@@ -71,9 +73,10 @@ def test_the_program_prints_each_preset_s_rules_as_data(installed, tmp_path):
     }
     node = load_bundled_policy().tools["eslint"].node
     assert node is not None
-    command = [*node.prefix, "node", PROGRAM, tmp_path, json.dumps(argument)]
     with on_machine(installed):
         env = dict(os.environ, MISE_OFFLINE="0")
+        folder = npm_tool.pinned_node(node.version, archives(node.platforms))
+    command = [f"{folder}/node", PROGRAM, tmp_path, json.dumps(argument)]
     assert json.loads(success(command, tmp_path, env).stdout) == {
         "eslint": {
             "configs": ["recommended"],

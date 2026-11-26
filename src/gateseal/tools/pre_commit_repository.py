@@ -22,6 +22,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from gateseal.compiler_release import GatesealPin
 from gateseal.diagnostics import GatesealError
 from gateseal.tools.model import (
     Catalog,
@@ -146,7 +147,7 @@ class RepositoryTool:
     def program(self, variables: Collection[str] = ()) -> None:
         return None
 
-    def entry(self, exclude: str | None) -> dict[str, object]:
+    def entry(self, exclude: str | None, pin: GatesealPin) -> dict[str, object]:
         hooks: list[object] = []
         for hook in self.use.hooks:
             entry = hook.base_entry(

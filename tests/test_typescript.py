@@ -8,16 +8,16 @@ npm first on PATH that fail, so a hook passes only on the pinned Node.
 
 import json
 import os
-import shlex
 import tomllib
 from pathlib import Path
 
 import pytest
 from conftest import on_machine
+from gateseal import npm_tool
 from gateseal.policy import bundled_root
-from gateseal.tools.node import FINISH, Tree, read_node
-from gateseal.validation import canonical, sha
+from gateseal.validation import canonical
 from installation import clone, process, success
+from npm_tools import hook_command, install_of, on_node, pinned_node, record, start
 from team_policy import URL, environment, git, publish
 from typescript_policy import (
     BAD,
@@ -45,40 +45,9 @@ def notes(result):
     return [d["message"] for d in result["diagnostics"]]
 
 
-def hook_entries(root):
-    config = json.loads((root / ".pre-commit-config.yaml").read_bytes())
-    return {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
-
-
-def on_node(root, hook, *arguments):
-    """Return what node prints for arguments on the Node of the hook in root."""
-    prefix = shlex.split(hook_entries(root)[hook]["entry"])[:5]
-    assert prefix[-1] == "--"
-    return success([*prefix, "node", *arguments], root).stdout.strip()
-
-
-def script_of(root, hook):
-    words = shlex.split(hook_entries(root)[hook]["entry"])
-    return words[words.index("/bin/sh") + 2]
-
-
-def install_of(root, env, hook):
-    """Return the folder where the hook in root keeps its packages."""
-    folder = script_of(root, hook).partition("dir=$cache/gateseal/npm/")[2]
-    machine = f"{os.uname().sysname}-{os.uname().machine}"
-    folder = folder.partition(";")[0].replace("$(uname -s)-$(uname -m)", machine)
-    return Path(env["HOME"]) / ".cache/gateseal/npm" / folder
-
-
-def program_of(root, env, hook):
-    """Return the program that the hook in root starts on its Node."""
-    program = script_of(root, hook).partition('"$dir/"')[2].partition(" ")[0]
-    return install_of(root, env, hook) / program
-
-
-def started_node(root, hook):
-    """Return the version of the Node that starts the hook's tool in root."""
-    return on_node(root, hook, "--version")
+def started_node(root, env):
+    """Return the version of the Node that starts each tool from npm in root."""
+    return on_node(root, env, "--version")
 
 
 def stage(root, name, text):
@@ -150,6 +119,7 @@ def test_configure_writes_the_policy_s_eslint_data(adopted):
         ".gateseal/eslint-suppressions.json",
         ".gateseal/eslint.json",
         ".gateseal/eslint.package-lock.json",
+        ".gateseal/prettier-ignore.txt",
         ".gateseal/prettier.package-lock.json",
         ".gateseal/prettier.toml",
     ]
@@ -157,13 +127,41 @@ def test_configure_writes_the_policy_s_eslint_data(adopted):
 
 def test_a_commit_runs_prettier_on_the_pinned_node(adopted):
     consumer, env = adopted
-    assert started_node(consumer, "prettier") == f"v{NODE}"
+    assert started_node(consumer, env) == f"v{NODE}"
     wrong = process(["node", "--version"], consumer, env)
     assert (wrong.returncode, wrong.stderr) == (97, "the PATH Node ran\n")
     stage(consumer, "src/greet.ts", BAD)
     output = commit_fixed(consumer, env, "src/greet.ts")
     assert (consumer / "src/greet.ts").read_text() == FORMATTED
     assert "the PATH Node ran" not in output
+
+
+def test_skip_takes_the_own_id_of_a_hook_of_a_tool_from_npm(adopted):
+    consumer, env = adopted
+    stage(consumer, "src/greet.ts", BAD)
+    result, output = commit(consumer, dict(env, SKIP="prettier"))
+    assert result.returncode == 0, output
+    assert (consumer / "src/greet.ts").read_text() == BAD
+    lines = {line.partition(".")[0]: line for line in output.splitlines()}
+    assert lines["prettier"].endswith("Skipped")
+    assert lines["eslint"].endswith("Passed")
+
+
+def test_without_the_pinned_node_and_mise_s_auto_install_a_commit_stops(
+    adopted, tmp_path
+):
+    consumer, env = adopted
+    off = dict(env, MISE_AUTO_INSTALL="0", MISE_DATA_DIR=str(tmp_path / "mise"))
+    stage(consumer, "src/greet.ts", BAD)
+    result, output = commit(consumer, off)
+    assert result.returncode == 1, output
+    assert output.count("- exit code: 127") == 2, output
+    assert (
+        f"mise has no install of Node {NODE}, the pinned Node. Turn the "
+        "auto-install of mise on."
+    ) in output
+    assert "the PATH Node ran" not in output
+    assert (consumer / "src/greet.ts").read_text() == BAD
 
 
 def test_a_commit_fails_on_what_typescript_eslint_refuses(adopted):
@@ -173,7 +171,7 @@ def test_a_commit_fails_on_what_typescript_eslint_refuses(adopted):
     assert result.returncode == 1, output
     assert "src/count.ts" in output
     assert "@typescript-eslint/no-explicit-any" in output
-    assert "- hook id: eslint" in output
+    assert "- hook id: gateseal-npm-tool" in output
     heads = success(["git", "rev-parse", "HEAD", "adopted"], consumer).stdout.split()
     assert heads[0] == heads[1]
 
@@ -226,7 +224,7 @@ def test_the_repository_s_own_settings_and_packages_change_nothing(adopted):
 
 
 def test_the_loader_takes_a_package_from_the_root_of_the_install(adopted, tmp_path):
-    consumer, _ = adopted
+    consumer, env = adopted
     root = tmp_path.resolve()
     nested = "node_modules/eslint/node_modules"
     for folder, copy in {"node_modules": "pinned", nested: "of ESLint"}.items():
@@ -242,7 +240,7 @@ def test_the_loader_takes_a_package_from_the_root_of_the_install(adopted, tmp_pa
         f"import({json.dumps(loader.as_uri())}).then((loaded) =>"
         " console.log(loaded.default[0].languageOptions.parser));\n"
     )
-    assert on_node(consumer, "eslint", program) == "pinned"
+    assert on_node(consumer, env, program) == "pinned"
 
 
 RECOMMENDED = (
@@ -350,9 +348,7 @@ preset, loaded from the hook's install, then the policy's rules."""
 def eslint_rules(root, env, config):
     """Return the rules that ESLint turns on for src/app.ts with config."""
     eslint = install_of(root, env, "eslint") / "node_modules/eslint/bin/eslint.js"
-    out = on_node(
-        root, "eslint", eslint, "--config", config, "--print-config", "src/app.ts"
-    )
+    out = on_node(root, env, eslint, "--config", config, "--print-config", "src/app.ts")
     rules = json.loads(out)["rules"]
     return {name: value for name, value in rules.items() if value[0] != 0}
 
@@ -390,10 +386,10 @@ def test_a_commit_runs_no_code_of_a_preset(adopted):
         '{ throw new Error("a preset ran"); } });\n'
     )
     entry.write_bytes(kept + trap.encode())
-    prefix = shlex.split(hook_entries(consumer)["eslint"]["entry"])[:5]
-    read = [*prefix, "node", "-e", f"require({json.dumps(str(entry))}).configs"]
+    node = pinned_node(consumer, env)
+    read = [node, "-e", f"require({json.dumps(str(entry))}).configs"]
     try:
-        assert "a preset ran" in process(read, consumer).stderr
+        assert "a preset ran" in process(read, consumer, env).stderr
         stage(consumer, "src/count.ts", DEFECT)
         result, output = commit(consumer, env)
     finally:
@@ -409,7 +405,7 @@ def test_each_hook_keeps_its_packages_in_a_folder_of_its_own(adopted):
     prettier = install_of(consumer, env, "prettier")
     assert eslint.parent.name == prettier.parent.name == f"node-{NODE}"
     assert eslint != prettier
-    assert program_of(consumer, env, "prettier").is_relative_to(prettier)
+    assert (prettier / "node_modules/prettier/package.json").exists()
     for package in ("eslint", "@typescript-eslint/parser", "typescript"):
         assert (eslint / "node_modules" / package / "package.json").exists()
     assert not (consumer / "node_modules").exists()
@@ -460,13 +456,11 @@ BROKEN = "sha512-" + "A" * 86 + "=="
 """An integrity hash that no package has."""
 
 
-def first_use(consumer, env, tmp_path, tool, lockfile, program):
-    """Start tool on its first use from lockfile, as policy.lock may record it."""
-    tree = Tree(canonical(lockfile), program)
-    lock = json.loads((bundled_root() / "policy.lock").read_bytes())
-    launch = read_node(NODE, lock["node"]).launch(tree, None, tool)
+def first_use(consumer, env, tmp_path, tool, package, lockfile):
+    """Start tool on its first use from lockfile, as the Lock may record it."""
+    record(consumer, tool, package, canonical(lockfile))
     fresh = dict(env, XDG_CACHE_HOME=str(tmp_path / "cache"))
-    result = process([*launch, "--version"], consumer, fresh)
+    result = start(consumer, fresh, tool, tool, "--version")
     assert (result.returncode, result.stdout) == (127, ""), result.stderr
     assert result.stderr.endswith(
         f"npm cannot install the locked packages of {tool}.\n"
@@ -480,8 +474,7 @@ def test_a_changed_lockfile_hash_stops_the_first_install(adopted, tmp_path):
     lock = consumer / ".gateseal/prettier.package-lock.json"
     data = json.loads(lock.read_bytes())
     data["packages"]["node_modules/prettier"]["integrity"] = BROKEN
-    program = "node_modules/prettier/bin/prettier.cjs"
-    output = first_use(consumer, env, tmp_path, "prettier", data, program)
+    output = first_use(consumer, env, tmp_path, "prettier", "prettier", data)
     assert "EINTEGRITY" in output
     assert "A complete log" not in output
 
@@ -491,9 +484,7 @@ def test_a_package_missing_from_the_lockfile_stops_the_first_install(adopted, tm
     lock = consumer / ".gateseal/eslint.package-lock.json"
     data = json.loads(lock.read_bytes())
     del data["packages"]["node_modules/typescript"]
-    first_use(
-        consumer, env, tmp_path, "eslint", data, "node_modules/eslint/bin/eslint.js"
-    )
+    first_use(consumer, env, tmp_path, "eslint", "eslint", data)
 
 
 def test_an_optional_package_that_npm_drops_stops_the_first_install(adopted, tmp_path):
@@ -501,51 +492,46 @@ def test_an_optional_package_that_npm_drops_stops_the_first_install(adopted, tmp
     consumer, env = adopted
     lock = json.loads((bundled_root() / "policy.lock").read_bytes())
     lockfile = lock["components"]["tsc"]["versions"]["7.0.2"]["lockfile"]
-    platform = on_node(consumer, "prettier", "-p", 'process.platform+"-"+process.arch')
+    platform = on_node(consumer, env, "-p", 'process.platform+"-"+process.arch')
     native = f"node_modules/@typescript/typescript-{platform}"
     lockfile["packages"][native]["integrity"] = BROKEN
-    program = "node_modules/typescript/bin/tsc"
-    output = first_use(consumer, env, tmp_path, "tsc", lockfile, program)
+    output = first_use(consumer, env, tmp_path, "tsc", "typescript", lockfile)
     assert output.endswith(
         f"npm installed no {native}.\nnpm cannot install the locked packages of tsc.\n"
     )
 
 
-def test_a_lockfile_other_than_the_hook_s_fills_no_install(adopted, tmp_path):
+def test_a_lockfile_other_than_the_lock_s_fills_no_install(adopted, tmp_path):
     """The same packages in other bytes: npm does not run, and nothing installs."""
     consumer, env = adopted
     lock = consumer / ".gateseal/prettier.package-lock.json"
     lock.write_text(json.dumps(json.loads(lock.read_bytes())))
     fresh = dict(env, XDG_CACHE_HOME=str(tmp_path / "cache"))
-    words = shlex.split(hook_entries(consumer)["prettier"]["entry"])
-    result = process(words, consumer, fresh)
-    assert (result.returncode, result.stdout) == (127, ""), result.stderr
-    assert result.stderr.endswith(
-        "The lockfile is not the one that the hook names.\n"
-        "npm cannot install the locked packages of prettier.\n"
-    ), result.stderr
-    assert "npm error" not in result.stderr
+    result = process(hook_command(consumer, "prettier"), consumer, fresh)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        127,
+        "",
+        ".gateseal/prettier.package-lock.json is not the file that gateseal.lock "
+        "records. Run gateseal configure.\n",
+    )
     assert not list((tmp_path / "cache").glob("gateseal/npm/*/node-*/*"))
 
 
-def test_a_crlf_lockfile_without_other_platforms_packages_installs(adopted, tmp_path):
+def test_an_install_without_other_platforms_packages_is_complete(adopted, tmp_path):
     """npm leaves out a portable package that only another platform's needs."""
-    consumer, _ = adopted
+    consumer, env = adopted
     packages = {
         "": {"dependencies": {"tool": "1.0.0"}},
         "node_modules/tool": {"version": "1.0.0"},
         "node_modules/tool-aix": {"optional": True, "os": ["aix"], "version": "1.0.0"},
         "node_modules/helper": {"optional": True, "version": "1.0.0"},
     }
-    lockfile = canonical({"lockfileVersion": 3, "packages": packages})
-    new, final = tmp_path / "new", tmp_path / "final"
+    new = tmp_path / "new"
     (new / "node_modules").mkdir(parents=True)
-    (new / "package-lock.json").write_bytes(lockfile.replace(b"\n", b"\r\n"))
+    (new / "package-lock.json").write_bytes(canonical({"packages": packages}))
     installed = {"packages": {"": {}, "node_modules/tool": {}}}
     (new / "node_modules/.package-lock.json").write_text(json.dumps(installed))
-    on_node(consumer, "prettier", "-e", FINISH, new, sha(lockfile), final)
-    assert final.is_dir()
-    assert not new.exists()
+    assert on_node(consumer, env, "-e", npm_tool.CHECK_INSTALL, new) == ""
 
 
 def test_a_file_named_like_an_option_is_checked_as_a_file(adopted):
@@ -675,22 +661,23 @@ def team(installed, tmp_path_factory):
 def test_two_repositories_with_two_node_pins_each_run_their_own(
     installed, team, adopted, tmp_path
 ):
-    bundled, _ = adopted
+    bundled, bundled_env = adopted
     env = dict(environment(installed, team), PATH=wrong_path(tmp_path / "wrong node"))
     consumer = clone(tmp_path / "origin", tmp_path / "consumer")
     source = ("--policy", URL, "--policy-path", "policy", "--policy-tag", "v1")
     adopt(installed, consumer, dict(env, MISE_OFFLINE="0"), *source)
-    assert started_node(consumer, "eslint") == f"v{OTHER_NODE}"
-    assert started_node(bundled, "eslint") == f"v{NODE}"
-    other = install_of(consumer, env, "eslint")
-    assert other.parent.name == f"node-{OTHER_NODE}"
-    assert other.name == install_of(bundled, env, "eslint").name
+    assert started_node(consumer, env) == f"v{OTHER_NODE}"
+    assert started_node(bundled, bundled_env) == f"v{NODE}"
     lock = json.loads((consumer / "gateseal.lock").read_bytes())
     assert lock["native_artifacts"]["node"]["version"] == OTHER_NODE
     stage(consumer, "src/greet.ts", BAD)
     commit_fixed(consumer, env, "src/greet.ts")
     assert (consumer / "src/greet.ts").read_text() == FORMATTED
-    assert program_of(consumer, env, "eslint").is_file()
+    other = install_of(consumer, env, "eslint")
+    own = install_of(bundled, bundled_env, "eslint")
+    assert other.parent.name == f"node-{OTHER_NODE}"
+    assert other.name == own.name
+    assert (other / "node_modules/eslint/package.json").is_file()
     status = notes(installed.cli(consumer, "status", env=env))
     assert (
         f"Tool eslint 10.15.0 for typescript: built-in, npm-package on Node "

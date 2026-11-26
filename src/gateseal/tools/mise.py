@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Protocol
 
 from gateseal.diagnostics import GatesealError
+from gateseal.npm_tool import mise_names
 from gateseal.processes import execute, find_tool
 from gateseal.tools.model import MissingUpstream, Upstream
 from gateseal.validation import version_key
@@ -41,41 +42,18 @@ class Download(Protocol):
 def mise_request(name: str, version: str, platforms: Mapping[str, Download]) -> str:
     """Return mise's request for a tool, with every platform's archive.
 
-    mise reads the option platforms_<os>_<arch>_<name> as the nested
-    platforms.<os>-<arch>.<name> of a mise file. A URL, a checksum and a
-    version hold no comma or bracket, which would end an option. mise
-    installs a request once under its tool name and version and never
-    reads its options again, so the tool name ends in a digest of them.
+    gateseal's hook that starts a tool from npm builds the same request from
+    the Lock, so npm_tool.mise_names owns its form.
     """
-    options = _options(platforms)
-    return f"{_tool(name, options)}[{options}]@{version}"
+    return mise_names(name, version, archives(platforms))[0]
 
 
-def mise_install_name(
-    name: str, version: str, platforms: Mapping[str, Download]
-) -> str:
-    """Return the tool name and version under which mise keeps mise_request's install.
-
-    mise where prints the folder of that install, and fails when mise has
-    not installed it. The name holds a digest of each archive's URL and
-    SHA-256, so the folder holds only an archive that mise checked.
-    """
-    return f"{_tool(name, _options(platforms))}@{version}"
-
-
-def _options(platforms: Mapping[str, Download]) -> str:
-    return ",".join(
-        f"platforms_{platform.replace('-', '_')}_{option}={value}"
-        for platform, archive in sorted(platforms.items())
-        for option, value in (
-            ("url", archive.url),
-            ("checksum", "sha256:" + archive.sha256),
-        )
-    )
-
-
-def _tool(name: str, options: str) -> str:
-    return f"http:{name}-{hashlib.sha256(options.encode()).hexdigest()[:12]}"
+def archives(platforms: Mapping[str, Download]) -> dict[str, tuple[str, str]]:
+    """Return each platform's URL and SHA-256, as npm_tool takes them."""
+    return {
+        platform: (archive.url, archive.sha256)
+        for platform, archive in platforms.items()
+    }
 
 
 def read_checksums(listing: bytes) -> dict[str, str]:

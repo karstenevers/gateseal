@@ -39,7 +39,7 @@ Use the push stage for a tool that is too slow for each commit. Each clone then 
 
 ## Hooks
 
-Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. gateseal's own hooks `gateseal-check`, `gateseal-lfs-check` and `gateseal-node-packages` keep their IDs and names. A hook with one of them gives `duplicate_identifier`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. gateseal's own hooks `gateseal-check`, `gateseal-lfs-check`, `gateseal-node-packages` and `gateseal-npm-tool` keep their IDs and names. A hook with one of them gives `duplicate_identifier`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
 
 By default, every failure of a hook is a failed check, which exits 1. Some tools also fail when they cannot check, such as when they cannot reach a service. List the exit codes with which the tool reports a finding in `finding_exit_codes`, such as `[1]`. When the hook fails with another exit code, the hook is `stopped`, and `gateseal run` and the CI gate report `tool_failed` and exit 4. The list holds one or more distinct integers from 1 to 255. For example, the bundled `uv-audit` hook, shortened:
 
@@ -124,13 +124,22 @@ Release binaries run through `mise --no-config exec --deny-env`. A hook of any o
 
 An `npm-package` source has a `package`: the tool's name on the npm registry, without a version. Examples are `prettier` and `@biomejs/biome`. Set `executable.name` to the program that the package installs. The program must be a JavaScript file, because the hook starts the pinned Node with it. `check_at_commit` is invalid for this kind.
 
-The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). `gateseal policy lock` runs npm on that Node to lock them, so it needs mise and the npm registry. Each hook runs one command, in this form:
+The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). `gateseal policy lock` runs npm on that Node to lock them, so it needs mise and the npm registry.
 
-```text
-mise --no-config exec <Node request> -- /bin/sh -c '<script>' <program> <args>
+Each hook is gateseal's own hook `gateseal-npm-tool`, which pre-commit builds from gateseal's repository at the commit that the Lock pins. The hook keeps its own ID as `alias` and its own name. Its arguments are the tool's name, the executable's name and the hook's `args`. This is the built-in `tsc` hook in `.pre-commit-config.yaml`, without its stages and patterns:
+
+```json
+{
+  "id": "gateseal-npm-tool",
+  "alias": "tsc",
+  "name": "tsc",
+  "args": ["tsc", "tsc", "--noEmit", "--project", "tsconfig.json"]
+}
 ```
 
-The script installs the tool's lockfile, which `gateseal policy lock` records, once into a folder of your cache folder. Then it starts the program on the pinned Node. When it finds no pinned Node or cannot install the packages, the hook exits 127, so list no 127 in `finding_exit_codes`.
+`SKIP=tsc` and `pre-commit run tsc --hook-stage pre-push` name the hook by its alias, and gateseal's results name it `tsc`. When the hook fails, pre-commit prints `hook id: gateseal-npm-tool` below the hook's name.
+
+The hook reads the rest from `gateseal.lock`: the URL and the SHA-256 of the Node archive for each platform, the tool's package, and the SHA-256 of the tool's lockfile, `.gateseal/<tool>.package-lock.json`. It asks mise for that Node. It installs the lockfile once into a folder of your cache folder. Then it starts the program on the pinned Node. The hook exits 127 when it finds no pinned Node or cannot start it, cannot install the packages, or finds another lockfile than the Lock records. So list no 127 in `finding_exit_codes`.
 
 The kind guarantees these things, whatever a definition says:
 

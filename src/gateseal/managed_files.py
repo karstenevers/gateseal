@@ -6,10 +6,9 @@ from collections.abc import Generator
 from pathlib import Path
 
 from gateseal.diagnostics import GatesealError
+from gateseal.npm_tool import LOCK as LOCK
 
 MANIFEST = "gateseal.toml"
-
-LOCK = "gateseal.lock"
 
 LOCK_FORMAT = 2
 """The Lock format, which changes only when the ownership ledger changes."""

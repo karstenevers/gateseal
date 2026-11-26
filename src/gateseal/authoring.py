@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
-from gateseal import policy_toml, sources
+from gateseal import npm_tool, policy_toml, sources
 from gateseal.diagnostics import GatesealError, Note, Result
 from gateseal.managed_files import open_directory, read, read_optional, write_atomic
 from gateseal.policy import (
@@ -34,7 +34,7 @@ from gateseal.policy import (
     review_policy,
 )
 from gateseal.processes import execute, find_tool
-from gateseal.tools.mise import require_mise
+from gateseal.tools.mise import archives, require_mise
 from gateseal.tools.model import Catalog, MissingUpstream, Release
 from gateseal.tools.node import NAME as NODE
 from gateseal.tools.node import Node, lock_node, read_node
@@ -100,7 +100,7 @@ class Releases:
     def lockfile(
         self, dependencies: Mapping[str, str], tool: str, version: str
     ) -> dict[str, object]:
-        folder = self._npm(dependencies, None, "resolve", tool, version)
+        _, folder = self._npm(dependencies, None, "resolve", tool, version)
         lockfile = decode_json((folder / "package-lock.json").read_bytes())
         lockfile.pop("name", None)
         return lockfile
@@ -116,14 +116,11 @@ class Releases:
         dependencies = cast(
             Mapping[str, str], nested(lockfile, "packages", "", "dependencies")
         )
-        folder = self._npm(dependencies, lockfile, "install", tool, version)
-        command = [*self.node.prefix, "node", str(program), str(folder)]
-        run = execute(
-            [*command, json.dumps(argument)],
-            folder,
-            dict(os.environ),
-            allow_failure=True,
+        node, folder = self._npm(dependencies, lockfile, "install", tool, version)
+        command, env = npm_tool.on_node(
+            node, str(program), [str(folder), json.dumps(argument)]
         )
+        run = execute(command, folder, env, allow_failure=True)
         if run.returncode:
             detail = run.stderr.decode("utf-8", "replace").strip()
             raise GatesealError(
@@ -143,25 +140,30 @@ class Releases:
         doing: str,
         tool: str,
         version: str,
-    ) -> Path:
-        """Run npm on the policy's Node in a new folder, and return the folder.
+    ) -> tuple[str, Path]:
+        """Run npm on the policy's Node in a new folder; return Node's and the folder.
 
         Without lockfile, npm resolves dependencies into package-lock.json;
         with it, npm ci installs exactly its packages. A package or version
         that the registry lacks is MissingUpstream; any other failure is
         upstream_unavailable.
         """
-        env = dict(os.environ)
-        require_mise(env)
+        require_mise(dict(os.environ))
         folder = Path(tempfile.mkdtemp(dir=self.scratch))
         (folder / "package.json").write_bytes(canonical({"dependencies": dependencies}))
-        arguments = ("install", "--package-lock-only")
+        arguments = ["install", "--package-lock-only"]
         if lockfile is not None:
             (folder / "package-lock.json").write_bytes(canonical(lockfile))
-            arguments = ("ci",)
-        run = execute(
-            [*self.node.npm(*arguments), str(folder)], folder, env, allow_failure=True
-        )
+            arguments = ["ci"]
+        try:
+            node = npm_tool.pinned_node(
+                self.node.version, archives(self.node.platforms)
+            )
+        except npm_tool.Stopped as stopped:
+            step = f"Then rerun {self.rerun}."
+            raise GatesealError("upstream_unavailable", str(stopped), 4, step) from None
+        command, env = npm_tool.npm_in(node, str(folder), arguments)
+        run = execute(command, folder, env, allow_failure=True)
         if run.returncode:
             detail = run.stderr.decode("utf-8", "replace").strip()
             text = f"npm cannot {doing} the packages of {tool} {version}: {detail}"
@@ -169,7 +171,7 @@ class Releases:
                 raise MissingUpstream("upstream_release_missing", text, tool, version)
             step = f"Check that npm reaches its registry, then rerun {self.rerun}."
             raise GatesealError("upstream_unavailable", text, 4, step)
-        return folder
+        return node, folder
 
 
 class Snapshot:

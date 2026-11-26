@@ -12,79 +12,58 @@ pass with other packages than the lockfile pins.
 
 The hook picks the package manager when it runs, from the lockfile that the
 repository commits, because the generated configuration must be the same for an
-npm and a pnpm project. So gateseal configure gives the hook the command that
-starts each package manager on the pinned Node, one argument each, such as
-npm=<command>. pre-commit builds the hook from gateseal's repository at the
-commit the Lock pins.
+npm and a pnpm project. It starts the package manager on the Node that the
+Lock pins, as npm_tool starts every tool from npm: npm is the one of Node's
+distribution, and any other package manager starts from its pinned lockfile,
+which gateseal installs once into its own folder, outside the project. So npm
+does not read the project's package.json there, whose devEngines field can
+name another package manager and then stops npm. pre-commit builds the hook
+from gateseal's repository at the commit the Lock pins.
 """
 
 import os
-import shlex
-import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from pathlib import Path
 
+from gateseal import npm_tool
 from gateseal.diagnostics import GatesealError
-from gateseal.processes import find_tool
 from gateseal.tools.package_managers import PackageManager, package_manager
 
 NEEDS = "A selected check runs in the repository's Node project, but"
-RECONFIGURE = (
-    "Run gateseal configure, which writes the hook's arguments. Then push again."
-)
 
 
-def start_commands(arguments: Sequence[str]) -> dict[str, list[str]]:
-    """Return the words that start each package manager, from the hook's arguments.
-
-    Each argument is name=command, and command is a shell-quoted command line.
-    """
-    found: dict[str, list[str]] = {}
-    for argument in arguments:
-        name, _, command = argument.partition("=")
-        try:
-            words = shlex.split(command)
-        except ValueError:
-            words = []
-        if not words:
-            raise GatesealError(
-                "invalid_invocation",
-                "Each argument of gateseal-node-packages must be a package "
-                f"manager's name, =, and the command that starts it, not {argument!r}.",
-                next_step=RECONFIGURE,
-            )
-        found[name] = words
-    return found
+def on_pinned_node(manager: PackageManager) -> tuple[list[str], dict[str, str]]:
+    """Return what starts manager's own executable on the Node that the Lock pins."""
+    version, archives = npm_tool.locked_node()
+    node = npm_tool.pinned_node(version, archives)
+    if manager.tree is None:
+        return npm_tool.on_node(node, os.path.join(node, manager.name))
+    folder = npm_tool.install(
+        node, version, manager.name, manager.tree.lockfile.decode()
+    )
+    return npm_tool.on_node(node, os.path.join(folder, manager.tree.program))
 
 
-def install(root: Path, starts: Mapping[str, Sequence[str]]) -> None:
+def install(root: Path) -> None:
     """Install the packages that the lockfile at root pins.
 
-    starts holds the words that start a package manager's own executable, by
-    its name. Each command's output passes through, so pre-commit shows it when
-    the hook fails. Each check leaves the package manager's record as it found
-    it, also when the check fails or the hook is stopped.
+    Each command's output passes through, so pre-commit shows it when the hook
+    fails. Each check leaves the package manager's record as it found it, also
+    when the check fails or the hook is stopped.
     """
     manager = package_manager(root, NEEDS)
-    if manager.name not in starts:
-        raise GatesealError(
-            "invalid_invocation",
-            f"gateseal-node-packages has no argument that starts {manager.name}.",
-            next_step=RECONFIGURE,
-        )
-    start = [*starts[manager.name]]
-    start[0] = find_tool(start[0])
-    env = os.environ | dict(manager.environment)
+    command, started = on_pinned_node(manager)
+    env = started | dict(manager.environment)
     record = None if manager.record is None else root / manager.record
     kept = None if record is None else _read(record)
     for check in manager.checks:
         try:
-            _run(manager, [*start, *check], root, env)
+            _run(manager, [*command, *check], root, env)
         finally:
             if record is not None:
                 _put_back(record, kept)
-    _run(manager, [*start, *manager.install], root, env)
+    _run(manager, [*command, *manager.install], root, env)
 
 
 Kept = tuple[bytes, int, int]
@@ -118,7 +97,7 @@ def _run(
     manager: PackageManager, command: list[str], root: Path, env: Mapping[str, str]
 ) -> None:
     """Run command in root, or stop when it fails."""
-    if subprocess.run(command, cwd=root, env=env, check=False).returncode:
+    if npm_tool.start(command, env, cwd=str(root)):
         raise GatesealError(
             "tool_failed",
             f"{manager.name} could not install the packages that "
@@ -131,8 +110,11 @@ def _run(
 
 def main() -> int:
     try:
-        install(Path.cwd(), start_commands(sys.argv[1:]))
+        install(Path.cwd())
     except GatesealError as exc:
         print(f"gateseal: {exc}\nNext: {exc.next_step}", file=sys.stderr)
+        return 1
+    except npm_tool.Stopped as stopped:
+        print(stopped, file=sys.stderr)
         return 1
     return 0

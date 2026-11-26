@@ -127,7 +127,14 @@ change the manifest, policy or lock format, and its entry says how to move.
   npm's lockfile of each tool, and the hook installs exactly that tree,
   checking each package's integrity hash. npm reads only the user's proxy,
   CA and registry settings. Each Node version and each lockfile has its own
-  install. Each hook skips every file that gateseal generates.
+  install. Each hook skips every file that gateseal generates. In
+  `.pre-commit-config.yaml`, each hook is gateseal's own hook
+  `gateseal-npm-tool`, with the hook's own ID as its `alias` and one short
+  line of arguments: the tool's name, its executable's name and the tool's
+  own arguments. The hook reads the Node and the tool's lockfile from
+  `gateseal.lock` and starts no shell. `SKIP` and gateseal's results name
+  each hook by its own ID. For a failed hook, pre-commit prints
+  `hook id: gateseal-npm-tool` below the hook's name.
 - `node` in `policy.toml`, which pins one Node version for every tool from
   npm. It is required exactly when a tool runs on Node. `gateseal policy
   lock` records each Node archive's SHA-256 from the release's
@@ -218,10 +225,11 @@ change the manifest, policy or lock format, and its entry says how to move.
   `tsc`. A Manifest with a repository hook of such an ID or name stops with
   `duplicate_identifier`, also when it does not select the hook's capability.
   Rename the repository hook.
-- gateseal reserves the hook ID `gateseal-node-packages` and its name
-  `Install the Node project's packages from its lockfile` in every Manifest.
-  A repository hook with either stops with `duplicate_identifier`. Rename the
-  repository hook.
+- gateseal reserves the hook IDs `gateseal-node-packages` and
+  `gateseal-npm-tool` and their names `Install the Node project's packages
+  from its lockfile` and `Start a tool from npm on the pinned Node` in every
+  Manifest. A repository hook with any of them stops with
+  `duplicate_identifier`. Rename the repository hook.
 - A policy whose tool has a hook with the ID or name of one of gateseal's own
   hooks, such as `gateseal-check`, stops with `duplicate_identifier`. Rename
   the tool's hook.

@@ -11,8 +11,18 @@ name = "prettier"
 [configuration]
 format = "toml"
 
-# --config names the policy's options. --no-editorconfig and the empty ignore
-# path keep a repository's .editorconfig, .prettierignore and .gitignore from
+# An ignore file that ignores nothing. Without --ignore-path, Prettier reads
+# the repository's .prettierignore and .gitignore and skips each file that
+# they list. The hook names this file instead, so no file of the repository
+# keeps a file from Prettier.
+[files.ignore]
+extension = "txt"
+content = """
+# gateseal owns this file. It lists no file, so Prettier skips none.
+"""
+
+# --config names the policy's options. --no-editorconfig and the ignore file
+# keep a repository's .editorconfig, .prettierignore and .gitignore from
 # changing what Prettier formats and how. --ignore-unknown skips a file that
 # Prettier has no parser for. --no-error-on-unmatched-pattern lets a batch
 # pass whose every file Prettier skips, such as one in node_modules. The
@@ -22,7 +32,7 @@ format = "toml"
 name = "prettier"
 args = [
   "--config", "{configuration}",
-  "--no-editorconfig", "--ignore-path", "/dev/null",
+  "--no-editorconfig", "--ignore-path", "{ignore}",
   "--write", "--ignore-unknown", "--no-error-on-unmatched-pattern", "--",
 ]
 types_or = ["ts", "tsx"]

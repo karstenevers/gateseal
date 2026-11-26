@@ -28,6 +28,7 @@ ESLINT = ".gateseal/eslint.json"
 LOADER = ".gateseal/eslint-loader.mjs"
 SUPPRESSIONS = ".gateseal/eslint-suppressions.json"
 PRETTIER = ".gateseal/prettier.toml"
+IGNORE = ".gateseal/prettier-ignore.txt"
 REPORT = ".gateseal/betterleaks-report.tmpl"
 HISTORY_REPORT = ".gateseal/betterleaks-history-report.tmpl"
 SECRETS = {
@@ -43,6 +44,7 @@ TYPESCRIPT = {
     ESLINT: "c642ecb8698ae76341f650da43c99674e90d63db6e13373eed0cc32419f33e8b",
     LOADER: "416aa4d02ff72014ad63315e9b7ff4604872169da0ed2a7c8d1e44aea70a50aa",
     PRETTIER: "8337e1afa204789e8ba2ee47068064308807817324f17f290ccd57d9be88109f",
+    IGNORE: "28735de13e2a37c692c0ea43d0d241284612bc298da349e57964786e36b7d9b1",
     SUPPRESSIONS: "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
     ".gateseal/eslint.package-lock.json": (
         "a320bd4523541011470886447ac051be8396763bd8a34717bf7abd95ea076145"
@@ -121,16 +123,16 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "dfe5fde6b95cfb67b2f3ac1730bdcd635c36c758babc89ad60f36c93c9fdfa56"
+            "84dda2eceb096911fb9dd239df0ed6c0f8110e8e4caf575fb98691ed69211f2d"
         ),
-        CONFIG: "eaaf86891a6bdf161a5d2897fcd259612150df3a84b9af75b0f62ef19aaf5ae8",
+        CONFIG: "b96d91315461442585f300d9272d6317dbaf0bdff8b2f9ba4ddc5b218d340a6c",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "c901f8716ed7dcd435fa0a9aee72a1cbf078125cb53b98935512797f136de647"
+            "508e9e4cf37717115ed8ae15ab7228983e1bbca536da52ff94ade878e2e7f516"
         ),
-        CONFIG: "8bd4d001a4c27a116c9290927cb818eb43779cadeb6de7954efaea12b954d01e",
+        CONFIG: "45e7fd010427200b9b51552cb144cb75b6f78b4e8de4182f854b5d51d5b7f840",
         ".gateseal/tsc.package-lock.json": (
             "454a05c1b8202c11775d92f24048111003d4cc731e1e5d03326b67799ac76051"
         ),
@@ -243,8 +245,12 @@ def test_built_in_npm_tools_name_only_owned_files():
         "--fix",
         "--",
     )
-    assert prettier.owned == (PRETTIER,)
+    assert prettier.owned == (PRETTIER, IGNORE)
+    assert prettier.files[IGNORE].startswith(b"# ")
+    assert prettier.files[IGNORE].count(b"\n") == 1
     assert prettier.hooks["prettier"].args[:2] == ("--config", PRETTIER)
+    assert "--ignore-path" in prettier.hooks["prettier"].args
+    assert IGNORE in prettier.hooks["prettier"].args
     assert prettier.hooks["prettier"].args[-1] == "--"
     assert eslint.files[LOADER].startswith(
         b"// gateseal owns this file; gateseal configure writes it.\n"

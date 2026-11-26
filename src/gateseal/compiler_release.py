@@ -4,6 +4,7 @@ Its repository, version and commit, and the uv and pre-commit it works with.
 """
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Self
 
@@ -38,10 +39,22 @@ NODE_PACKAGES_HOOK = "gateseal-node-packages"
 NODE_PACKAGES_HOOK_NAME = "Install the Node project's packages from its lockfile"
 """The name that pre-commit prints for NODE_PACKAGES_HOOK."""
 
+NPM_TOOL_HOOK = "gateseal-npm-tool"
+"""The hook of gateseal's repository that starts a tool from npm.
+
+Each hook of such a tool is this hook under the tool's own hook ID as its
+alias, with the tool's own name. pre-commit's SKIP and pre-commit run take
+the alias, so a user names the hook by the tool's own hook ID.
+"""
+
+NPM_TOOL_HOOK_NAME = "Start a tool from npm on the pinned Node"
+"""The name of NPM_TOOL_HOOK, which each hook of a tool replaces with its own."""
+
 OWN_HOOKS = {
     CHECK_HOOK: CHECK_HOOK_NAME,
     LFS_HOOK: LFS_HOOK_NAME,
     NODE_PACKAGES_HOOK: NODE_PACKAGES_HOOK_NAME,
+    NPM_TOOL_HOOK: NPM_TOOL_HOOK_NAME,
 }
 """The name of each hook that gateseal's repository defines, by ID."""
 
@@ -102,8 +115,11 @@ class GatesealPin:
         selection needs, such as NODE_PACKAGES_HOOK.
         """
         own = [CHECK_HOOK, LFS_HOOK] if pushes else [CHECK_HOOK]
-        return {
-            "repo": self.repository,
-            "rev": self.commit,
-            "hooks": [*({"id": hook} for hook in own), *hooks],
-        }
+        return self.repository_with([*({"id": hook} for hook in own), *hooks])
+
+    def repository_with(self, hooks: Sequence[dict[str, object]]) -> dict[str, object]:
+        """Return hooks of gateseal's repository as a repository at the commit.
+
+        pre-commit builds one environment for every such repository.
+        """
+        return {"repo": self.repository, "rev": self.commit, "hooks": list(hooks)}
