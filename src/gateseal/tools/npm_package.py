@@ -1,7 +1,8 @@
 """The npm-package kind: a tool from the npm registry, on the policy's Node.
 
 Each version's Policy Lock record is npm's lockfile of the tool's package and
-its packages, which configure writes as an owned output. Each hook is one
+its packages, which configure writes as an owned output, and the rules of the
+presets that an ESLint rule file names, which eslint_presets reads. Each hook is one
 command that node.Node.launch renders, and excludes every file that gateseal
 writes, so a formatter never rewrites one. The Lock records each tool in
 components under its name, and its Node once in native_artifacts.
@@ -16,6 +17,9 @@ from typing import ClassVar
 from gateseal.ci_providers import PROVIDERS
 from gateseal.diagnostics import GatesealError
 from gateseal.managed_files import CONFIG, LOCK, MANIFEST
+from gateseal.tools import eslint_presets
+from gateseal.tools.configurations import Presets
+from gateseal.tools.eslint_presets import PRESETS
 from gateseal.tools.model import (
     OWNED,
     Catalog,
@@ -32,7 +36,7 @@ from gateseal.tools.model import (
     local_repository,
 )
 from gateseal.tools.node import Node, Tree, package_name, read_tree
-from gateseal.validation import fields, nested
+from gateseal.validation import fields, mapping, nested
 
 GENERATED = exclusion(
     tuple(
@@ -68,9 +72,11 @@ class NpmPackage:
         records: Mapping[str, object],
         node: Node | None,
     ) -> NpmTool:
-        """Require each version's record to lock the tool's package and packages.
+        """Require each version's record to lock the tool's package and packages,
+        and to hold the presets that its rule file names.
 
-        A record that locks others fails with policy_lock_stale.
+        A record that locks others, or holds other presets, fails with
+        policy_lock_stale.
         """
         name, executable = definition.name, definition.executable
         if executable is None or node is None:
@@ -78,17 +84,23 @@ class NpmPackage:
                 "invalid_field", f"tools.{name} runs on Node with an executable."
             )
         trees: dict[str, Tree] = {}
+        presets: dict[str, Presets] = {}
         for version in catalog.requires:
             field = f"components.{name}.versions.{version}"
+            record = mapping(records[version], field)
+            record = fields(record, {"lockfile"} | ({PRESETS} & record.keys()), field)
             trees[version] = read_tree(
-                fields(records[version], {"lockfile"}, field)["lockfile"],
+                record["lockfile"],
                 self.dependencies(name, catalog, version),
                 self.package,
                 executable.name,
                 f"{name} {version}",
             )
+            presets[version] = eslint_presets.read(
+                definition, use, version, record.get(PRESETS)
+            )
         versions = {
-            version: Release(version, requires)
+            version: Release(version, requires, presets=presets[version])
             for version, requires in catalog.requires.items()
         }
         return NpmTool(
@@ -106,21 +118,27 @@ class NpmPackage:
     def lock(
         self,
         definition: ToolDefinition,
+        use: ToolUse,
         catalog: Catalog,
         version: str,
         recorded: object,
         upstream: Upstream,
     ) -> dict[str, object]:
-        """Record npm's lockfile of the package and the packages.
+        """Record npm's lockfile of the package and the packages, and the presets.
 
-        A recorded lockfile of the same packages stays, so npm resolves only
-        a version or a set of packages that the record lacks.
+        A recorded lockfile of the same packages stays, and so do its presets,
+        so npm resolves only a version or a set of packages that the record
+        lacks. A new lockfile drops the recorded presets: each is read again.
         """
         dependencies = self.dependencies(definition.name, catalog, version)
         lockfile = nested(recorded, "lockfile")
         if nested(lockfile, "packages", "", "dependencies") != dependencies:
             lockfile = upstream.lockfile(dependencies, definition.name, version)
-        return {"lockfile": lockfile}
+            recorded = None
+        presets = eslint_presets.lock(
+            definition, use, version, lockfile, nested(recorded, PRESETS), upstream
+        )
+        return {"lockfile": lockfile} | ({PRESETS: presets} if presets else {})
 
     def dependencies(self, name: str, catalog: Catalog, version: str) -> dict[str, str]:
         """Return what the tool installs: its package at version and its packages.

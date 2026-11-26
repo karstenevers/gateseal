@@ -6,7 +6,8 @@ data/tools, <name>.tool.toml, so the gateseal commit that the Lock pins
 covers it. The suffix keeps every tool from reading a definition as its own
 configuration, as Ruff reads any ruff.toml it walks past. Kind modules import
 gateseal.tools.model and the shared modules gateseal.tools.mise,
-gateseal.tools.node and gateseal.tools.package_managers, never this package.
+gateseal.tools.node, gateseal.tools.package_managers and
+gateseal.tools.eslint_presets, never this package.
 Only node_project builds on another kind, npm_package, which imports no kind,
 so loading it cannot cycle.
 """

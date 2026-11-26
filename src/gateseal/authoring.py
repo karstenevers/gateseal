@@ -9,12 +9,14 @@ policy.toml.
 
 import fcntl
 import http.client
+import json
 import os
 import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import cast
 
 from gateseal import policy_toml, sources
 from gateseal.diagnostics import GatesealError, Note, Result
@@ -36,7 +38,7 @@ from gateseal.tools.mise import require_mise
 from gateseal.tools.model import Catalog, MissingUpstream, Release
 from gateseal.tools.node import NAME as NODE
 from gateseal.tools.node import Node, lock_node, read_node
-from gateseal.validation import canonical, decode_json, mapping
+from gateseal.validation import canonical, decode_json, mapping, nested
 from gateseal.validation import version as stable_version
 
 README = "README.md"
@@ -98,23 +100,76 @@ class Releases:
     def lockfile(
         self, dependencies: Mapping[str, str], tool: str, version: str
     ) -> dict[str, object]:
+        folder = self._npm(dependencies, None, "resolve", tool, version)
+        lockfile = decode_json((folder / "package-lock.json").read_bytes())
+        lockfile.pop("name", None)
+        return lockfile
+
+    def evaluate(
+        self,
+        lockfile: Mapping[str, object],
+        program: Path,
+        argument: object,
+        tool: str,
+        version: str,
+    ) -> object:
+        dependencies = cast(
+            Mapping[str, str], nested(lockfile, "packages", "", "dependencies")
+        )
+        folder = self._npm(dependencies, lockfile, "install", tool, version)
+        command = [*self.node.prefix, "node", str(program), str(folder)]
+        run = execute(
+            [*command, json.dumps(argument)],
+            folder,
+            dict(os.environ),
+            allow_failure=True,
+        )
+        if run.returncode:
+            detail = run.stderr.decode("utf-8", "replace").strip()
+            raise GatesealError(
+                "tool_failed",
+                f"Node cannot run {program.name} on the packages of {tool} {version}: "
+                f"{detail}",
+                4,
+                f"Check that the packages of {tool} {version} load on Node "
+                f"{self.node.version}, then rerun {self.rerun}.",
+            )
+        return decode_json(run.stdout)
+
+    def _npm(
+        self,
+        dependencies: Mapping[str, str],
+        lockfile: Mapping[str, object] | None,
+        doing: str,
+        tool: str,
+        version: str,
+    ) -> Path:
+        """Run npm on the policy's Node in a new folder, and return the folder.
+
+        Without lockfile, npm resolves dependencies into package-lock.json;
+        with it, npm ci installs exactly its packages. A package or version
+        that the registry lacks is MissingUpstream; any other failure is
+        upstream_unavailable.
+        """
         env = dict(os.environ)
         require_mise(env)
         folder = Path(tempfile.mkdtemp(dir=self.scratch))
         (folder / "package.json").write_bytes(canonical({"dependencies": dependencies}))
+        arguments = ("install", "--package-lock-only")
+        if lockfile is not None:
+            (folder / "package-lock.json").write_bytes(canonical(lockfile))
+            arguments = ("ci",)
         run = execute(
-            [*self.node.write_lockfile(), str(folder)], folder, env, allow_failure=True
+            [*self.node.npm(*arguments), str(folder)], folder, env, allow_failure=True
         )
         if run.returncode:
             detail = run.stderr.decode("utf-8", "replace").strip()
-            text = f"npm cannot resolve the packages of {tool} {version}: {detail}"
+            text = f"npm cannot {doing} the packages of {tool} {version}: {detail}"
             if "E404" in detail or "ETARGET" in detail:
                 raise MissingUpstream("upstream_release_missing", text, tool, version)
             step = f"Check that npm reaches its registry, then rerun {self.rerun}."
             raise GatesealError("upstream_unavailable", text, 4, step)
-        lockfile = decode_json((folder / "package-lock.json").read_bytes())
-        lockfile.pop("name", None)
-        return lockfile
+        return folder
 
 
 class Snapshot:
@@ -176,6 +231,24 @@ def _note(policy: Policy) -> Note:
         "info",
         "policy",
         f"Policy {policy.release}, digest {policy.content_digest}.",
+    )
+
+
+def _notes(policy: Policy) -> tuple[Note, ...]:
+    """Return the policy's note, and one for each tool whose presets give rules."""
+    return (
+        _note(policy),
+        *(
+            Note(
+                "info",
+                "presets",
+                f"The {name} configuration takes only the rules of its presets. "
+                "Its files, parser and plugins apply; a preset's other settings, "
+                "such as parser options, do not.",
+            )
+            for name, tool in policy.tools.items()
+            if tool.release.presets
+        ),
     )
 
 
@@ -265,7 +338,12 @@ def _resolve(
             components[name] = {
                 "versions": {
                     version: definition.source.lock(
-                        definition, catalog, version, kept.get(version), upstream
+                        definition,
+                        review.uses[name],
+                        catalog,
+                        version,
+                        kept.get(version),
+                        upstream,
                     )
                     for version in sorted(catalog.requires)
                 }
@@ -287,7 +365,7 @@ def lock(root: Path) -> Result:
         "locked",
         f"{LOCK} holds the facts of every version policy.toml reviews.",
         changed=snapshot.write({LOCK: data}),
-        notes=(_note(policy),),
+        notes=_notes(policy),
     )
 
 
@@ -355,7 +433,7 @@ def add(root: Path, tool: str, requested: str) -> Result:
         f"{POLICY} reviews {tool} {exact}, and {LOCK} holds its facts.",
         changed=snapshot.write({POLICY: edited, LOCK: data}),
         next_steps=_pin_step(catalog, tool, exact),
-        notes=(_note(policy),),
+        notes=_notes(policy),
     )
 
 

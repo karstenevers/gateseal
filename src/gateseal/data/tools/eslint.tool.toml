@@ -9,8 +9,8 @@ package = "eslint"
 name = "eslint"
 
 # The policy's ESLint data: the files ESLint checks, the parser and plugins
-# from the tool's pinned packages, and the rules. configure checks it and
-# writes it as .gateseal/eslint.json, which the loader reads.
+# from the tool's pinned packages, the presets and the rules. configure checks
+# it and writes it as .gateseal/eslint.json, which the loader reads.
 [configuration]
 format = "eslint"
 
@@ -20,7 +20,9 @@ format = "eslint"
 # hook started, the root of the hook's install. So it loads the packages at
 # the versions that the policy pins, never a copy that ESLint itself depends
 # on, and never the repository's node_modules. It reads the data whose name it
-# shares: <name>.json beside <name>-loader.mjs.
+# shares: <name>.json beside <name>-loader.mjs. Its layers hold the presets'
+# rules as the Policy Lock records them, each for some of the files, then the
+# policy's rules. So no preset code runs.
 [files.loader]
 extension = "mjs"
 content = '''
@@ -46,8 +48,8 @@ export default [
     files: data.files,
     languageOptions: data.parser ? { parser: await load(data.parser) } : {},
     plugins,
-    rules: data.rules,
   },
+  ...data.layers,
 ];
 '''
 

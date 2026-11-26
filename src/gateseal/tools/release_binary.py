@@ -160,6 +160,7 @@ class ReleaseBinary:
     def lock(
         self,
         definition: ToolDefinition,
+        use: ToolUse,
         catalog: Catalog,
         version: str,
         recorded: object,

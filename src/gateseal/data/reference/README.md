@@ -33,9 +33,10 @@ this README and every other file.
   function may have. configure copies it to `.gateseal/crap.toml`, which the
   CRAP hook reads.
 - `rules/eslint.toml` holds the ESLint rules: the files to check, the parser
-  and plugins by package, and each rule's severity. It holds only `files`,
-  `parser`, `plugins` and `rules`, and names only packages that the `packages`
-  of `eslint` pin. Configure writes it as `.gateseal/eslint.json`.
+  and plugins by package, the presets whose rules apply first, and each
+  rule's severity, which wins over the presets. It holds only `files`,
+  `parser`, `plugins`, `presets` and `rules`, and names only packages that the
+  `packages` of `eslint` pin. Configure writes it as `.gateseal/eslint.json`.
 - `rules/prettier.toml` holds the Prettier options that configure copies
   into each repository.
 - `rules/uv-audit.toml` lists the advisories that the audit ignores, under

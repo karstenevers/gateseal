@@ -138,16 +138,28 @@ change the manifest, policy or lock format, and its entry says how to move.
 - `packages` in a tool's table of `policy.toml`, which pins the npm packages
   that a tool from npm installs beside itself, such as an ESLint parser.
 - The `eslint` configuration format. Its rule file holds only `files`,
-  `parser`, `plugins` and `rules`, so no key loads another file or a preset.
+  `parser`, `plugins`, `presets` and `rules`, so no key loads another file.
   A parser or plugin must be a package that the tool's `packages` pin.
   `gateseal configure` writes the rules as `.gateseal/eslint.json`, and a
   loader of the ESLint definition gives them to ESLint.
+- Presets in a rule file of the `eslint` format, such as
+  `presets = ["eslint/recommended", "@typescript-eslint/strict"]`.
+  `gateseal policy lock` reads each preset once on the policy's Node and
+  records its rules in `policy.lock`. A commit gets the rules as data and runs
+  no code of a preset. A rule in `rules` wins over a preset. A preset gives
+  only its rules, not its other settings, such as parser options. A preset
+  with a rule that needs type information, a preset that the package does
+  not have, and a preset of a plugin that `packages` do not pin each give
+  `invalid_field`, and the message names the preset. `extends` gives
+  `invalid_field`, and its message names `presets`.
 - The bundled policy's `typescript` capability. It runs ESLint with the
-  recommended rules of ESLint and typescript-eslint and applies their fixes,
-  then formats with Prettier, on staged `.ts` and `.tsx` files. The
-  repository's own ESLint and Prettier settings do not apply. A rule file
-  that sets Prettier's `plugins` gives `invalid_field`, because Prettier
-  would load each plugin from the repository.
+  presets `eslint/recommended` and `@typescript-eslint/recommended` and
+  applies their fixes, then formats with Prettier, on staged `.ts` and `.tsx`
+  files. Its rule file turns off only `no-unexpected-multiline`, which
+  conflicts with Prettier. The repository's own ESLint and Prettier settings
+  do not apply. A rule file that sets Prettier's `plugins` gives
+  `invalid_field`, because Prettier would load each plugin from the
+  repository.
 - `node` in each hook and finding entry of `run --json` and `gate --json`
   for a tool from npm. The `tool` diagnostic of `status`, `doctor` and
   `check` names that Node too.

@@ -130,7 +130,7 @@ Each release is flat. The keys `extends`, `extend`, `inherit`, `include`, and `b
 
 ## Policy lock
 
-`policy.lock` is generated JSON. It records the upstream Git commit, the archive URL and SHA-256, or the PyPI package for each reviewed version. For an npm tool, it records npm's lockfile of the tool's package and `packages`: every package that npm installs, with its integrity hash. `gateseal policy check` validates the file offline. `gateseal policy lock` and `gateseal policy add` check upstream data and download new archives before writing. An executable marked `check_at_commit` also gets an executable SHA-256.
+`policy.lock` is generated JSON. It records the upstream Git commit, the archive URL and SHA-256, or the PyPI package for each reviewed version. For an npm tool, it records npm's lockfile of the tool's package and `packages`: every package that npm installs, with its integrity hash. For an ESLint rule file with [presets](tool-definitions.md#presets), it also records `presets`: the rules of each preset, by package and preset name. `gateseal policy check` validates the file offline. `gateseal policy lock` and `gateseal policy add` check upstream data and download new archives before writing. An executable marked `check_at_commit` also gets an executable SHA-256.
 
 A policy with `node` also gets a top-level `node` record. It holds the version and an archive for `linux-x64` and for `macos-arm64`. Each archive has its URL on nodejs.org and its SHA-256 from the release's `SHASUMS256.txt`. `gateseal policy lock` downloads each archive that the record lacks and checks it:
 
@@ -157,7 +157,7 @@ A policy with `node` also gets a top-level `node` record. It holds the version a
 | `policy_changed` | A policy file changed during the operation. Review it. Retry. |
 | `invalid_invocation`, `unknown_component`, `version_unreviewed`, `requires_conflict`, `policy_edit_unsupported` | Check the component, reviewed version, requirements, or TOML layout in the diagnostic. |
 
-After you change `node` or a tool's `packages`, loading the policy gives `policy_lock_stale` until you run `gateseal policy lock`. For Node, `upstream_asset_missing` means that the release lacks `SHASUMS256.txt` or an archive. `upstream_checksum_missing` means that `SHASUMS256.txt` lists no archive for a platform. `upstream_changed` means that it lists another SHA-256 than the record. For an npm tool, `upstream_release_missing` gives npm's report of a package or version that the registry lacks, and `upstream_executable_missing` means that the tool's package links no program of `executable.name`.
+After you change `node`, a tool's `packages`, or the `presets` of an ESLint rule file, loading the policy gives `policy_lock_stale` until you run `gateseal policy lock`. For Node, `upstream_asset_missing` means that the release lacks `SHASUMS256.txt` or an archive. `upstream_checksum_missing` means that `SHASUMS256.txt` lists no archive for a platform. `upstream_changed` means that it lists another SHA-256 than the record. For an npm tool, `upstream_release_missing` gives npm's report of a package or version that the registry lacks, and `upstream_executable_missing` means that the tool's package links no program of `executable.name`. For a preset, `tool_failed` means that Node could not read the presets from the installed packages.
 
 See [Author a team policy](author-a-policy.md#review-a-tool-version) for review and recovery steps.
 

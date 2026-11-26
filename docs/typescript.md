@@ -47,9 +47,9 @@ Later commits call no npm and need no network, until a pin changes. The CI gate 
 
 If a hook changes a file, the commit stops. Review the change, stage it and commit again. A finding that ESLint cannot fix also stops the commit. ESLint's report names the file, the line and the rule, such as `@typescript-eslint/no-explicit-any`.
 
-ESLint runs first, so Prettier formats what the fixes leave. The bundled ESLint rules hold no rule about formatting, and they leave out `no-unexpected-multiline`, which conflicts with Prettier. So the two tools do not undo each other's changes.
+ESLint runs first, so Prettier formats what the fixes leave. The bundled ESLint rules hold no rule about formatting, and they turn off `no-unexpected-multiline`, which conflicts with Prettier. So the two tools do not undo each other's changes.
 
-The bundled rules are ESLint's recommended rules and typescript-eslint's recommended rules. They leave out the core rules that typescript-eslint turns off for TypeScript. The Prettier options are Prettier's defaults, such as a line width of 80 and double quotes.
+The bundled rules are the presets `eslint/recommended` and `@typescript-eslint/recommended`. The second preset turns off the core rules that TypeScript checks itself. `policy.lock` records the rules of both presets, so a commit runs no code of a preset. The Prettier options are Prettier's defaults, such as a line width of 80 and double quotes.
 
 ## What the repository cannot change
 
@@ -76,7 +76,7 @@ Run `gateseal configure` and commit the changed files. Each path names a file or
 
 A team changes the checks in its own policy release. Start one with [Author a team policy](author-a-policy.md). The bundled policy copy holds these files:
 
-- `rules/eslint.toml` holds the ESLint rules. See [the ESLint format](tool-definitions.md#eslint-configuration-format) for what the file can hold.
+- `rules/eslint.toml` holds the ESLint rules: the presets, and the rules that differ from them. See [the ESLint format](tool-definitions.md#eslint-configuration-format) for what the file can hold.
 - `rules/prettier.toml` holds the Prettier options.
 - `policy.toml` pins the tools, Node, and the packages that ESLint loads.
 
@@ -109,7 +109,9 @@ exclude = []
 - `packages` pins the packages that every reviewed ESLint version installs beside it. A parser or a plugin that `rules/eslint.toml` names must be listed here.
 - `gateseal policy add eslint <version> policy` reviews a new ESLint version. The same command works for Prettier.
 
-After you edit `node` or `packages`, run `gateseal policy lock policy`. It records the SHA-256 of each Node archive, and npm's lockfile of each tool: every package that npm installs, with its integrity hash. See [Policy format](policy-format.md#policy-lock).
+To use other presets, change `presets` in `rules/eslint.toml`, such as to `["eslint/recommended", "@typescript-eslint/strict"]`. To change one rule, set it in `[rules]`. A rule there wins over the presets.
+
+After you edit `node`, `packages` or `presets`, run `gateseal policy lock policy`. It records the SHA-256 of each Node archive, npm's lockfile of each tool, and the rules of each preset. The lockfile lists every package that npm installs, with its integrity hash. See [Policy format](policy-format.md#policy-lock).
 
 ## Limits
 
@@ -117,7 +119,7 @@ After you edit `node` or `packages`, run `gateseal policy lock policy`. It recor
 - The hooks get `.ts` and `.tsx` files only. ESLint skips a name in upper case, such as `Widget.TS`, as TypeScript does. pre-commit gives `.mts` and `.cts` files no TypeScript type, so they are not checked.
 - No rule needs type information, and this capability runs no type check. `typescript-types` runs one at each push.
 - `gateseal run --json` and `gateseal gate --json` list no ESLint finding by file and line. The hook's entry says that it failed, and the text output shows ESLint's report.
-- The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. The ESLint format refuses `extends`, so a preset cannot load. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`. Pin Prettier 3 or later. Prettier 2 has more options that load code from the repository, such as `pluginSearchDirs` and a parser that it does not know, and a rule file can set them.
+- The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. A preset gives only its rules, not its other settings, such as parser options. A preset with a rule that needs type information gives `invalid_field`, such as `@typescript-eslint/recommended-type-checked`. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`. Pin Prettier 3 or later. Prettier 2 has more options that load code from the repository, such as `pluginSearchDirs` and a parser that it does not know, and a rule file can set them.
 - npm reads only the proxy, CA and registry settings of your `.npmrc`: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as its token. Your `npm_config_` variables can set the first five. A scoped registry, such as `@team:registry`, does not apply.
 - A commit that an npm script starts, such as `npm run commit`, gets the proxy, CA and registry settings of that script, such as those of the project's `.npmrc`. To keep them out, run `git commit` yourself.
 

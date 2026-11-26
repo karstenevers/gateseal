@@ -12,7 +12,7 @@ import pytest
 from archives import tar_gz
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import built_in_tools
-from gateseal.tools.model import Catalog
+from gateseal.tools.model import Catalog, ToolUse
 
 CATALOG = Catalog("1.9.0", {"1.9.0": {}}, {})
 
@@ -65,7 +65,8 @@ def lock(files, recorded=None, checked=True):
         executable = replace(tool.executable, check_at_commit=False)
         tool = replace(tool, executable=executable)
     upstream = Releases(files)
-    record = tool.source.lock(tool, CATALOG, "1.9.0", recorded, upstream)
+    use = ToolUse("secrets", (), None)
+    record = tool.source.lock(tool, use, CATALOG, "1.9.0", recorded, upstream)
     return record, upstream.downloaded
 
 

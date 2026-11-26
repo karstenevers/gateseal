@@ -4,8 +4,9 @@ Every test drives the installed command. Offline, the hook repositories are
 local Git repositories that their GitHub URLs reach through
 url.<base>.insteadOf, a urllib opener that the driver installs serves
 Betterleaks' release files and PyPI's release pages from a directory, and the
-driver's npm answers with the lockfiles of npm.json, so gateseal policy lock
-and add run their own code against fixtures. The network tests resolve
+driver's npm answers with the lockfiles of npm.json and its Node with the
+presets of presets.json, so gateseal policy lock and add run their own code
+against fixtures. The network tests resolve
 versions from the real upstream.
 """
 
@@ -83,8 +84,24 @@ def lockfile(self, dependencies, tool, version):
     return found
 
 
+def evaluate(self, lockfile, program, argument, tool, version):
+    presets = json.loads((root / "presets.json").read_bytes())
+    return {
+        package: {
+            "configs": list(presets[package]),
+            "presets": {
+                name: {"blocks": presets[package][name], "typed": []}
+                for name in names
+                if name in presets[package]
+            },
+        }
+        for package, names in argument["presets"].items()
+    }
+
+
 urllib.request.install_opener(urllib.request.build_opener(Fixtures))
 authoring.Releases.lockfile = lockfile
+authoring.Releases.evaluate = evaluate
 raise SystemExit(main(sys.argv[2:]))
 """
 
@@ -112,7 +129,8 @@ def release(root, version, platforms=("linux_x64", "darwin_arm64")):
 
 
 def serve_node(root):
-    """Publish a fake release of the bundled Node, and npm's bundled lockfiles."""
+    """Publish a fake release of the bundled Node, and npm's bundled lockfiles
+    and presets."""
     locked = json.loads((bundled_root() / "policy.lock").read_bytes())
     for url, data in node_files(locked["node"]["version"]).items():
         path = root / url.removeprefix("https://")
@@ -127,6 +145,12 @@ def serve_node(root):
         if "lockfile" in record
     }
     (root / "npm.json").write_text(json.dumps(lockfiles))
+    presets = {}
+    for component in locked["components"].values():
+        for record in component["versions"].values():
+            for package, configs in record.get("presets", {}).items():
+                presets.setdefault(package, {}).update(configs)
+    (root / "presets.json").write_text(json.dumps(presets))
 
 
 @dataclass
