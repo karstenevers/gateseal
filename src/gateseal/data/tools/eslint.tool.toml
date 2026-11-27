@@ -22,7 +22,9 @@ format = "eslint"
 # on, and never the repository's node_modules. It reads the data whose name it
 # shares: <name>.json beside <name>-loader.mjs. Its layers hold the presets'
 # rules as the Policy Lock records them, each for some of the files, then the
-# policy's rules. So no preset code runs.
+# policy's rules. So no preset code runs. It reports no unused disable
+# comment: a comment for a rule that only another ESLint tool runs, such as
+# eslint-typed, looks unused here, and --fix would delete it.
 [files.loader]
 extension = "mjs"
 content = '''
@@ -47,6 +49,7 @@ export default [
   {
     files: data.files,
     languageOptions: data.parser ? { parser: await load(data.parser) } : {},
+    linterOptions: { reportUnusedDisableDirectives: "off" },
     plugins,
   },
   ...data.layers,

@@ -62,7 +62,7 @@ The hook, and a team's tool that imports the project's packages itself, also nee
 
 ## A push stops at the Node project's packages
 
-The hook `gateseal-node-packages` installs the packages that the lockfile pins before `tsc` runs. If `package-lock.json` or `pnpm-lock.yaml` does not match `package.json`, run `npm install` or `pnpm install`. Commit the lockfile. Then push again. The checks after the install run only when it passes. If the project lacks `package.json` or a lockfile, the hook names the file to add.
+The hook `gateseal-node-packages` installs the packages that the lockfile pins before the checks that read the Node project run, such as `tsc`. If `package-lock.json` or `pnpm-lock.yaml` does not match `package.json`, run `npm install` or `pnpm install`. Commit the lockfile. Then push again. The checks after the install run only when it passes. If the project lacks `package.json` or a lockfile, the hook names the file to add.
 
 If `tsc` reports missing types after the install, check whether an install script or a code generator makes them. No install script runs. Commit the generated files. If it reports `error TS5101` or `error TS5102`, `tsconfig.json` sets an option that TypeScript 7 removed, such as `baseUrl`. See [Which TypeScript runs](typescript.md#which-typescript-runs).
 

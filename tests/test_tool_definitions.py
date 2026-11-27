@@ -42,7 +42,7 @@ PYTHON = {RUFF: "ffcf7d3c282f374519e8110da535fbde8e4d9dd0d81b7dad32db64a6979f8c2
 ALL = "6edbc51f7109342deb3f7caf0fca05e49f7dbf1c70171fddfe6c2ebbec439191"
 TYPESCRIPT = {
     ESLINT: "c642ecb8698ae76341f650da43c99674e90d63db6e13373eed0cc32419f33e8b",
-    LOADER: "416aa4d02ff72014ad63315e9b7ff4604872169da0ed2a7c8d1e44aea70a50aa",
+    LOADER: "aca7d03dc17102d14244bef5adfc6582ed8da523ce0579f4fe5c9ec42a36ff88",
     PRETTIER: "8337e1afa204789e8ba2ee47068064308807817324f17f290ccd57d9be88109f",
     IGNORE: "28735de13e2a37c692c0ea43d0d241284612bc298da349e57964786e36b7d9b1",
     SUPPRESSIONS: "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
@@ -54,44 +54,59 @@ TYPESCRIPT = {
     ),
 }
 
+TYPED_LINT = {
+    ".gateseal/eslint-typed.json": (
+        "ab02a715fdb240e76455c2a9dd8bad1159fdbc01a5934ac0f7a56bcf1fe30e68"
+    ),
+    ".gateseal/eslint-typed-loader.mjs": (
+        "3672ba4fccb65eb81814812b0d8a0c357729b1520cdcb5535665de6c597df277"
+    ),
+    ".gateseal/eslint-typed-suppressions.json": TYPESCRIPT[SUPPRESSIONS],
+    ".gateseal/eslint-typed.package-lock.json": TYPESCRIPT[
+        ".gateseal/eslint.package-lock.json"
+    ],
+}
+"""The typed ESLint's outputs. It shares the eslint tool's lockfile, so one
+install serves both."""
+
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "d46b27dcf6f8a26ba74bdfb05da05258bb58f49218191ea7d8feabfdff10c28d"
+            "5c96e5c81197016231fecd2a4ee663140f9d7f1a76023c63944b5fca914f252d"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "a0a2f3304a9e4e3b740c44a07629859f6b23f45120351bee0d04e7381da35486"
+            "6f72a9aca00ce5f6a594bcbe8077b7dc88f378e4b2636ac6fc9fbcddf470cbd6"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "b3496ba1e7b787ed736e2ee864055d54dfeb5d5a699c9ba6415a2f6b49360cf9",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "706c790a50c9fe96a817a564140676f7abd7e1a304759087b54a5ee8fd5a6148"
+            "3f6417f44c0f7e3bbee844008469e28570f29d710d205b0104e61264d32c6744"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "9bc40c40ac18613998a50ff891e76de35fa6a0e1626684cf0dfc8463b69975b2"
+            "a8c876f010c48525231e470b0e851ec2b2ce919c90d47b607e160695dfbe7f5a"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "b70061f063b0469c60c170af03fdfd35431c1d4b46e3abd41818d7410aaaed0f"
+            "98eba6b9e78c5cc79a4fa53f56e4ca8eadcb27ea6ef9b98a5ed043c478456c14"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "cafec08867a7bfb81f22b86f90567abf56409ffa87287b4a48e2dcf3ae41f7bb"
+            "c46a276eafafabdbbd3ad8329a5863a63f3bf56bdc5178c7340ad70399d70756"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -99,7 +114,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "66632db58acc1df081b33c3d96099e7e195bfa112bb843d8acbbd28e9301d6ee"
+            "6937243f334e08629b501a9bd1d659cebb989e55f75a39061c12d679d8d52eda"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -107,7 +122,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "3c9887faa87b61172a8fa7b37bb5c7a9c3f7007fc6b328121bed6252a9f97cc9"
+            "76dcdd084c968f7be9243c7d174bc2171545226fcb4359d386280a5de1136a50"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -115,7 +130,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "e56000a7efb9915f5c104b40c5212c3929e84472d6a12dc9e171d4bce3eb7a0b"
+            "ce6ddc51529576289d5f78aab6fa541c27888ab6e8d8789cd5a74c38fbdcb654"
         ),
         CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
         PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
@@ -123,14 +138,14 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "493a678d497d70094664118c6acb83c657f9e60b60f22a3b73896e8efaa38207"
+            "350661153978fcaf02ecd3bac1ba1a2dcd58dc9589ec04b0666bb99975e5152f"
         ),
         CONFIG: "b96d91315461442585f300d9272d6317dbaf0bdff8b2f9ba4ddc5b218d340a6c",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "43baec62de34096147231f763dd074ec2947bb64cca5d63919696182f3303dc2"
+            "f745f6700553f58a0bf41c5e2314456f05fb1067048ff6467e18883a68d34969"
         ),
         CONFIG: "45e7fd010427200b9b51552cb144cb75b6f78b4e8de4182f854b5d51d5b7f840",
         ".gateseal/tsc.package-lock.json": (
@@ -146,7 +161,7 @@ GOLDEN = {
         "typescript-unused",
     ): {
         "gateseal.lock": (
-            "02a95b1f8cb3b99e968497be6759609e21eb4be68fc4d76df1d8cdf817df4dbf"
+            "858a3e5bd1b5c5e57633010c6c5d57c6e1720b77266301db7b3da33f0cbb396c"
         ),
         CONFIG: "b6e9536f0b68aad704cf8595795cab17bedd7ee78b0ad90ccbd71550c44410e0",
         ".gateseal/tsc.package-lock.json": (
@@ -168,7 +183,7 @@ GOLDEN = {
     },
     ("hygiene", "typescript-vitest", "typescript-crap", "typescript-mutation"): {
         "gateseal.lock": (
-            "6dc9321f432cb9e656330ba1ca93dabc65a3936f7a6425e3ea04705b9e843322"
+            "a7f76335bee6f02c16db14f31b3bc65b6511d22c139af702847cccdaf69ea5ca"
         ),
         CONFIG: ("09c66bc8cca76aa60ce1d2598413686d1b64a4e22a389eed196f07edabe83be6"),
         ".gateseal/crap-typescript.toml": (
@@ -189,7 +204,7 @@ GOLDEN = {
     },
     ("hygiene", "typescript-jest", "typescript-crap"): {
         "gateseal.lock": (
-            "bfa3ee3dae646c112246088c9cfcb6ff4132580c04d5d1fc304168ec61f0af13"
+            "a2bb98c5d7c31be04de2145f2cb0b30363daff89372baf9363825583cebf25b4"
         ),
         CONFIG: ("57f345dd78edbf8c391683896ca8974d1116054792a00ecacdf96fe434fc0e4c"),
         ".gateseal/crap-typescript.toml": (
@@ -201,6 +216,14 @@ GOLDEN = {
         ".gateseal/reports/.gitignore": (
             "240a3e0d37d2e86b614063f5347eb02d4f99ca6c254de6b82871ff8d95532a7d"
         ),
+    },
+    ("hygiene", "typescript", "typescript-typed-lint"): {
+        "gateseal.lock": (
+            "babb1f9fce6b8a574e5c60c4ccb52fa4a4707379a33653f3312faab8fbc856b9"
+        ),
+        CONFIG: "8753553e9380db267619de84e9e8e4e601ee82c1fb47c1532af2b819b0054cf5",
+        **TYPESCRIPT,
+        **TYPED_LINT,
     },
 }
 
@@ -223,6 +246,7 @@ GOLDEN = {
         "typescript with every check",
         "typescript tests with vitest",
         "typescript tests with jest",
+        "typescript with typed lint",
     ],
 )
 def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
@@ -272,8 +296,15 @@ def bundled_before(root, capability):
         ("typescript-types", ("hygiene", "python")),
         ("typescript-audit", ("hygiene", "typescript", "typescript-types")),
         ("typescript-vitest", ("hygiene", "typescript", "typescript-types")),
+        ("typescript-typed-lint", ("hygiene", "typescript", "typescript-types")),
     ],
-    ids=["typescript", "python", "before typescript-audit", "before typescript-vitest"],
+    ids=[
+        "typescript",
+        "python",
+        "before typescript-audit",
+        "before typescript-vitest",
+        "before typescript-typed-lint",
+    ],
 )
 def test_a_selection_without_a_new_capability_changes_only_in_the_policy_digest(
     tmp_path, added, selection
@@ -340,6 +371,38 @@ def test_built_in_npm_tools_name_only_owned_files():
     assert eslint.files[LOADER].startswith(
         b"// gateseal owns this file; gateseal configure writes it.\n"
     )
+
+
+def test_the_typed_eslint_checks_the_whole_project_at_a_push():
+    policy = load_bundled_policy()
+    source = BundledSource(policy.release)
+    manifest = render(("hygiene", "typescript", "typescript-typed-lint"), source)
+    chosen = resolve(parse_manifest(manifest), policy)
+    config = json.loads(compile_outputs(chosen, PIN, source)[CONFIG])
+    hooks = {
+        hook.get("alias", hook["id"]): hook
+        for repo in config["repos"]
+        for hook in repo["hooks"]
+    }
+    assert list(hooks).index("gateseal-node-packages") < list(hooks).index(
+        "eslint-typed"
+    )
+    entry = hooks["eslint-typed"]
+    assert {key: entry[key] for key in ("name", "stages", "pass_filenames")} == {
+        "name": "eslint with types",
+        "stages": ["pre-push", "manual"],
+        "pass_filenames": False,
+    }
+    assert entry["always_run"] is True
+    assert entry["args"] == [
+        "eslint-typed",
+        "eslint",
+        "--config",
+        ".gateseal/eslint-typed-loader.mjs",
+        "--suppressions-location",
+        ".gateseal/eslint-typed-suppressions.json",
+        ".",
+    ]
 
 
 def test_the_dependency_checks_read_only_the_policy_s_settings():

@@ -105,6 +105,7 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
         "typescript-jest",
         "typescript-crap",
         "typescript-mutation",
+        "typescript-typed-lint",
     )
     unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
     assert review.catalogs["ruff"].requires == unrequired | {

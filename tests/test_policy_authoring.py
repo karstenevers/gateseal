@@ -241,6 +241,7 @@ def started(installed, tmp_path):
         "rules/betterleaks.toml",
         "rules/crap-typescript.toml",
         "rules/crap.toml",
+        "rules/eslint-typed.toml",
         "rules/eslint.toml",
         "rules/knip.toml",
         "rules/osv-scanner.toml",

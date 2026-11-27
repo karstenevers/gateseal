@@ -10,7 +10,7 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript`, and `stryker`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `eslint-typed`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript`, and `stryker`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
 
 ## Shared fields
 
@@ -158,7 +158,7 @@ A gateseal release without the `npm-package` kind or the `eslint` format below g
 
 ## Tools that read the Node project
 
-A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc`, `knip`, `vitest`, `jest` and `stryker` are of this kind. Their `[source]` and their `packages` table are those of an `npm-package` tool. So are their records in the Policy Lock and the Lock. Each hook starts the tool from gateseal's own install on the pinned Node, as an `npm-package` hook does. So the policy's version of the tool runs, not a version that the project's lockfile pins. Jest is the exception: its launcher starts the Jest that the project installs.
+A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc`, `eslint-typed`, `knip`, `vitest`, `jest` and `stryker` are of this kind. Their `[source]` and their `packages` table are those of an `npm-package` tool. So are their records in the Policy Lock and the Lock. Each hook starts the tool from gateseal's own install on the pinned Node, as an `npm-package` hook does. So the policy's version of the tool runs, not a version that the project's lockfile pins. Jest is the exception: its launcher starts the Jest that the project installs.
 
 The repository needs `package.json` and exactly one of `package-lock.json` and `pnpm-lock.yaml` at its root. gateseal's own hook `gateseal-node-packages` runs before the tool's hooks, in each stage that runs such a tool. It installs what the lockfile pins into `node_modules`:
 
@@ -218,12 +218,23 @@ A preset is `eslint/recommended`, ESLint's recommended rules, or `<prefix>/<name
 `gateseal policy lock` reads each preset once. npm installs the locked packages on the policy's Node, and gateseal reads the preset's rules from them. `policy.lock` records the rules beside npm's lockfile. A commit gets the rules as data and runs no code of a preset. A rerun reads only a preset that `policy.lock` lacks. After a plugin upgrade, `gateseal policy lock` reads each preset again, and the diff of `policy.lock` shows each rule that changed.
 
 - A preset gives only its rules, and the files that they apply to. Its other settings, such as parser options, do not apply. `gateseal policy lock` says so in its output.
-- A preset that turns on a rule that needs type information gives `invalid_field`. The message names the rule.
+- A preset that turns on a rule that needs type information gives `invalid_field` for an `npm-package` tool. The message names the rule. A `node-project` tool reads the project's types, so its presets can turn on such rules. See [Rules that need type information](#rules-that-need-type-information).
 - A preset that the package does not have gives `invalid_field`. The message lists the package's presets.
 - A preset that turns on a rule of a plugin that `plugins` does not declare gives `invalid_field`.
 - A preset of a plugin that `packages` do not pin gives `invalid_field`. So does a preset of a tool that does not run on Node.
 
 The JSON file is data, not an ESLint configuration. Its `layers` hold the rules of each preset, each for the policy's `files`, then the policy's `rules`. The built-in `eslint` definition adds a loader as the fixed file `files.loader`, written as `.gateseal/eslint-loader.mjs`. Its hook passes the loader with `--config {loader}`, so ESLint runs no configuration file of the repository. The definition also adds an empty list of suppressions as the fixed file `files.suppressions`, written as `.gateseal/eslint-suppressions.json`, and its hook passes `--suppressions-location {suppressions}`. So ESLint does not read the repository's own `eslint-suppressions.json`, which would accept each finding that it lists. This option needs ESLint 9.24.0 or later. The loader reads the JSON file beside it. It loads the parser and the plugins from the root of the hook's install, where each pinned package is, never from a copy that ESLint itself depends on and never from the repository's `node_modules`. It finds each package as `require` does, so a package that offers its entry only to `import` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. A team definition of this format needs the same loader under the key `loader`, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml).
+
+### Rules that need type information
+
+The built-in `eslint-typed` definition runs ESLint as a `node-project` tool, at a push and in the CI gate. Its rule file holds the same keys. Its presets and rules can need type information, such as `@typescript-eslint/no-floating-promises`. Its loader, `.gateseal/eslint-typed-loader.mjs`, also does these things:
+
+- It reads `tsconfig.json` at the repository root with the TypeScript that the tool's `packages` pin, and gives it to the parser as `parserOptions.project`.
+- ESLint checks only the files that `tsconfig.json` includes and that `files` names. A file outside `tsconfig.json`, such as a build script, is no parsing error.
+- ESLint skips each `.js`, `.mjs` and `.cjs` file that `files` does not name.
+- It stops with TypeScript's message when it cannot read `tsconfig.json`, such as `error TS5083: Cannot read file 'tsconfig.json'.` It also stops when `tsconfig.json` includes no file, because ESLint does not follow project references.
+
+The hook gets no file names and runs ESLint on `.` at each push. It applies no fixes. Neither ESLint loader reports an unused disable comment. Each runs only its own rules, so a comment for a rule of the other tool looks unused, and the commit hook's `--fix` would delete it. A team definition of a typed ESLint copies [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint-typed.tool.toml), loader included. With the loader of `eslint`, the parser gets no types, and ESLint stops with `You have used a rule which requires type information`.
 
 ## Choices
 

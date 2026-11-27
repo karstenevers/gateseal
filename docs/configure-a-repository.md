@@ -23,6 +23,7 @@ Add one `--capability` option for each group of checks:
 | `python-types` | Python types, with Pyright in strict mode, at every commit. | A uv project with `uv.lock` |
 | `typescript` | TypeScript lint and format, with ESLint and Prettier. See [Check TypeScript](typescript.md). | mise |
 | `typescript-types` | TypeScript types, with `tsc`, at each push. See [Type checks at push](typescript.md#type-checks-at-push). | An npm or pnpm project, and mise |
+| `typescript-typed-lint` | TypeScript lint rules that need type information, with ESLint, at each push. See [Typed lint at push](typescript.md#typed-lint-at-push). | An npm or pnpm project, and mise |
 | `typescript-unused` | Unused files, exports, and dependencies, with knip, at each push. See [Dependency checks](typescript.md#dependency-checks). | An npm or pnpm project, and mise |
 | `typescript-audit` | Known vulnerabilities of the packages in `package-lock.json`, with OSV-Scanner, in the CI gate. See [The audit](typescript.md#the-audit). | An npm project with `package-lock.json`, and mise |
 

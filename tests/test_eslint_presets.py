@@ -259,10 +259,10 @@ def test_each_reviewed_version_reads_and_renders_its_own_presets(
         (
             "@typescript-eslint/recommended-type-checked",
             "names the preset @typescript-eslint/recommended-type-checked, whose "
-            "rule @typescript-eslint/await-thenable needs type information, which "
-            "gateseal's ESLint data cannot give.",
+            "rule @typescript-eslint/await-thenable needs type information, but "
+            "eslint runs outside the repository's Node project.",
             "Remove @typescript-eslint/recommended-type-checked from presets, or "
-            "name a preset without type-checked rules.",
+            "name it in the rule file of a node-project tool, such as eslint-typed.",
         ),
         (
             "@typescript-eslint/legacy",
@@ -307,6 +307,39 @@ def test_lock_refuses_a_preset_that_gateseal_cannot_record(
         step,
     )
     assert not (root / "policy.lock").exists()
+
+
+TYPED_POLICY = POLICY.replace(
+    "typescript.tools.eslint", "typescript-typed-lint.tools.eslint-typed"
+).replace("rules/eslint.toml", "rules/eslint-typed.toml")
+TYPED_RULES = RULES.replace(
+    '"eslint/recommended", "@typescript-eslint/recommended"',
+    '"@typescript-eslint/recommended-type-checked"',
+)
+
+
+def test_a_node_project_tool_records_a_preset_whose_rules_need_types(
+    tmp_path, preset_releases
+):
+    """The built-in eslint-typed reads the project's types, so it may name one."""
+    files = {
+        "rules/gitleaks.toml": None,
+        "tools/yamllint.toml": None,
+        "tools/gitleaks.toml": None,
+        "rules/eslint-typed.toml": TYPED_RULES,
+    }
+    root = team(tmp_path, TYPED_POLICY, files)
+    assert authoring.lock(root).code == "locked"
+    lock = json.loads((root / "policy.lock").read_bytes())
+    typed = PRESETS[PLUGIN]["recommended-type-checked"]["blocks"]
+    record = lock["components"]["eslint-typed"]["versions"][ESLINT]
+    assert record["presets"] == {PLUGIN: {"recommended-type-checked": typed}}
+    locked, _ = consumer(load_policy_tree(root), ["typescript-typed-lint"])
+    data = locked.snapshot.outputs[".gateseal/eslint-typed.json"]
+    assert json.loads(data)["layers"] == [
+        {"files": ["**/*.ts"], "rules": typed[0]["rules"]},
+        {"files": ["**/*.ts"], "rules": {"no-var": "off"}},
+    ]
 
 
 def test_a_package_without_presets_says_it_has_none(tmp_path, preset_releases):
