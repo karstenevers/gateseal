@@ -54,7 +54,7 @@ Teammates need Git and pre-commit, but not gateseal. They also need mise for rel
 
 ## What it supports
 
-- **Bundled checks:** file hygiene, Ruff and Pyright for Python, Python tests with coverage, CRAP scores and mutation tests at each push, Python dependency checks with `uv lock --check`, deptry and a vulnerability audit in CI, ESLint, Prettier, tsc and knip for TypeScript with a vulnerability audit in CI, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
+- **Bundled checks:** file hygiene, Ruff and Pyright for Python, Python tests with coverage, CRAP scores and mutation tests at each push, Python dependency checks with `uv lock --check`, deptry and a vulnerability audit in CI, ESLint, Prettier, tsc and knip for TypeScript with a vulnerability audit in CI, TypeScript tests with coverage, CRAP scores and mutation tests at each push, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
 - **CI:** GitHub Actions and Azure Pipelines (Azure DevOps).
 - **Platforms:** macOS on arm64 and Linux on x86-64.
 - **Planned:** upgrade pull requests for new tool releases, and Windows.

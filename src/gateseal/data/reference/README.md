@@ -19,8 +19,10 @@ this README and every other file.
   runs on. The `typescript` capability runs ESLint and then Prettier on it.
   The `typescript-types` capability runs tsc on it in the repository's own npm
   or pnpm project, whose lockfile pins the packages that tsc reads. The
-  `typescript-unused` capability runs knip there too. Each
-  tool's `packages` table pins the npm packages that it installs beside
+  `typescript-unused` capability runs knip there too. The
+  `typescript-vitest`, `typescript-jest` and `typescript-mutation`
+  capabilities run Vitest, Jest and StrykerJS in that project the same way.
+  Each tool's `packages` table pins the npm packages that it installs beside
   itself, such as the parser that the ESLint rules name.
 - `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
   the Ruff configuration, the Pyright configuration and the Betterleaks rules
@@ -32,7 +34,8 @@ this README and every other file.
   `disabledRules` turns some of them off.
 - `rules/crap.toml` holds only `limit`, the highest CRAP score that a
   function may have. configure copies it to `.gateseal/crap.toml`, which the
-  CRAP hook reads.
+  CRAP hook reads. `rules/crap-typescript.toml` holds the limit of the CRAP
+  hook for TypeScript in the same way.
 - `rules/eslint.toml` holds the ESLint rules: the files to check, the parser
   and plugins by package, the presets whose rules apply first, and each
   rule's severity, which wins over the presets. It holds only `files`,

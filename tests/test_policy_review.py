@@ -101,6 +101,10 @@ def test_a_version_may_require_a_built_in_tool_the_policy_does_not_offer():
         "typescript-types",
         "typescript-audit",
         "typescript-unused",
+        "typescript-vitest",
+        "typescript-jest",
+        "typescript-crap",
+        "typescript-mutation",
     )
     unrequired = dict.fromkeys(BUNDLED_TOOLS["ruff"].versions, {})
     assert review.catalogs["ruff"].requires == unrequired | {
@@ -198,6 +202,7 @@ def test_a_capability_without_a_history_scan_may_expose_exclude():
         ("python", "exclude"): ("vendor",),
         ("python-crap", "exclude"): (),
         ("typescript", "exclude"): (),
+        ("typescript-crap", "exclude"): (),
     }
 
 

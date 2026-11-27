@@ -14,7 +14,7 @@ For example, move OpenTofu to a new release in 20 repositories, while 2 of them 
 | Runs the checks at commit time | Yes | No | No | No | Yes, through pre-commit |
 | Runs the checks in CI | With a CI job you write | Yes, only GitHub | No | No | Yes, in a CI file it writes |
 | Checks only the changed files in CI | With refs you set yourself | Not documented | No | No | Yes, for pull requests, and for pushes on GitHub |
-| Runs Python tests with coverage, CRAP scores, and mutation tests | With hooks you write | No | No | No | [Yes](python-tests.md), at a push and in CI. Coverage and CRAP share one test run |
+| Runs Python or TypeScript tests with coverage, CRAP scores, and mutation tests | With hooks you write | No | No | No | Yes, for [Python](python-tests.md) and [TypeScript](typescript.md#test-checks-at-push), at a push and in CI. Coverage and CRAP share one test run |
 | Pins release binaries, such as Betterleaks, and Node by checksum | No | No | No | No | Yes |
 | Installs tools from npm, such as ESLint, from a lockfile with no install scripts | No | No | No | No | [Yes](typescript.md#gateseal-and-pre-commits-node-hooks) |
 | Updates hook versions to | The latest tag, with `pre-commit autoupdate` | The latest tag, in weekly pull requests, only GitHub | The latest release, in pull requests, only GitHub | The latest allowed release, in pull requests | The team's reviewed release, with `gateseal upgrade` |

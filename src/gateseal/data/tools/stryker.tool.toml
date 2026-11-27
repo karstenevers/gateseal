@@ -1,0 +1,182 @@
+# Mutation tests of the lines that a push, or the range the gate checks,
+# changes. The policy's StrykerJS runs the project's Vitest or Jest tests in
+# the repository's own Node project, whose packages gateseal's own hook
+# installs from the lockfile first. Any mutant that no test kills fails the
+# hook, and StrykerJS names each one.
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "@stryker-mutator/core"
+
+[executable]
+name = "stryker"
+
+# The one StrykerJS configuration of every policy. The hook names it, so
+# StrykerJS reads no configuration of the repository itself. The file reads
+# the repository's own StrykerJS configuration and keeps only the settings in
+# kept, which say where the code and the tests are. Every setting that decides
+# the result is the policy's: the thresholds, the mutators, the timeouts and
+# allowEmpty, with which a change that no test runs would pass.
+#
+# StrykerJS has no option for a Git range. So the file reads the changed lines
+# from git diff against PRE_COMMIT_FROM_REF, which pre-commit sets at a push
+# and in a ranged gate. The diff starts at the commit that the range's start
+# shares with its end, so a line that only the remote branch changed is not
+# in it, and it reads every file as text, whatever its attributes say. The
+# file gives each block of changed lines in a mutated file as a mutation
+# range. A range replaces the mutate patterns, so the file
+# first drops each changed file that the patterns leave out, such as a test.
+# StrykerJS reads each pattern from the project folder, so the file compares
+# each pattern as a path from that folder, and gives each range with the
+# file's full path, where a bracket of a parent folder's name is in a class
+# too. A line of code can look like a file header of the diff, so the
+# file reads a header only between a "diff --git" line and the first hunk.
+# StrykerJS reads a file name as a pattern, so the file puts each bracket,
+# star and question mark of a name in a class. It stops at a mutated file's
+# name with a brace, a quote or a backslash, which no pattern can name.
+# Without a range, or without a changed line in a mutated file, there is
+# nothing to mutate, and the hook passes without a test run.
+#
+# The runners come from the hook's own install, by path, because StrykerJS
+# looks for plugins only beside itself. The install also pins a TypeScript
+# with a JavaScript API, which StrykerJS needs to rewrite tsconfig.json.
+[files.config]
+extension = "mjs"
+content = '''
+// gateseal owns this file; gateseal configure writes it.
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join, matchesGlob, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
+
+const kept = ["mutate", "vitest", "jest", "tsconfigFile", "ignorePatterns", "concurrency"];
+const code = "cjs|mjs|js|ts|mts|cts|jsx|tsx";
+const defaults = [
+  `{src,lib}/**/!(*.+(s|S)pec|*.+(t|T)est).+(${code})`,
+  `!{src,lib}/**/__tests__/**/*.+(${code})`,
+];
+
+const names = ["stryker.config", "stryker.conf", ".stryker.config", ".stryker.conf"];
+const found = names
+  .flatMap((name) => ["json", "js", "mjs", "cjs"].map((end) => `${name}.${end}`))
+  .find((file) => existsSync(file));
+const all = !found
+  ? {}
+  : found.endsWith(".json")
+    ? JSON.parse(readFileSync(found, "utf8"))
+    : (await import(pathToFileURL(found).href)).default;
+const own = Object.fromEntries(kept.filter((key) => key in all).map((key) => [key, all[key]]));
+
+const project = JSON.parse(readFileSync("package.json", "utf8"));
+const installs = (name) => name in { ...project.dependencies, ...project.devDependencies };
+const runner = all.testRunner ?? (installs("jest") && !installs("vitest") ? "jest" : "vitest");
+if (runner !== "vitest" && runner !== "jest") {
+  throw new Error(`gateseal runs StrykerJS with vitest or jest, not ${runner}. Change testRunner in ${found}.`);
+}
+const tool = createRequire(process.argv[1]);
+const manifest = tool.resolve(`@stryker-mutator/${runner}-runner/package.json`);
+const entry = JSON.parse(readFileSync(manifest, "utf8")).exports["."];
+
+const slashed = (path) => path.replaceAll("\\", "/");
+const inProject = (pattern) =>
+  slashed(relative(".", resolve(pattern.replace(/:\d+(?::\d+)?-\d+(?::\d+)?$/, ""))));
+const patterns = own.mutate ?? defaults;
+const mutated = (file) =>
+  patterns.reduce(
+    (yes, pattern) =>
+      pattern.startsWith("!")
+        ? yes && !matchesGlob(file, inProject(pattern.slice(1)))
+        : yes || matchesGlob(file, inProject(pattern)),
+    false,
+  );
+// GIT_DIFF_OPTS wins over --unified=0 and would add unchanged lines to the hunks.
+const { GIT_DIFF_OPTS, ...environment } = process.env;
+const git = (...args) => execFileSync("git", args, { encoding: "utf8", env: environment, maxBuffer: 2 ** 30 });
+const from = process.env.PRE_COMMIT_FROM_REF;
+let base = from;
+try {
+  base = from && git("merge-base", from, process.env.PRE_COMMIT_TO_REF || "HEAD").trim();
+} catch {
+  // Two histories without a shared commit: every line differs from the range's start.
+}
+const diff = !base
+  ? ""
+  : git(
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--unified=0",
+      "--inter-hunk-context=0",
+      "--text",
+      "--no-color",
+      "--no-ext-diff",
+      "--no-textconv",
+      "--src-prefix=a/",
+      "--dst-prefix=b/",
+      base,
+      "--",
+    );
+const escapes = { a: "\x07", b: "\b", f: "\f", n: "\n", r: "\r", t: "\t", v: "\v" };
+const unquoted = (name) =>
+  name
+    .slice(1, -1)
+    .replace(/\\([0-7]{3}|.)/g, (_, code) =>
+      code.length === 3 ? String.fromCharCode(parseInt(code, 8)) : (escapes[code] ?? code),
+    );
+const refused = sep === "/" ? /[{}"\\]/ : /[{}"]/;
+const ranges = [];
+let file;
+let header = false;
+for (const line of diff.split("\n")) {
+  const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
+  if (line.startsWith("diff --git ")) {
+    header = true;
+    file = undefined;
+  } else if (hunk) {
+    header = false;
+  }
+  if (header && line.startsWith("+++ ")) {
+    const name = line.startsWith('+++ "') ? unquoted(line.slice(4)) : line.slice(4).replace(/\t$/, "");
+    file = name.startsWith("b/") && mutated(name.slice(2)) ? name.slice(2) : undefined;
+    if (file && (file.startsWith("!") || refused.test(resolve(file)))) {
+      throw new Error(`StrykerJS cannot take the file name ${file}. Rename the file without {, }, " and \\.`);
+    }
+  } else if (hunk && file && hunk[2] !== "0") {
+    const first = Number(hunk[1]);
+    const last = first + Number(hunk[2] ?? 1) - 1;
+    ranges.push(`${slashed(resolve(file)).replace(/[[\]()*?]/g, "[$&]")}:${first}-${last}`);
+  }
+}
+if (!ranges.length) {
+  console.log("No changed line to mutate.");
+  process.exit(0);
+}
+
+export default {
+  ...own,
+  testRunner: runner,
+  plugins: [join(dirname(manifest), typeof entry === "string" ? entry : entry.import)],
+  mutate: ranges,
+  thresholds: { high: 100, low: 100, break: 100 },
+  reporters: ["clear-text", "json"],
+  clearTextReporter: { allowColor: false, allowEmojis: false, reportTests: false },
+  logLevel: "warn",
+  allowConsoleColors: false,
+  jsonReporter: { fileName: ".gateseal/reports/mutation.json" },
+  tempDirName: ".gateseal/reports/stryker",
+  cleanTempDir: "always",
+};
+'''
+
+# The hook writes StrykerJS's JSON report, so the repository gets the
+# generated .gitignore of the reports, which also covers StrykerJS's working
+# copy of the project. StrykerJS exits 1 under the break threshold.
+[hooks.stryker]
+name = "mutation tests (StrykerJS)"
+args = ["run", "{config}"]
+types_or = ["ts", "tsx", "javascript", "jsx"]
+writes = ["mutation.json"]
+output = "plain"

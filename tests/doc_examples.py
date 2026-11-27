@@ -1,4 +1,4 @@
-"""The TOML blocks that the docs publish, so a test runs what a reader copies."""
+"""The code blocks that the docs publish, so a test runs what a reader copies."""
 
 import re
 import textwrap
@@ -7,10 +7,10 @@ from pathlib import Path
 DOCS = Path(__file__).parents[1] / "docs"
 
 
-def example(page, marker):
-    """Return the TOML block that docs/page shows under <!-- marker -->."""
+def example(page, marker, language="toml"):
+    """Return the block in language that docs/page shows under <!-- marker -->."""
     found = re.search(
-        rf"^( *)<!-- {re.escape(marker)} -->\n\1```toml\n(.*?)^\1```$",
+        rf"^( *)<!-- {re.escape(marker)} -->\n\1```{language}\n(.*?)^\1```$",
         (DOCS / page).read_text(),
         re.MULTILINE | re.DOTALL,
     )

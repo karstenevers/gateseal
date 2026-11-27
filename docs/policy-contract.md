@@ -60,7 +60,7 @@ The Manifest is UTF-8 TOML with schema `1`. It needs `capabilities` and `policy`
 
 ### Capabilities
 
-Select at least one distinct capability from the policy. The bundled policy offers `hygiene`, `python`, `python-types`, `python-tests`, `python-crap`, `python-mutation`, `python-lock`, `python-audit`, `python-dependencies`, `secrets`, [`typescript`](typescript.md), [`typescript-types`](typescript.md#type-checks-at-push), [`typescript-unused`](typescript.md#unused-code-with-knip), and [`typescript-audit`](typescript.md#the-audit). Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
+Select at least one distinct capability from the policy. The bundled policy offers `hygiene`, `python`, `python-types`, `python-tests`, `python-crap`, `python-mutation`, `python-lock`, `python-audit`, `python-dependencies`, `secrets`, [`typescript`](typescript.md), [`typescript-types`](typescript.md#type-checks-at-push), [`typescript-unused`](typescript.md#unused-code-with-knip), [`typescript-audit`](typescript.md#the-audit), and the [TypeScript test checks](typescript.md#test-checks-at-push) `typescript-vitest`, `typescript-jest`, `typescript-crap` and `typescript-mutation`. Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
 
 ### Policy
 

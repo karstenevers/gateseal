@@ -305,6 +305,10 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "typescript-types",
         "typescript-audit",
         "typescript-unused",
+        "typescript-vitest",
+        "typescript-jest",
+        "typescript-crap",
+        "typescript-mutation",
     )
     assert "betterleaks" not in policy.tools
     assert [asset.path for asset in policy.assets] == [
@@ -317,6 +321,7 @@ def test_policy_without_secrets_still_loads(tmp_path):
         "rules/prettier.toml",
         "rules/osv-scanner.toml",
         "rules/knip.toml",
+        "rules/crap-typescript.toml",
         "policy.lock",
     ]
     assert policy.content_digest != bundled.content_digest
@@ -345,6 +350,10 @@ def test_policy_without_python_offers_no_python(tmp_path):
         "typescript-types",
         "typescript-audit",
         "typescript-unused",
+        "typescript-vitest",
+        "typescript-jest",
+        "typescript-crap",
+        "typescript-mutation",
     )
     assert "ruff" not in policy.tools
     assert "rules/ruff.toml" not in {asset.path for asset in policy.assets}

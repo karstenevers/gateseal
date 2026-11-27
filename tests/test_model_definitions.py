@@ -9,7 +9,14 @@ import json
 import pytest
 from gateseal.diagnostics import GatesealError
 from gateseal.tools import built_in_tools, load_definition
-from gateseal.tools.model import Origin, changed_upstream, require_local_hooks
+from gateseal.tools.model import (
+    AT_COMMIT,
+    Origin,
+    Scope,
+    changed_upstream,
+    local_repository,
+    require_local_hooks,
+)
 
 CONTENT = 'content = "{{ range . }}{{ .File }}\\n{{ end }}"'
 TOOL = f"""\
@@ -111,6 +118,37 @@ def test_a_hook_reads_the_exit_codes_of_its_findings():
 def test_finding_exit_codes_are_one_or_more_codes_from_1_to_255(codes):
     message = refusal(FINDINGS, f"{FINDINGS}finding_exit_codes = {codes}\n")
     assert "tools.gitleaks.hooks.gitleaks.finding_exit_codes" in message.split()
+
+
+EXCLUDED = FINDINGS + "exclude = '(^|/)tests?/'\n"
+
+
+def test_a_hook_never_gets_a_file_that_its_exclude_matches():
+    """The hook's own pattern adds to the paths that its capability keeps from it."""
+    definition = load_definition(
+        "gitleaks", TOOL.replace(FINDINGS, EXCLUDED).encode(), Origin.TEAM
+    )
+    hook = definition.hooks["gitleaks"]
+    assert (
+        hook.base_entry(None, AT_COMMIT, Scope.FILES)["exclude"] == "(?:(^|/)tests?/)"
+    )
+    paths = "^(?:vendor(?:/|$))"
+    rendered = local_repository(("gitleaks",), [hook], paths, AT_COMMIT, Scope.FILES)
+    (entry,) = rendered["hooks"]
+    assert entry["exclude"] == f"{paths}|(?:(^|/)tests?/)"
+    plain = load_definition("gitleaks", TOOL.encode(), Origin.TEAM).hooks["gitleaks"]
+    assert "exclude" not in plain.base_entry(None, AT_COMMIT, Scope.FILES)
+    assert plain.base_entry(paths, AT_COMMIT, Scope.FILES)["exclude"] == paths
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    ["'('", "5", "['a']", "'(?i)a'"],
+    ids=["open", "number", "list", "flag for the whole"],
+)
+def test_a_hook_s_exclude_is_a_regular_expression(pattern):
+    message = refusal(FINDINGS, f"{FINDINGS}exclude = {pattern}\n")
+    assert "tools.gitleaks.hooks.gitleaks.exclude" in message.split()
 
 
 @pytest.mark.parametrize(

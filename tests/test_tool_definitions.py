@@ -57,41 +57,41 @@ TYPESCRIPT = {
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "aa72a95c4eef9c304cea61b323a5d800cb7d5aa092796b27918c14b22d311d7a"
+            "d46b27dcf6f8a26ba74bdfb05da05258bb58f49218191ea7d8feabfdff10c28d"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "5386361f99f6be787ab30b95284e70e9678d947278900d39e909b539f2beeb4f"
+            "a0a2f3304a9e4e3b740c44a07629859f6b23f45120351bee0d04e7381da35486"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "b3496ba1e7b787ed736e2ee864055d54dfeb5d5a699c9ba6415a2f6b49360cf9",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "dad68bb8403e07892d6fbea456f961855fa1376758a9c3083225f8e4913f4954"
+            "706c790a50c9fe96a817a564140676f7abd7e1a304759087b54a5ee8fd5a6148"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "6de61cc673359c0c5fec861103d70592df162a6dcfef385b997d67f4219c98f9"
+            "9bc40c40ac18613998a50ff891e76de35fa6a0e1626684cf0dfc8463b69975b2"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "5098b27ec8600b733dd4fd3d5709f82ad14df02455583101d521bcaaff83e5e7"
+            "b70061f063b0469c60c170af03fdfd35431c1d4b46e3abd41818d7410aaaed0f"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "8a9060405fea7573094bd096ea6553e9f882c9a9f5f7dc418287a46c65b8fbe3"
+            "cafec08867a7bfb81f22b86f90567abf56409ffa87287b4a48e2dcf3ae41f7bb"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -99,7 +99,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "6daf9892cf6e6a55d3f38798760b7eb648fedf649e03727fcb11938d81c7ca67"
+            "66632db58acc1df081b33c3d96099e7e195bfa112bb843d8acbbd28e9301d6ee"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -107,7 +107,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "e95df1c7375f6e980b8560d58fe5f61a27045f23703ea8cb83e8ea35f9a669db"
+            "3c9887faa87b61172a8fa7b37bb5c7a9c3f7007fc6b328121bed6252a9f97cc9"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -115,7 +115,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "f3a5d8b8886ed6cc4c0d8ef81ce7afd7960a7bd0907ed31c9105bd5c48482ff9"
+            "e56000a7efb9915f5c104b40c5212c3929e84472d6a12dc9e171d4bce3eb7a0b"
         ),
         CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
         PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
@@ -123,14 +123,14 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "c2a6ca58e19e27bdda630404bdd0dea14f3dd192439ce43cab7c95fdfc53f6ec"
+            "493a678d497d70094664118c6acb83c657f9e60b60f22a3b73896e8efaa38207"
         ),
         CONFIG: "b96d91315461442585f300d9272d6317dbaf0bdff8b2f9ba4ddc5b218d340a6c",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "2b9d0ff79873c09a5e193b100ad0758ae78cd34fe589668d2e10f005d47540d2"
+            "43baec62de34096147231f763dd074ec2947bb64cca5d63919696182f3303dc2"
         ),
         CONFIG: "45e7fd010427200b9b51552cb144cb75b6f78b4e8de4182f854b5d51d5b7f840",
         ".gateseal/tsc.package-lock.json": (
@@ -146,7 +146,7 @@ GOLDEN = {
         "typescript-unused",
     ): {
         "gateseal.lock": (
-            "abd5a8558f98115c03e259cfc30195dc3628d050307ca30ad8120deda4215282"
+            "02a95b1f8cb3b99e968497be6759609e21eb4be68fc4d76df1d8cdf817df4dbf"
         ),
         CONFIG: "b6e9536f0b68aad704cf8595795cab17bedd7ee78b0ad90ccbd71550c44410e0",
         ".gateseal/tsc.package-lock.json": (
@@ -165,6 +165,42 @@ GOLDEN = {
             "e729d669b14adac54a1d9c01264b344b0330a730252658cf6dbeb0d73f4c18df"
         ),
         **TYPESCRIPT,
+    },
+    ("hygiene", "typescript-vitest", "typescript-crap", "typescript-mutation"): {
+        "gateseal.lock": (
+            "6dc9321f432cb9e656330ba1ca93dabc65a3936f7a6425e3ea04705b9e843322"
+        ),
+        CONFIG: ("09c66bc8cca76aa60ce1d2598413686d1b64a4e22a389eed196f07edabe83be6"),
+        ".gateseal/crap-typescript.toml": (
+            "b2718f8d5e1d285c75931f77eca1bb051e189ce1ded6c22e3b10fa72a000c311"
+        ),
+        ".gateseal/reports/.gitignore": (
+            "240a3e0d37d2e86b614063f5347eb02d4f99ca6c254de6b82871ff8d95532a7d"
+        ),
+        ".gateseal/stryker-config.mjs": (
+            "2b3310f843b98cbfbe60d8230ba9421f09a5eef6681f5063c781a4a7e0681255"
+        ),
+        ".gateseal/stryker.package-lock.json": (
+            "150a3b8e69affc356413336e59ff9b1842054a19bf5aca1ebead89174164f6c8"
+        ),
+        ".gateseal/vitest.package-lock.json": (
+            "6e0e6aeee1923be2551afdb40c74d2c8db6b1a0a5ead8b30d52ee316f066cb04"
+        ),
+    },
+    ("hygiene", "typescript-jest", "typescript-crap"): {
+        "gateseal.lock": (
+            "bfa3ee3dae646c112246088c9cfcb6ff4132580c04d5d1fc304168ec61f0af13"
+        ),
+        CONFIG: ("57f345dd78edbf8c391683896ca8974d1116054792a00ecacdf96fe434fc0e4c"),
+        ".gateseal/crap-typescript.toml": (
+            "b2718f8d5e1d285c75931f77eca1bb051e189ce1ded6c22e3b10fa72a000c311"
+        ),
+        ".gateseal/jest.package-lock.json": (
+            "6821005fc395361eabab771eae01bb335b8e93d33f155e089dc95efae5c227e2"
+        ),
+        ".gateseal/reports/.gitignore": (
+            "240a3e0d37d2e86b614063f5347eb02d4f99ca6c254de6b82871ff8d95532a7d"
+        ),
     },
 }
 
@@ -185,6 +221,8 @@ GOLDEN = {
         "typescript",
         "typescript with types",
         "typescript with every check",
+        "typescript tests with vitest",
+        "typescript tests with jest",
     ],
 )
 def test_bundled_selections_compile_to_the_reviewed_release_bytes(selection):
@@ -220,6 +258,9 @@ def bundled_before(root, capability):
     table = re.compile(r"^\[capabilities\.[a-z-]+\.tools\.([a-z-]+)\]$", re.M)
     for tool in table.findall(dropped):
         del locked["components"][tool]
+    configuration = re.compile(r'^configuration = "(.+)"$', re.M)
+    for rules in configuration.findall(dropped):
+        (root / rules).unlink()
     (root / "policy.lock").write_bytes(canonical(locked))
     return load_policy_tree(root)
 
@@ -230,8 +271,9 @@ def bundled_before(root, capability):
         ("typescript-types", ("hygiene", "typescript")),
         ("typescript-types", ("hygiene", "python")),
         ("typescript-audit", ("hygiene", "typescript", "typescript-types")),
+        ("typescript-vitest", ("hygiene", "typescript", "typescript-types")),
     ],
-    ids=["typescript", "python", "typescript with types"],
+    ids=["typescript", "python", "before typescript-audit", "before typescript-vitest"],
 )
 def test_a_selection_without_a_new_capability_changes_only_in_the_policy_digest(
     tmp_path, added, selection
