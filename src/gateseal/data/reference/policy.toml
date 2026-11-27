@@ -126,3 +126,44 @@ reviewed = ["2.7.1"]
 configuration = "rules/knip.toml"
 pin = "6.46.1"
 reviewed = ["6.46.1"]
+
+# typescript-vitest and typescript-jest run the tests once, with coverage, at
+# a push and in the gate, in the repository's own npm or pnpm project. Select
+# the one of the project's test runner. Its coverage report is what
+# typescript-crap reads, so typescript-crap needs one of the two.
+[capabilities.typescript-vitest.tools.vitest]
+pin = "5.1.1"
+reviewed = ["5.1.1"]
+
+# The coverage providers that the project's Vitest configuration chooses from.
+[capabilities.typescript-vitest.tools.vitest.packages]
+"@vitest/coverage-istanbul" = "5.1.1"
+"@vitest/coverage-v8" = "5.1.1"
+
+[capabilities.typescript-jest.tools.jest]
+pin = "30.5.2"
+reviewed = ["30.5.2"]
+
+# typescript-crap scores each function of the changed files from that report.
+# The rules set the limit.
+[capabilities.typescript-crap.tools.crap-typescript]
+configuration = "rules/crap-typescript.toml"
+pin = "0.1.0"
+reviewed = ["0.1.0"]
+
+[capabilities.typescript-crap.choices]
+exclude = []
+
+# typescript-mutation runs StrykerJS on the lines that a push or the gate's
+# range changes. It runs its own tests, apart from the coverage run.
+[capabilities.typescript-mutation.tools.stryker]
+pin = "10.1.1"
+reviewed = ["10.1.1"]
+
+# The runners of both test tools, the Vitest that the Vitest runner starts,
+# and a TypeScript with a JavaScript API, which StrykerJS needs.
+[capabilities.typescript-mutation.tools.stryker.packages]
+"@stryker-mutator/jest-runner" = "10.1.1"
+"@stryker-mutator/vitest-runner" = "10.1.1"
+typescript = "6.0.3"
+vitest = "5.1.1"

@@ -235,7 +235,9 @@ class Hook:
     leaves for a later one, each at its report_path. finding_exit_codes
     holds the exit codes with which the tool reports a finding; any other
     failure means the tool stopped before it could check. When it is empty,
-    every failure is a finding.
+    every failure is a finding. exclude is pre-commit's pattern of the files
+    that the hook never gets, such as the tests that a coverage report leaves
+    out, or None.
     """
 
     tool: str
@@ -248,6 +250,7 @@ class Hook:
     reads: tuple[str, ...] = ()
     writes: tuple[str, ...] = ()
     finding_exit_codes: frozenset[int] = frozenset()
+    exclude: str | None = None
 
     def base_entry(
         self, exclude: str | None, stages: frozenset[Stage], scope: Scope
@@ -255,7 +258,8 @@ class Hook:
         """Return the native configuration keys every rendering of the hook shares.
 
         stages is the definition's, which STAGE_SETS holds, and scope the
-        definition's too.
+        definition's too. exclude is the pattern of the paths that the hook's
+        capability and kind keep from it, which the hook's own pattern adds to.
         """
         entry: dict[str, object] = {
             "id": self.id,
@@ -268,8 +272,9 @@ class Hook:
             entry["pass_filenames"] = False
         if self.types_or:
             entry["types_or"] = list(self.types_or)
-        if exclude is not None:
-            entry["exclude"] = exclude
+        patterns = [found for found in (exclude, self.exclude) if found is not None]
+        if patterns:
+            entry["exclude"] = "|".join(patterns)
         return entry
 
 
@@ -594,13 +599,29 @@ def _exit_codes(value: object, field: str) -> frozenset[int]:
     return codes
 
 
+def _excluded(value: object, field: str) -> str:
+    """Return field's pattern, a Python regular expression as pre-commit reads one.
+
+    The pattern is checked as base_entry joins it, in a group of its own. So a
+    flag for the whole expression, such as (?i), is refused here.
+    """
+    wrapped = f"(?:{string(value, field)})"
+    try:
+        re.compile(wrapped)
+    except re.error as error:
+        raise GatesealError(
+            "invalid_field", f"{field} is no regular expression: {error}."
+        ) from None
+    return wrapped
+
+
 def _hook(
     tool: str, origin: Origin, hook_id: str, value: object, owned: Mapping[str, str]
 ) -> Hook:
     field = f"tools.{tool}.hooks.{hook_id}"
     table = mapping(value, field)
     output = closed(table.get("output"), OutputFormat, f"{field}.output")
-    optional = {"args", "types_or", "reads", "writes", "finding_exit_codes"}
+    optional = {"args", "types_or", "reads", "writes", "finding_exit_codes", "exclude"}
     table = fields(table, {"name", "output"} | (optional & set(table)), field)
     if not NAME.fullmatch(hook_id):
         raise GatesealError("invalid_field", f"{field} needs a lowercase id.")
@@ -629,6 +650,7 @@ def _hook(
             if "finding_exit_codes" in table
             else frozenset()
         ),
+        _excluded(table["exclude"], f"{field}.exclude") if "exclude" in table else None,
     )
 
 

@@ -1,0 +1,35 @@
+# The tests run once, under Vitest with coverage, at a push and in the gate.
+# The policy's Vitest runs them in the repository's own Node project, with the
+# project's Vitest configuration and the packages in its node_modules, which
+# gateseal's own hook installs from the lockfile first. A failing test fails
+# the hook, and Vitest's output names the test.
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "vitest"
+
+[executable]
+name = "vitest"
+
+# The JSON reporter writes coverage-final.json, an Istanbul report, into the
+# folder of the reports. Vitest would empty that folder first, so
+# --coverage.clean=false keeps the other reports and the folder's .gitignore.
+# --coverage.reportOnFailure=true writes the report of a run with a failing
+# test too, so the CRAP hook never reads the report of an earlier run.
+# The project's configuration chooses the provider, v8 by default, and its
+# other coverage settings apply, thresholds included.
+[hooks.vitest-coverage]
+name = "Vitest with coverage"
+args = [
+  "run",
+  "--coverage",
+  "--coverage.reporter=json",
+  "--coverage.reportsDirectory=.gateseal/reports",
+  "--coverage.clean=false",
+  "--coverage.reportOnFailure=true",
+]
+types_or = ["ts", "tsx", "javascript", "jsx"]
+writes = ["coverage-final.json"]
+output = "plain"

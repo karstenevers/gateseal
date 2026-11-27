@@ -26,7 +26,7 @@ Add one `--capability` option for each group of checks:
 | `typescript-unused` | Unused files, exports, and dependencies, with knip, at each push. See [Dependency checks](typescript.md#dependency-checks). | An npm or pnpm project, and mise |
 | `typescript-audit` | Known vulnerabilities of the packages in `package-lock.json`, with OSV-Scanner, in the CI gate. See [The audit](typescript.md#the-audit). | An npm project with `package-lock.json`, and mise |
 
-To run the tests at each push, follow [Check Python tests](python-tests.md). To check `uv.lock`, unused dependencies, and known vulnerabilities, follow [Check Python dependencies](python-dependencies.md).
+To run the tests at each push, follow [Check Python tests](python-tests.md) or, for Vitest or Jest, [Test checks at push](typescript.md#test-checks-at-push). To check `uv.lock`, unused dependencies, and known vulnerabilities, follow [Check Python dependencies](python-dependencies.md).
 
 ## Select CI
 

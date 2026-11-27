@@ -251,10 +251,19 @@ def test_a_gateseal_move_takes_this_bundled_policy_only_when_asked(
         (
             "typescript-audit",
             ("hygiene", "typescript", "typescript-types"),
-            ("knip", "osv-scanner"),
+            ("knip", "osv-scanner", "vitest", "jest", "crap-typescript", "stryker"),
+        ),
+        (
+            "typescript-vitest",
+            ("hygiene", "typescript", "typescript-types"),
+            ("vitest", "jest", "crap-typescript", "stryker"),
         ),
     ],
-    ids=["before typescript-types", "before typescript-audit"],
+    ids=[
+        "before typescript-types",
+        "before typescript-audit",
+        "before typescript-vitest",
+    ],
 )
 def test_a_bundled_move_adds_no_hook_of_a_capability_left_unselected(
     consumer, monkeypatch, tmp_path, added, capabilities, left_out

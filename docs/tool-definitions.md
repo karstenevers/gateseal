@@ -10,7 +10,7 @@ repository = "https://github.com/psf/black-pre-commit-mirror"
 tag = "{version}"
 ```
 
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `tsc`, and `knip`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
+See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript`, and `stryker`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
 
 ## Shared fields
 
@@ -40,7 +40,7 @@ Use the push stage for a tool that is too slow for each commit. Each clone then 
 
 ## Hooks
 
-Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. gateseal's own hooks `gateseal-check`, `gateseal-lfs-check`, `gateseal-node-packages` and `gateseal-npm-tool` keep their IDs and names. A hook with one of them gives `duplicate_identifier`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `exclude`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. gateseal's own hooks `gateseal-check`, `gateseal-lfs-check`, `gateseal-node-packages` and `gateseal-npm-tool` keep their IDs and names. A hook with one of them gives `duplicate_identifier`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. `exclude` is a Python regular expression, as pre-commit reads one, without a flag for the whole expression, such as `(?i)`. The hook never gets a file whose path from the repository root matches it, such as `'(^|/)tests?/'` for test folders. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
 
 By default, every failure of a hook is a failed check, which exits 1. Some tools also fail when they cannot check, such as when they cannot reach a service. List the exit codes with which the tool reports a finding in `finding_exit_codes`, such as `[1]`. When the hook fails with another exit code, the hook is `stopped`, and `gateseal run` and the CI gate report `tool_failed` and exit 4. The list holds one or more distinct integers from 1 to 255. For example, the bundled `uv-audit` hook, shortened:
 
@@ -158,7 +158,7 @@ A gateseal release without the `npm-package` kind or the `eslint` format below g
 
 ## Tools that read the Node project
 
-A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc` is of this kind. Its `[source]` and its `packages` table are those of an `npm-package` tool. So are its records in the Policy Lock and the Lock. Each hook starts the tool from gateseal's own install on the pinned Node, as an `npm-package` hook does. So the policy's version of the tool runs, never a version that the project's lockfile pins.
+A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc`, `knip`, `vitest`, `jest` and `stryker` are of this kind. Their `[source]` and their `packages` table are those of an `npm-package` tool. So are their records in the Policy Lock and the Lock. Each hook starts the tool from gateseal's own install on the pinned Node, as an `npm-package` hook does. So the policy's version of the tool runs, not a version that the project's lockfile pins. Jest is the exception: its launcher starts the Jest that the project installs.
 
 The repository needs `package.json` and exactly one of `package-lock.json` and `pnpm-lock.yaml` at its root. gateseal's own hook `gateseal-node-packages` runs before the tool's hooks, in each stage that runs such a tool. It installs what the lockfile pins into `node_modules`:
 

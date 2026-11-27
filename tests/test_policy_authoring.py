@@ -239,6 +239,7 @@ def started(installed, tmp_path):
         "policy.lock",
         "policy.toml",
         "rules/betterleaks.toml",
+        "rules/crap-typescript.toml",
         "rules/crap.toml",
         "rules/eslint.toml",
         "rules/knip.toml",

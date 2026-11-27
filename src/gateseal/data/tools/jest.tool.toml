@@ -1,0 +1,32 @@
+# The tests run once, under Jest with coverage, at a push and in the gate.
+# The policy's Jest starts them in the repository's own Node project, and its
+# launcher hands over to the project's own Jest when node_modules has one. The
+# tests run with the project's Jest configuration and the packages in its
+# node_modules, such as ts-jest, which gateseal's own hook installs from the
+# lockfile first. A failing test fails the hook, and Jest's output names the
+# test.
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+[source]
+package = "jest"
+
+[executable]
+name = "jest"
+
+# The JSON reporter writes coverage-final.json, an Istanbul report, into the
+# folder of the reports. --coverageProvider=babel is Jest's default provider,
+# the one whose report the CRAP hook scores. --ci writes no new snapshot.
+[hooks.jest-coverage]
+name = "Jest with coverage"
+args = [
+  "--ci",
+  "--coverage",
+  "--coverageProvider=babel",
+  "--coverageReporters=json",
+  "--coverageDirectory=.gateseal/reports",
+]
+types_or = ["ts", "tsx", "javascript", "jsx"]
+writes = ["coverage-final.json"]
+output = "plain"

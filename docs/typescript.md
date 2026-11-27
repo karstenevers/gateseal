@@ -6,6 +6,8 @@ The bundled `typescript-types` capability checks the project's types with `tsc` 
 
 Two more capabilities check the project's dependencies. `typescript-unused` runs knip at each push and in the CI gate. `typescript-audit` checks `package-lock.json` for known vulnerabilities in the CI gate only. See [Dependency checks](#dependency-checks).
 
+Four more capabilities check the project's tests at each push and in the CI gate: `typescript-vitest` or `typescript-jest`, `typescript-crap` and `typescript-mutation`. See [Test checks at push](#test-checks-at-push).
+
 ## Select the capability
 
 [Install gateseal](install.md), pre-commit and mise first. From the repository root, run:
@@ -342,6 +344,155 @@ Any ID of the advisory works, such as its GHSA or CVE ID. `ignoreUntil` sets a d
 - The audit reads only `package-lock.json`. It does not check a pnpm or Yarn project.
 - knip runs the configuration files of the tools that it knows, such as `vitest.config.ts`, to find entry files. They are code of the repository, as the tests are.
 - `gateseal gate --json` lists no finding by file and line. The hook's entry says that it failed, and the text output shows the report.
+
+## Test checks at push
+
+Three checks run the project's tests at `git push` and in the CI gate. None of them runs at a commit or in `gateseal run`.
+
+| Capability | Hook | A push fails when |
+| --- | --- | --- |
+| `typescript-vitest` | `Vitest with coverage` | a Vitest test fails |
+| `typescript-jest` | `Jest with coverage` | a Jest test fails |
+| `typescript-crap` | `CRAP score (TypeScript)` | a function in a changed file scores over 10. It needs one of the two capabilities above. |
+| `typescript-mutation` | `mutation tests (StrykerJS)` | no test catches a change to a changed line |
+
+A function's CRAP score is its complexity squared times (1 − coverage) cubed, plus its complexity. A fully tested function scores its complexity. A function of complexity 4 without tests scores 20.
+
+### Select the test checks
+
+The repository needs `package.json` and exactly one lockfile at its root, as for [the type check](#select-the-type-check). The project lists its own test runner, because the test files import from it. For example:
+
+<!-- typescript-tests-package -->
+```json
+{
+  "name": "shop",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vitest": "5.1.1"
+  }
+}
+```
+
+The CRAP hook stops at a changed file that the coverage report does not measure. Vitest measures only the files that a test imports, unless its configuration lists the code. So list each folder of code in `vitest.config.ts`:
+
+<!-- typescript-tests-vitest-config -->
+```ts
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: { coverage: { include: ["src/**"] } },
+});
+```
+
+In a Jest project, set `collectCoverageFrom` in the Jest configuration in the same way.
+
+From the repository root, select the capability of the project's test runner and the checks you want, and install the push hook:
+
+```sh
+gateseal configure \
+  --capability typescript-vitest \
+  --capability typescript-crap \
+  --capability typescript-mutation
+gateseal setup --refresh
+```
+
+Without setup, run `pre-commit install` in place of the second command. For a Jest project, select `typescript-jest` in place of `typescript-vitest`. Select only one of the two, because both write the same coverage report. Commit `gateseal.toml`, `gateseal.lock`, `.pre-commit-config.yaml` and `.gateseal/`.
+
+### What a push runs
+
+The checks start only when the push changes a `.ts`, `.tsx`, `.js` or `.jsx` file. A push that only deletes such files starts none of them. The hooks run in this order:
+
+1. `gateseal-node-packages` installs the packages that the lockfile pins, as for the type check.
+2. `Vitest with coverage` runs `vitest run --coverage`, or `Jest with coverage` runs `jest --ci --coverage`. Each runs every test of the project one time and writes `.gateseal/reports/coverage-final.json`. A failing test fails the hook, and the runner's output names the test.
+3. `CRAP score (TypeScript)` reads that report and scores each function of the changed files.
+4. `mutation tests (StrykerJS)` changes the code on each line that the push changes, one change at a time, and runs the tests that cover it. A change that no test catches fails the hook. StrykerJS names each one with its file and line, such as `src/pricing.ts:10:10`.
+
+The checks read the files in your working tree, not the pushed commit. So check out the branch and commit your edits before you push. The CI gate checks the commit itself, and gives the same results for the same range.
+
+The reports are in `.gateseal/reports/`. The generated `.gateseal/reports/.gitignore` makes Git ignore them. StrykerJS also keeps its working copy of the project there during a run.
+
+### Which test runner runs
+
+The policy's Vitest and StrykerJS run, in the project and with the project's packages and configuration. The bundled policy pins Vitest 5.1.1, Jest 30.5.2 and StrykerJS 10.1.1. The project's own Vitest can be older. If a test passes only on the project's own version, a team policy can pin that version.
+
+Jest is different. Its launcher starts the Jest that the project installs. So a project on Jest 29 with `ts-jest` runs its tests on Jest 29, and the policy's Jest runs only in a project without Jest in its `node_modules`.
+
+The settings of the project's `vitest.config.ts` or Jest configuration apply, except these:
+
+- **Coverage report.** The hook sets the coverage report's format and folder on the command line.
+- **Coverage provider of Jest.** Jest measures with its default provider. The CRAP hook cannot read the line counts of Jest's `v8` provider or of c8, and stops at such a report with a message that names Vitest and Jest. Vitest can use its `v8` or its `istanbul` provider.
+
+The CRAP hook scores no test file: no file in a `test`, `tests`, `__tests__` or `__mocks__` folder, and no file named like `pricing.test.ts` or `pricing.spec.ts`. It also scores no configuration file of a tool, such as `vite.config.ts`. To leave out other files, set the `exclude` choice of `typescript-crap` in `gateseal.toml`.
+
+### What the repository cannot change
+
+- **CRAP limit.** The limit is in the policy's `rules/crap-typescript.toml`. A function over the limit can stay only with an entry in `.crap-baseline.toml`, and a change that adds an entry fails the hook. A file that the range's start lacks counts as adopted, so commit the first baseline on its own. A change to `.crap-baseline.toml` alone starts no check, so review each one.
+- **Mutation score.** StrykerJS reads `.gateseal/stryker-config.mjs`, which gateseal generates. Each changed line must have no surviving change. The file reads only these settings from the repository's own StrykerJS configuration, such as `stryker.config.json`: `testRunner`, `mutate`, `vitest`, `jest`, `tsconfigFile`, `ignorePatterns` and `concurrency`. They say where the code and the tests are. It ignores every other setting, such as `thresholds`, `mutator` and `allowEmpty`.
+
+Without `mutate`, StrykerJS changes the code in `src` and `lib`, except test files. Without `testRunner`, it uses Jest when `package.json` lists `jest` and not `vitest`, and Vitest otherwise.
+
+### Push time
+
+StrykerJS runs the tests on its own copy of the project, with its own count of the tests that reach each change. It cannot write the coverage report of the original files, and it cannot read one. So a push with all the checks runs the tests two times: one time for coverage, and one time in StrykerJS before it changes the code. After that, StrykerJS runs only the tests that reach each change.
+
+The table gives the median of 5 runs of each hook. Each run checked a push that adds one function of 3 lines and its test to a project with 2 source files, on a 4-core Linux machine.
+
+| Hook | Time |
+| --- | --- |
+| `Vitest with coverage` | 1.0 s |
+| `CRAP score (TypeScript)` | 0.3 s |
+| `mutation tests (StrykerJS)`, 3 changes to the code | 4.3 s |
+
+StrykerJS changes only the lines of the push, so its time grows with the size of the change and not with the size of the project's code.
+
+### What the test checks cannot do
+
+- One repository can select `typescript-vitest` or `typescript-jest`, not both. Other test runners are not supported.
+- Yarn and workspaces are not supported, as for the type check. The project is at the repository root: a Vitest `root` or a Jest `rootDir` in another folder writes the coverage report where the CRAP hook does not read it.
+- pre-commit gives `.mts` and `.cts` files no TypeScript type. A push that changes only such files starts none of the checks.
+- Some gate runs check all tracked files, such as a weekly run or a new branch. StrykerJS then has no range and changes no line. The first push to an empty remote has no range either. A pull request's gate has a range.
+- StrykerJS cannot take a changed file whose name has `{`, `}`, `"` or `\`. The hook stops and names the file.
+- StrykerJS changes only code that lies wholly on the changed lines. When you edit one line of an expression over several lines, StrykerJS does not change that expression.
+- When no test imports a changed file, StrykerJS stops with `No tests were executed` and the push fails. Add a test that imports the file.
+- `gateseal gate --json` lists no failing test, score or surviving change by file and line. The hook's entry says that it failed, and the text output shows the tool's report.
+
+The bundled `policy.toml` has these lines for the test checks:
+
+<!-- policy tables: typescript-tests -->
+```toml
+[capabilities.typescript-vitest.tools.vitest]
+pin = "5.1.1"
+reviewed = ["5.1.1"]
+
+[capabilities.typescript-vitest.tools.vitest.packages]
+"@vitest/coverage-istanbul" = "5.1.1"
+"@vitest/coverage-v8" = "5.1.1"
+
+[capabilities.typescript-jest.tools.jest]
+pin = "30.5.2"
+reviewed = ["30.5.2"]
+
+[capabilities.typescript-crap.tools.crap-typescript]
+configuration = "rules/crap-typescript.toml"
+pin = "0.1.0"
+reviewed = ["0.1.0"]
+
+[capabilities.typescript-crap.choices]
+exclude = []
+
+[capabilities.typescript-mutation.tools.stryker]
+pin = "10.1.1"
+reviewed = ["10.1.1"]
+
+[capabilities.typescript-mutation.tools.stryker.packages]
+"@stryker-mutator/jest-runner" = "10.1.1"
+"@stryker-mutator/vitest-runner" = "10.1.1"
+typescript = "6.0.3"
+vitest = "5.1.1"
+```
+
+`packages` pins what each tool loads beside itself: Vitest's two coverage providers, and for StrykerJS the runner of each test tool, the Vitest that the Vitest runner starts, and a TypeScript.
 
 ## gateseal and pre-commit's Node hooks
 

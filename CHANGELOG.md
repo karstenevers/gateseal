@@ -71,6 +71,20 @@ change the manifest, policy or lock format, and its entry says how to move.
   pytestmut 0.1.0 on the lines that a push or a ranged gate changes, and fails
   on any mutant that no test kills. Each starts only when a Python file
   changed. A repository that selects none of them gets no new check.
+- TypeScript test checks at a push and in the CI gate, as four opt-in
+  capabilities of the bundled policy for an npm or pnpm project.
+  `typescript-vitest` runs the project's tests once with Vitest 5.1.1, and
+  `typescript-jest` with the project's own Jest, or else Jest 30.5.2, and
+  each writes a coverage report.
+  `typescript-crap` reads that report and fails a function in a changed file
+  whose CRAP score is over 10, unless `.crap-baseline.toml` lists it. A change
+  may not add a baseline entry. `typescript-mutation` runs StrykerJS 10.1.1 on
+  the lines that a push or a ranged gate changes, and fails on any change to
+  the code that no test catches. The policy owns the limit and the mutation
+  score. Each starts only when a TypeScript or JavaScript file changed. A
+  repository that selects none of them gets no new check.
+- `exclude` in a hook of a tool definition: a regular expression of the files
+  that the hook never gets, such as test files.
 - Python dependency checks, as three opt-in capabilities of the bundled
   policy. `python-lock` runs `uv lock --check` with uv 0.13.9 at each commit,
   in `gateseal run` and in the CI gate, and a stale `uv.lock` stops the commit
@@ -231,9 +245,12 @@ change the manifest, policy or lock format, and its entry says how to move.
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
 - The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
-  `uv-audit`, `deptry`, `eslint`, `prettier`, `tsc`, `knip` and
-  `osv-scanner`, and the names `pyright`, `uv lock check`, `uv audit`,
-  `deptry`, `eslint`, `prettier`, `tsc`, `knip` and `osv-scanner`. A Manifest with a repository hook of such an ID or name stops with
+  `uv-audit`, `deptry`, `eslint`, `prettier`, `tsc`, `knip`, `osv-scanner`,
+  `vitest-coverage`, `jest-coverage`, `crap-score-typescript` and `stryker`,
+  and the names `pyright`, `uv lock check`, `uv audit`, `deptry`, `eslint`,
+  `prettier`, `tsc`, `knip`, `osv-scanner`, `Vitest with coverage`,
+  `Jest with coverage`, `CRAP score (TypeScript)` and
+  `mutation tests (StrykerJS)`. A Manifest with a repository hook of such an ID or name stops with
   `duplicate_identifier`, also when it does not select the hook's capability.
   Rename the repository hook.
 - gateseal reserves the hook IDs `gateseal-node-packages` and

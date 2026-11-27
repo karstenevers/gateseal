@@ -336,7 +336,14 @@ def test_a_selection_that_writes_a_report_owns_an_ignore_file_for_every_report(
 
 def test_a_selection_that_writes_no_report_owns_no_ignore_file():
     bundled = load_bundled_policy()
-    writing = {"python-tests", "python-crap"}
+    writing = {
+        "python-tests",
+        "python-crap",
+        "typescript-vitest",
+        "typescript-jest",
+        "typescript-crap",
+        "typescript-mutation",
+    }
     chosen = selection(bundled, *(c for c in bundled.capabilities if c not in writing))
     outputs = compile_outputs(chosen, PIN, BundledSource(bundled.release))
     assert not [name for name in outputs if name.startswith(".gateseal/reports")]
