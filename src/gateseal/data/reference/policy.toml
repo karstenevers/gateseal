@@ -167,3 +167,19 @@ reviewed = ["10.1.1"]
 "@stryker-mutator/vitest-runner" = "10.1.1"
 typescript = "6.0.3"
 vitest = "5.1.1"
+
+# typescript-typed-lint is for an npm or a pnpm project. ESLint runs the rules
+# that need type information at a push and in the gate, in the repository's
+# own project, where the lockfile pins the packages whose types the rules read.
+# Its pin and packages are those of eslint in typescript. Its TypeScript is the
+# one that the parser reads types with, whatever tsc version the repository
+# selects.
+[capabilities.typescript-typed-lint.tools.eslint-typed]
+configuration = "rules/eslint-typed.toml"
+pin = "10.15.0"
+reviewed = ["10.15.0"]
+
+[capabilities.typescript-typed-lint.tools.eslint-typed.packages]
+"@typescript-eslint/eslint-plugin" = "8.73.0"
+"@typescript-eslint/parser" = "8.73.0"
+typescript = "6.0.3"

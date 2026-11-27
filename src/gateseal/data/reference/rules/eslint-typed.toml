@@ -1,0 +1,27 @@
+# gateseal owns this file; gateseal configure writes it from the reviewed policy.
+# gateseal checks it and writes it as .gateseal/eslint-typed.json, which the
+# eslint-typed definition's loader reads. The rules are typescript-eslint's
+# recommended rules that need type information. gateseal policy lock records
+# them in policy.lock.
+
+# The files ESLint checks, as patterns from the repository root. Of these, it
+# checks the files that tsconfig.json includes.
+files = ["**/*.ts", "**/*.tsx"]
+
+# The parser of TypeScript, which reads the project's types.
+parser = "@typescript-eslint/parser"
+
+# The presets whose rules apply first, in this order.
+presets = ["@typescript-eslint/recommended-type-checked-only"]
+
+# Each plugin by the prefix that its rules' names start with.
+[plugins]
+"@typescript-eslint" = "@typescript-eslint/eslint-plugin"
+
+# The preset also turns these on, and the eslint check of typescript runs them
+# at each commit already.
+[rules]
+no-var = "off"
+prefer-const = "off"
+prefer-rest-params = "off"
+prefer-spread = "off"

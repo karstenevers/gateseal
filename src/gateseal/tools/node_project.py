@@ -20,6 +20,10 @@ Guarantees this module owns, whatever a definition says:
   repository root. A push through pre-commit alone has no such check, but the
   install hook then stops and names what the project lacks.
 
+A node-project tool's ESLint rule file may also name a preset whose rules
+need type information. The definition's loader must give the types from the
+project's tsconfig.json and node_modules, as the loader of eslint-typed does.
+
 The first use needs the network, for Node, the tool and the project's
 packages. Each version's Policy Lock record and the Lock's record are an
 npm-package tool's.
@@ -60,6 +64,7 @@ class NodeProject(NpmPackage):
     kind: ClassVar[str] = "node-project"
     remark: ClassVar[str] = "; the repository's lockfile pins what it imports"
     scans_history: ClassVar[bool] = False
+    typed: ClassVar[bool] = True
 
 
 def parse_source(value: object, field: str) -> NodeProject:

@@ -40,12 +40,14 @@ def lock(
     lockfile: object,
     recorded: object,
     upstream: Upstream,
+    typed: bool,
 ) -> dict[str, dict[str, object]]:
     """Return the presets record of one reviewed version, empty when none is named.
 
     recorded is the version's record to keep, or None. Only a preset that it
     lacks is read; a rerun with nothing changed reads none, so it needs
-    neither npm nor Node.
+    neither npm nor Node. typed says that the tool reads the types of the
+    repository's Node project, so a preset may turn on a rule that needs them.
     """
     presets, plugins = _rule_file(definition, use)
     missing: dict[str, list[str]] = {}
@@ -69,7 +71,7 @@ def lock(
             held = nested(lockfile, "packages", f"node_modules/{preset.package}")
             subject = f"{preset.package} {nested(held, 'version')}"
             blocks = _resolved(
-                definition.name, preset, subject, nested(found, preset.package)
+                definition.name, preset, subject, nested(found, preset.package), typed
             )
         at = f"{field}.{preset.package}.{preset.config}"
         undeclared = _undeclared(_blocks(blocks, at), plugins)
@@ -143,11 +145,14 @@ def _rule_file(
     return named_presets(cast(bytes, use.configuration))
 
 
-def _resolved(tool: str, preset: Preset, package: str, found: object) -> object:
+def _resolved(
+    tool: str, preset: Preset, package: str, found: object, typed: bool
+) -> object:
     """Return the blocks that PROGRAM read for preset, or refuse the preset.
 
     package names the preset's package at its locked version, and found is
-    what PROGRAM printed for it.
+    what PROGRAM printed for it. Only a typed tool takes a rule that needs type
+    information.
     """
     subject = f"The {tool} configuration names the preset {preset.name}"
     read = nested(found, "presets", preset.config)
@@ -160,14 +165,14 @@ def _resolved(tool: str, preset: Preset, package: str, found: object) -> object:
             f"{', '.join(listed) or 'none'}.",
             next_step="Correct the name in presets, then run gateseal policy lock.",
         )
-    typed = sequence(nested(read, "typed"), f"{preset.name}'s typed rules")
-    if typed:
+    needing = sequence(nested(read, "typed"), f"{preset.name}'s typed rules")
+    if needing and not typed:
         raise GatesealError(
             "invalid_field",
-            f"{subject}, whose rule {typed[0]} needs type information, which "
-            "gateseal's ESLint data cannot give.",
-            next_step=f"Remove {preset.name} from presets, or name a preset "
-            "without type-checked rules.",
+            f"{subject}, whose rule {needing[0]} needs type information, but "
+            f"{tool} runs outside the repository's Node project.",
+            next_step=f"Remove {preset.name} from presets, or name it in the rule "
+            "file of a node-project tool, such as eslint-typed.",
         )
     blocks = nested(read, "blocks")
     try:

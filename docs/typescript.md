@@ -4,6 +4,8 @@ The bundled `typescript` capability checks staged `.ts` and `.tsx` files with ES
 
 The bundled `typescript-types` capability checks the project's types with `tsc` at each push and in the CI gate. Select it beside `typescript` or alone. See [Type checks at push](#type-checks-at-push).
 
+The bundled `typescript-typed-lint` capability runs ESLint's rules that need type information at each push and in the CI gate. See [Typed lint at push](#typed-lint-at-push).
+
 Two more capabilities check the project's dependencies. `typescript-unused` runs knip at each push and in the CI gate. `typescript-audit` checks `package-lock.json` for known vulnerabilities in the CI gate only. See [Dependency checks](#dependency-checks).
 
 Four more capabilities check the project's tests at each push and in the CI gate: `typescript-vitest` or `typescript-jest`, `typescript-crap` and `typescript-mutation`. See [Test checks at push](#test-checks-at-push).
@@ -122,9 +124,9 @@ After you edit `node`, `packages` or `presets`, run `gateseal policy lock policy
 
 - ESLint and Prettier skip each file in a `node_modules` folder, also a staged one, as both do without gateseal.
 - The hooks get `.ts` and `.tsx` files only. ESLint skips a name in upper case, such as `Widget.TS`, as TypeScript does. pre-commit gives `.mts` and `.cts` files no TypeScript type, so they are not checked.
-- No rule needs type information, and this capability runs no type check. `typescript-types` runs one at each push.
+- No rule needs type information, and this capability runs no type check. `typescript-types` runs a type check at each push, and `typescript-typed-lint` runs the rules that need type information.
 - `gateseal run --json` and `gateseal gate --json` list no ESLint finding by file and line. The hook's entry says that it failed, and the text output shows ESLint's report.
-- The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. A preset gives only its rules, not its other settings, such as parser options. A preset with a rule that needs type information gives `invalid_field`, such as `@typescript-eslint/recommended-type-checked`. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`. Pin Prettier 3 or later. Prettier 2 has more options that load code from the repository, such as `pluginSearchDirs` and a parser that it does not know, and a rule file can set them.
+- The ESLint rules can use only the parser and the plugins that the policy's `packages` pin. A preset gives only its rules, not its other settings, such as parser options. A preset with a rule that needs type information gives `invalid_field`, such as `@typescript-eslint/recommended-type-checked`. Name it in `rules/eslint-typed.toml` instead. Prettier plugins are not supported: a rule file that sets `plugins`, also in the options of an override, gives `invalid_field`. Pin Prettier 3 or later. Prettier 2 has more options that load code from the repository, such as `pluginSearchDirs` and a parser that it does not know, and a rule file can set them.
 - npm reads only the proxy, CA and registry settings of your `.npmrc`: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as its token. Your `npm_config_` variables can set the first five. A scoped registry, such as `@team:registry`, does not apply.
 - A commit that an npm script starts, such as `npm run commit`, gets the proxy, CA and registry settings of that script, such as those of the project's `.npmrc`. To keep them out, run `git commit` yourself.
 
@@ -236,6 +238,77 @@ Run `gateseal configure` and commit the changed files. A team policy reviews ano
 - Yarn is not supported. Neither are workspaces nor project references. The check reads one lockfile and one `tsconfig.json`, both at the repository root.
 - `gateseal gate --json` lists no `tsc` error by file and line. The hook's entry says that it failed, and the text output shows the report of `tsc`.
 
+## Typed lint at push
+
+The bundled `typescript-typed-lint` capability runs the ESLint rules of typescript-eslint that need type information, such as `@typescript-eslint/no-floating-promises`. These rules read the types of the project's packages. So ESLint runs in the project, as `tsc` does. It runs at `git push` and in the CI gate, after gateseal's hook has installed the packages that the lockfile pins. It does not run at a commit or in `gateseal run`. The ESLint of `typescript` still runs at each commit, without type information.
+
+### Select typed lint
+
+The repository needs `package.json`, `tsconfig.json` and exactly one lockfile at its root, as for [the type check](#select-the-type-check). From the repository root, run:
+
+```sh
+gateseal configure \
+  --capability hygiene \
+  --capability typescript \
+  --capability typescript-typed-lint \
+  --ci github
+pre-commit install
+```
+
+In a configured repository, add `"typescript-typed-lint"` to `capabilities` in `gateseal.toml` and run `gateseal configure` instead. configure writes four more files under `.gateseal/`: `eslint-typed.json`, `eslint-typed-loader.mjs`, `eslint-typed-suppressions.json` and `eslint-typed.package-lock.json`. Commit the changed files. Without `package.json` or a lockfile, `configure` stops with `missing_project`, as for `typescript-types`.
+
+### What the push does
+
+1. gateseal's hook `gateseal-node-packages` installs the packages that the lockfile pins into `node_modules`. With `typescript-types` too, it runs once for both checks.
+2. ESLint checks each file that `tsconfig.json` includes and that the rule file's `files` patterns name.
+
+A finding stops the push. ESLint's report names the file, the line and the rule:
+
+```text
+eslint with types........................................................Failed
+- hook id: gateseal-npm-tool
+- exit code: 1
+
+/home/dev/shop/src/check.ts
+  4:3  error  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
+```
+
+ESLint reads `tsconfig.json` at the repository root with the policy's TypeScript, and gets no file names. So a change in one file can stop the push on a finding in another. A file that `tsconfig.json` does not include, such as a build script, gets no rule that needs type information. The ESLint of `typescript` still checks it at a commit. Without `tsconfig.json`, ESLint stops the push with `error TS5083: Cannot read file 'tsconfig.json'.` A `tsconfig.json` that names only project references stops the push too. Include the project's files in it.
+
+The repository's own ESLint configuration and `eslint-suppressions.json` do not apply, as at a commit. A comment such as `// eslint-disable-next-line @typescript-eslint/no-floating-promises` turns the rule off for its line. Neither ESLint check reports a disable comment as unused, so the commit hook keeps a comment for a rule that only the push runs.
+
+The CI gate runs the same two hooks. `gateseal gate --json` lists each as a hook entry. `gateseal status` describes the check like this:
+
+```text
+Tool eslint-typed 10.15.0 for typescript-typed-lint: built-in, node-project on Node 24.22.3; the repository's lockfile pins what it imports.
+```
+
+### The typed rules
+
+The bundled `rules/eslint-typed.toml` names the preset `@typescript-eslint/recommended-type-checked-only`, the rules of `recommended-type-checked` that need type information. The preset also turns on `no-var`, `prefer-const`, `prefer-rest-params` and `prefer-spread`. The rule file turns them off, because the commit-time ESLint runs them already. The file has the [ESLint format](tool-definitions.md#eslint-configuration-format), so a team can name other presets or set rules in `[rules]`. The bundled `policy.toml` has these lines for `typescript-typed-lint`:
+
+<!-- policy tables: typescript-typed-lint -->
+```toml
+[capabilities.typescript-typed-lint.tools.eslint-typed]
+configuration = "rules/eslint-typed.toml"
+pin = "10.15.0"
+reviewed = ["10.15.0"]
+
+[capabilities.typescript-typed-lint.tools.eslint-typed.packages]
+"@typescript-eslint/eslint-plugin" = "8.73.0"
+"@typescript-eslint/parser" = "8.73.0"
+typescript = "6.0.3"
+```
+
+The pins are those of `eslint` in `typescript`, so both tools share one install. The parser reads the types with the TypeScript that these `packages` pin, whatever `tsc` version the repository selects.
+
+### What typed lint cannot do
+
+- ESLint applies no fix at a push, because a push sends commits, not the working tree.
+- The install has the limits of the type check. See [What the type check cannot do](#what-the-type-check-cannot-do).
+- Yarn, workspaces and project references are not supported. The check reads one lockfile and one `tsconfig.json`, both at the repository root.
+- `gateseal gate --json` lists no ESLint finding by file and line. The hook's entry says that it failed, and the text output shows ESLint's report.
+
 ## Dependency checks
 
 Two capabilities of the bundled policy check a project's dependencies. Select each one alone or together, beside the other TypeScript capabilities:
@@ -324,7 +397,7 @@ The audit runs only in the CI gate, at each run, such as for a pull request or i
 
 The audit needs network access to `api.osv.dev`. When OSV-Scanner cannot reach the service, or `package-lock.json` is missing, the gate fails with `tool_failed` and exit code 4. It never passes. A `package-lock.json` that names no package, as in a project without dependencies, and an `npm-shrinkwrap.json` beside it also fail the gate, because OSV-Scanner then finds no package to check. Behind a proxy, OSV-Scanner reads `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`, in upper or lower case, and a CA bundle from `SSL_CERT_FILE` or `SSL_CERT_DIR`. The audit's time counts toward the policy's [time budget](ci-gate.md#time-budget).
 
-The audit reads `package-lock.json` as the repository commits it. Only the install of `typescript-unused` or `typescript-types` checks that the lockfile matches `package.json`. So select one of them beside `typescript-audit`.
+The audit reads `package-lock.json` as the repository commits it. Only the install of a check that runs in the Node project checks that the lockfile matches `package.json`. Such checks are `typescript-types`, `typescript-typed-lint`, `typescript-unused` and the test checks. So select one of them beside `typescript-audit`.
 
 ### Ignore an advisory
 
@@ -511,6 +584,6 @@ Without gateseal, a repository can run ESLint and Prettier as pre-commit hooks w
 | Packages that `tsc` reads | The packages that the project's lockfile pins, installed at each push. A setting can make the push fail, but none can make it pass with other packages. After a change of package manager, delete `node_modules` once, as [What the type check cannot do](#what-the-type-check-cannot-do) says | The packages in `node_modules`. Nothing installs them, so `tsc` fails in a new clone |
 | Later commits | A little slower, because gateseal's hook starts before each tool | A little faster |
 | ESLint plugins | Each plugin that the policy pins | Each plugin in `additional_dependencies`. An ES module configuration, such as `eslint.config.mjs`, cannot import it, so the project installs it too |
-| ESLint presets | `eslint/recommended` and each preset of a pinned plugin, with its rules only, and none with rules that need type information | Each preset that the ESLint configuration loads, with all its settings |
-| ESLint rules that need type information | None | Possible, when `node_modules` holds the project's packages |
+| ESLint presets | `eslint/recommended` and each preset of a pinned plugin, with its rules only. A preset with rules that need type information belongs to [the typed lint](#typed-lint-at-push) | Each preset that the ESLint configuration loads, with all its settings |
+| ESLint rules that need type information | At each push and in the CI gate, with `typescript-typed-lint` and the packages that the project's lockfile pins | Possible, when `node_modules` holds the project's packages |
 | Hook entry and name of a failed hook | One short line. A failed hook shows `hook id: gateseal-npm-tool` below the tool's name, and `SKIP=prettier` still works | One short line. A failed hook shows `hook id: prettier` |

@@ -9,6 +9,15 @@ change the manifest, policy or lock format, and its entry says how to move.
 
 ### Added
 
+- The built-in `eslint-typed` tool, which runs ESLint with the rules that
+  need type information at `git push` and in the CI gate. It is a
+  `node-project` tool, so it runs after gateseal's hook has installed the
+  project's packages. Its loader gives the parser the `tsconfig.json` at the
+  repository root, and ESLint checks only the files that `tsconfig.json`
+  includes. The bundled policy's new `typescript-typed-lint` capability runs
+  it with the preset `@typescript-eslint/recommended-type-checked-only`, at
+  the pins of `eslint`. A repository that does not select it gets no new
+  check.
 - `gateseal fetch` downloads each selected release binary, and the pinned Node
   of a tool from npm, with mise and builds the hook environments with
   pre-commit, before any hook runs. It tries
@@ -169,18 +178,20 @@ change the manifest, policy or lock format, and its entry says how to move.
   records its rules in `policy.lock`. A commit gets the rules as data and runs
   no code of a preset. A rule in `rules` wins over a preset. A preset gives
   only its rules, not its other settings, such as parser options. A preset
-  with a rule that needs type information, a preset that the package does
-  not have, and a preset of a plugin that `packages` do not pin each give
-  `invalid_field`, and the message names the preset. `extends` gives
-  `invalid_field`, and its message names `presets`.
+  that the package does not have and a preset of a plugin that `packages` do
+  not pin each give `invalid_field`, and the message names the preset. So
+  does a preset with a rule that needs type information, unless the tool is
+  of the `node-project` kind. `extends` gives `invalid_field`, and its
+  message names `presets`.
 - The bundled policy's `typescript` capability. It runs ESLint with the
   presets `eslint/recommended` and `@typescript-eslint/recommended` and
   applies their fixes, then formats with Prettier, on staged `.ts` and `.tsx`
   files. Its rule file turns off only `no-unexpected-multiline`, which
   conflicts with Prettier. The repository's own ESLint and Prettier settings
-  do not apply. A rule file that sets Prettier's `plugins` gives
-  `invalid_field`, because Prettier would load each plugin from the
-  repository.
+  do not apply. ESLint reports no unused disable comment, so its `--fix`
+  keeps a comment for a rule that only `eslint-typed` runs. A rule file that
+  sets Prettier's `plugins` gives `invalid_field`, because Prettier would
+  load each plugin from the repository.
 - `node` in each hook and finding entry of `run --json` and `gate --json`
   for a tool from npm. The `tool` diagnostic of `status`, `doctor` and
   `check` names that Node too.
@@ -245,12 +256,13 @@ change the manifest, policy or lock format, and its entry says how to move.
   temporary folder. It no longer changes the global Git configuration or the
   home folder of the agent's user.
 - The bundled policy offers hooks with the IDs `pyright`, `uv-lock`,
-  `uv-audit`, `deptry`, `eslint`, `prettier`, `tsc`, `knip`, `osv-scanner`,
-  `vitest-coverage`, `jest-coverage`, `crap-score-typescript` and `stryker`,
-  and the names `pyright`, `uv lock check`, `uv audit`, `deptry`, `eslint`,
-  `prettier`, `tsc`, `knip`, `osv-scanner`, `Vitest with coverage`,
-  `Jest with coverage`, `CRAP score (TypeScript)` and
-  `mutation tests (StrykerJS)`. A Manifest with a repository hook of such an ID or name stops with
+  `uv-audit`, `deptry`, `eslint`, `eslint-typed`, `prettier`, `tsc`, `knip`,
+  `osv-scanner`, `vitest-coverage`, `jest-coverage`, `crap-score-typescript`
+  and `stryker`, and the names `pyright`, `uv lock check`, `uv audit`,
+  `deptry`, `eslint`, `eslint with types`, `prettier`, `tsc`, `knip`,
+  `osv-scanner`, `Vitest with coverage`, `Jest with coverage`,
+  `CRAP score (TypeScript)` and `mutation tests (StrykerJS)`. A Manifest
+  with a repository hook of such an ID or name stops with
   `duplicate_identifier`, also when it does not select the hook's capability.
   Rename the repository hook.
 - gateseal reserves the hook IDs `gateseal-node-packages` and

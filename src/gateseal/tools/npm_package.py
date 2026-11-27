@@ -58,13 +58,19 @@ file, the Lock and the Manifest, whose bytes the Lock pins or holds.
 
 @dataclass(frozen=True)
 class NpmPackage:
-    """The [source] of a tool from npm: its package's name on the registry."""
+    """The [source] of a tool from npm: its package's name on the registry.
+
+    typed says that the tool reads the types of the repository's Node project,
+    so a preset of its ESLint rule file may turn on a rule that needs type
+    information. A tool of this kind runs outside the project, so it does not.
+    """
 
     kind: ClassVar[str] = "npm-package"
     starts: ClassVar[Starts] = Starts.EXECUTABLE
     remark: ClassVar[str] = ""
     on_node: ClassVar[bool] = True
     scans_history: ClassVar[bool] = True
+    typed: ClassVar[bool] = False
     package: str
 
     def offer(
@@ -139,7 +145,13 @@ class NpmPackage:
             lockfile = upstream.lockfile(dependencies, definition.name, version)
             recorded = None
         presets = eslint_presets.lock(
-            definition, use, version, lockfile, nested(recorded, PRESETS), upstream
+            definition,
+            use,
+            version,
+            lockfile,
+            nested(recorded, PRESETS),
+            upstream,
+            self.typed,
         )
         return {"lockfile": lockfile} | ({PRESETS: presets} if presets else {})
 

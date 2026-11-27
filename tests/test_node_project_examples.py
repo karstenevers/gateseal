@@ -2,7 +2,8 @@
 
 docs/add-a-tool.md's tsc-app definition and table, and docs/typescript.md's
 typescript-types table and its version exception, are the files these tests
-write into a team policy. A fake upstream answers where gateseal policy lock
+write into a team policy. docs/typescript.md's typescript-typed-lint table is
+the bundled policy's. A fake upstream answers where gateseal policy lock
 would ask nodejs.org and npm.
 """
 
@@ -24,6 +25,7 @@ from test_team_tools import consumer, team
 APP_DEFINITION = example("add-a-tool.md", "policy file: tools/tsc-app.toml")
 APP_TABLE = example("add-a-tool.md", "policy tables: tsc-app")
 TYPES_TABLE = example("typescript.md", "policy tables: typescript-types")
+TYPED_LINT_TABLE = example("typescript.md", "policy tables: typescript-typed-lint")
 EXCEPTION = example("typescript.md", "manifest tables: tsc exception")
 
 
@@ -107,3 +109,10 @@ def test_the_typescript_types_example_is_part_of_the_bundled_policy():
     bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
     capability = bundled["capabilities"]["typescript-types"]
     assert shown["capabilities"]["typescript-types"] == capability
+
+
+def test_the_typescript_typed_lint_example_is_part_of_the_bundled_policy():
+    shown = tomllib.loads(TYPED_LINT_TABLE)["capabilities"]
+    bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
+    capability = bundled["capabilities"]["typescript-typed-lint"]
+    assert shown == {"typescript-typed-lint": capability}

@@ -22,8 +22,10 @@ this README and every other file.
   `typescript-unused` capability runs knip there too. The
   `typescript-vitest`, `typescript-jest` and `typescript-mutation`
   capabilities run Vitest, Jest and StrykerJS in that project the same way.
-  Each tool's `packages` table pins the npm packages that it installs beside
-  itself, such as the parser that the ESLint rules name.
+  The `typescript-typed-lint` capability runs ESLint there with the rules
+  that need type information. Each tool's `packages` table pins the npm
+  packages that it installs beside itself, such as the parser that the
+  ESLint rules name.
 - `rules/ruff.toml`, `rules/pyright.toml` and `rules/betterleaks.toml` are
   the Ruff configuration, the Pyright configuration and the Betterleaks rules
   that configure copies into each repository. Pyright reads the paths in its
@@ -41,6 +43,9 @@ this README and every other file.
   rule's severity, which wins over the presets. It holds only `files`,
   `parser`, `plugins`, `presets` and `rules`, and names only packages that the
   `packages` of `eslint` pin. Configure writes it as `.gateseal/eslint.json`.
+- `rules/eslint-typed.toml` holds the ESLint rules that need type
+  information, in the same format, for `eslint-typed`. Configure writes it as
+  `.gateseal/eslint-typed.json`.
 - `rules/prettier.toml` holds the Prettier options that configure copies
   into each repository.
 - `rules/uv-audit.toml` lists the advisories that the audit ignores, under

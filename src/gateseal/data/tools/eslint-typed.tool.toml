@@ -1,0 +1,126 @@
+kind = "node-project"
+stages = ["push", "ci"]
+scope = "project"
+
+# The package and program of the eslint definition. A node-project tool runs
+# after gateseal's own hook has installed the project's packages from its
+# lockfile, so the parser can read the project's types.
+[source]
+package = "eslint"
+
+[executable]
+name = "eslint"
+
+# The policy's ESLint data, as for the eslint definition. A node-project tool
+# reads the project's types, so its presets may turn on rules that need them.
+[configuration]
+format = "eslint"
+
+# The loader of the eslint definition, which also gives the parser the
+# project's types. It reads tsconfig.json at the repository root with the
+# policy's TypeScript, the one that the parser uses, and stops with
+# TypeScript's own message when it cannot. ESLint then checks only the files
+# that tsconfig.json includes, and enters only the folders that hold one. So a
+# file outside tsconfig.json, such as a build script, is no parsing error. It
+# also skips each .js, .mjs and .cjs file that the policy's files patterns do
+# not name, which ESLint checks by default. Neither ESLint loader reports an
+# unused disable comment: each runs only its own rules, so a comment for the
+# other's rule looks unused, and the commit hook's --fix would delete it.
+[files.loader]
+extension = "mjs"
+content = '''
+// gateseal owns this file; gateseal configure writes it.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const root = process.argv[1].replace(/node_modules\/eslint\/.*$/, "");
+const tool = createRequire(root);
+const load = async (name) => {
+  const module = await import(pathToFileURL(tool.resolve(name)).href);
+  return module.default ?? module;
+};
+const file = fileURLToPath(import.meta.url).replace(/-loader\.mjs$/, ".json");
+const data = JSON.parse(readFileSync(file, "utf8"));
+const plugins = {};
+for (const [prefix, name] of Object.entries(data.plugins)) {
+  plugins[prefix] = await load(name);
+}
+const ts = await load("typescript");
+const fail = (text) => {
+  throw Object.assign(new Error(text), { stack: text });
+};
+const stop = (diagnostics) =>
+  fail(
+    ts
+      .formatDiagnostics(diagnostics, {
+        getCanonicalFileName: (name) => name,
+        getCurrentDirectory: () => process.cwd(),
+        getNewLine: () => "\n",
+      })
+      .trim(),
+  );
+const project = ts.getParsedCommandLineOfConfigFile("tsconfig.json", {}, {
+  ...ts.sys,
+  onUnRecoverableConfigFileDiagnostic: (diagnostic) => stop([diagnostic]),
+});
+if (project.errors.length > 0) {
+  stop(project.errors);
+}
+if (project.fileNames.length === 0) {
+  fail(
+    "tsconfig.json includes no file, and ESLint does not follow its " +
+      "references. Include the project's files in it.",
+  );
+}
+const included = new Set(project.fileNames.map((name) => resolve(name)));
+const folders = new Set();
+for (const name of included) {
+  let folder = dirname(name);
+  while (!folders.has(folder) && folder !== dirname(folder)) {
+    folders.add(folder);
+    folder = dirname(folder);
+  }
+}
+export default [
+  {
+    files: data.files,
+    languageOptions: {
+      ...(data.parser ? { parser: await load(data.parser) } : {}),
+      parserOptions: { project: "tsconfig.json", tsconfigRootDir: process.cwd() },
+    },
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+    plugins,
+  },
+  ...data.layers,
+  {
+    ignores: [
+      "**/*.js",
+      "**/*.mjs",
+      "**/*.cjs",
+      ...data.files.map((pattern) => `!${pattern}`),
+      (path) => !included.has(resolve(path)) && !folders.has(resolve(path)),
+    ],
+  },
+];
+'''
+
+# An empty list of suppressions, as for the eslint definition, so no file of
+# the repository accepts a finding.
+[files.suppressions]
+extension = "json"
+content = """
+{}
+"""
+
+# ESLint checks the project from the repository root. The hook gets no file
+# names and runs at every push, as tsc does, because a change of package.json
+# or the lockfile can cause a finding. It applies no fixes, since a push sends
+# commits, not the working tree. ESLint exits 1 on a finding and 2 when it
+# cannot lint, such as without tsconfig.json.
+[hooks.eslint-typed]
+name = "eslint with types"
+args = ["--config", "{loader}", "--suppressions-location", "{suppressions}", "."]
+finding_exit_codes = [1]
+output = "plain"
