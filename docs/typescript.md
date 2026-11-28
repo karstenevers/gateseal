@@ -500,7 +500,7 @@ The CRAP hook scores no test file: no file in a `test`, `tests`, `__tests__` or 
 
 ### What the repository cannot change
 
-- **CRAP limit.** The limit is in the policy's `rules/crap-typescript.toml`. A function over the limit can stay only with an entry in `.crap-baseline.toml`, and a change that adds an entry fails the hook. A file that the range's start lacks counts as adopted, so commit the first baseline on its own. A change to `.crap-baseline.toml` alone starts no check, so review each one.
+- **CRAP limit.** The limit is in the policy's `rules/crap-typescript.toml`. A function over the limit can stay only with an entry in `.crap-baseline.toml`, and a change that adds an entry fails the hook. At a push, an entry that a rebase or a merge of `origin/main` brings in is not new. In a ranged gate, a file that the range's start lacks counts as adopted. At a push, it counts as adopted when neither the remote's old tip of the branch nor the remote's commits that the push builds on have it. So commit the first baseline on its own. A change to `.crap-baseline.toml` alone starts no check, so review each one.
 - **Mutation score.** StrykerJS reads `.gateseal/stryker-config.mjs`, which gateseal generates. Each changed line must have no surviving change. The file reads only these settings from the repository's own StrykerJS configuration, such as `stryker.config.json`: `testRunner`, `mutate`, `vitest`, `jest`, `tsconfigFile`, `ignorePatterns` and `concurrency`. They say where the code and the tests are. It ignores every other setting, such as `thresholds`, `mutator` and `allowEmpty`.
 
 Without `mutate`, StrykerJS changes the code in `src` and `lib`, except test files. Without `testRunner`, it uses Jest when `package.json` lists `jest` and not `vitest`, and Vitest otherwise.
@@ -548,8 +548,8 @@ reviewed = ["30.5.2"]
 
 [capabilities.typescript-crap.tools.crap-typescript]
 configuration = "rules/crap-typescript.toml"
-pin = "0.1.0"
-reviewed = ["0.1.0"]
+pin = "0.1.3"
+reviewed = ["0.1.3", "0.1.0"]
 
 [capabilities.typescript-crap.choices]
 exclude = []

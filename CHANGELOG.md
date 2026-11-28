@@ -76,7 +76,9 @@ change the manifest, policy or lock format, and its entry says how to move.
   coverage.py 7.17.3 and writes coverage.py's JSON report. `python-crap` reads
   that report and fails a function in a changed Python file whose CRAP score
   is over 10, unless `.crap-baseline.toml` lists it. A change may lower or
-  remove a baseline entry, but not add or raise one. `python-mutation` runs
+  remove a baseline entry, but not add or raise one. At a push, an entry that
+  a rebase or a merge brings from a fetched branch of the remote is not new.
+  `python-mutation` runs
   pytestmut 0.1.0 on the lines that a push or a ranged gate changes, and fails
   on any mutant that no test kills. Each starts only when a Python file
   changed. A repository that selects none of them gets no new check.
@@ -87,7 +89,9 @@ change the manifest, policy or lock format, and its entry says how to move.
   each writes a coverage report.
   `typescript-crap` reads that report and fails a function in a changed file
   whose CRAP score is over 10, unless `.crap-baseline.toml` lists it. A change
-  may not add a baseline entry. `typescript-mutation` runs StrykerJS 10.1.1 on
+  may not add a baseline entry. At a push, an entry that a rebase or a merge
+  brings from a fetched branch of the remote is not new. `typescript-mutation`
+  runs StrykerJS 10.1.1 on
   the lines that a push or a ranged gate changes, and fails on any change to
   the code that no test catches. The policy owns the limit and the mutation
   score. Each starts only when a TypeScript or JavaScript file changed. A

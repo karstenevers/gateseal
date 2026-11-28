@@ -72,41 +72,41 @@ install serves both."""
 GOLDEN = {
     ("hygiene",): {
         "gateseal.lock": (
-            "5c96e5c81197016231fecd2a4ee663140f9d7f1a76023c63944b5fca914f252d"
+            "7cd3e55713b920d57fc2ee5e172d6b2b59452b381294a9374207fd372005906f"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
     },
     ("hygiene", CI): {
         "gateseal.lock": (
-            "6f72a9aca00ce5f6a594bcbe8077b7dc88f378e4b2636ac6fc9fbcddf470cbd6"
+            "b0fe409137d07c2c3dbfb5426d1cce8128c97c8a87ca5edc69c9966d2c17a97b"
         ),
         CONFIG: "8c5cad35ae3a2f3e9090967cbb3bf10153977d424e757041c4a4b341cf7b037b",
         WORKFLOW: "b3496ba1e7b787ed736e2ee864055d54dfeb5d5a699c9ba6415a2f6b49360cf9",
     },
     ("hygiene", "python"): {
         "gateseal.lock": (
-            "3f6417f44c0f7e3bbee844008469e28570f29d710d205b0104e61264d32c6744"
+            "f11e33b872536ef08f40e5a89df779ba1e4004a582e2bf77ab9656711796f3ca"
         ),
         CONFIG: "236167f59d52dffe1396b17fcd41d294855e7f02d2b642ec8302d49ba761eaa7",
         **PYTHON,
     },
     ("hygiene", "secrets"): {
         "gateseal.lock": (
-            "a8c876f010c48525231e470b0e851ec2b2ce919c90d47b607e160695dfbe7f5a"
+            "b40f55b9be8fa4d040b5d929ed6099252f078eaf57865c912b8aeb675de1d6aa"
         ),
         CONFIG: "37382b79b644e6eddcc574268eea858d24d3aedf841071c4d200eff8a779e813",
         **SECRETS,
     },
     ("hygiene", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "98eba6b9e78c5cc79a4fa53f56e4ca8eadcb27ea6ef9b98a5ed043c478456c14"
+            "de9bf4c1a83eff17ad473f5af7e647c095afe3ef7e0fe6db1555fe29b8d1e0fc"
         ),
         CONFIG: "11961c1b20fc0c5bd290e7d76bf99f3e3e048a7e7facc671fc7ab9e683d90251",
         **SECRETS,
     },
     ("hygiene", "python", "secrets"): {
         "gateseal.lock": (
-            "c46a276eafafabdbbd3ad8329a5863a63f3bf56bdc5178c7340ad70399d70756"
+            "08a7c5db36ff6740d52e9948612ee6b27ae397df82ae232b50e7957d7cf96b73"
         ),
         CONFIG: "e24f68c3866a967b197d4f863f58a90cdc986221bc26d4c080e359dac264b2a7",
         **PYTHON,
@@ -114,7 +114,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", BETTERLEAKS_1_8): {
         "gateseal.lock": (
-            "6937243f334e08629b501a9bd1d659cebb989e55f75a39061c12d679d8d52eda"
+            "be51194236bb8638624ed990987be4832e1f57c19f6753577c3e9ec6db3c27c9"
         ),
         CONFIG: "ac9c680e62a7426b1e4b3c2d74ea94190542465bfb97582b4dbff55e182f9427",
         **PYTHON,
@@ -122,7 +122,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "secrets", EXCLUDE): {
         "gateseal.lock": (
-            "76dcdd084c968f7be9243c7d174bc2171545226fcb4359d386280a5de1136a50"
+            "bd44e2698198f9d2da355a4f3e231f303999426454d243462cde9fa313ec99ff"
         ),
         CONFIG: "6707e55f53944a8c929a28ef17e7c13fe28d6e414f735c9714b4c20b4ee51fc4",
         **PYTHON,
@@ -130,7 +130,7 @@ GOLDEN = {
     },
     ("hygiene", "python", "python-types"): {
         "gateseal.lock": (
-            "ce6ddc51529576289d5f78aab6fa541c27888ab6e8d8789cd5a74c38fbdcb654"
+            "a9dcd8361548ff5b9d2d61c712eb3006c6c5165caf28aa851ec5d026b13a34ec"
         ),
         CONFIG: "4cf07b2f0a246da78625c58be61c1f1557590ae4ce31e8a746a1a4cb611571c1",
         PYRIGHT: "e54cf168d05c0ce31ddcfb8ce904805d82e00a49db243f98ba7e23de2d312684",
@@ -138,14 +138,14 @@ GOLDEN = {
     },
     ("hygiene", "typescript"): {
         "gateseal.lock": (
-            "350661153978fcaf02ecd3bac1ba1a2dcd58dc9589ec04b0666bb99975e5152f"
+            "41d3f142b95f1731d7d49e7f28a1bcfe1c1f9dff5f21e05b62d486e963b0ce41"
         ),
         CONFIG: "b96d91315461442585f300d9272d6317dbaf0bdff8b2f9ba4ddc5b218d340a6c",
         **TYPESCRIPT,
     },
     ("hygiene", "typescript", "typescript-types"): {
         "gateseal.lock": (
-            "f745f6700553f58a0bf41c5e2314456f05fb1067048ff6467e18883a68d34969"
+            "65691837094ae4b79900c2c9ff3439d729b7e44f82d4abde55a365f33edcdef4"
         ),
         CONFIG: "45e7fd010427200b9b51552cb144cb75b6f78b4e8de4182f854b5d51d5b7f840",
         ".gateseal/tsc.package-lock.json": (
@@ -161,7 +161,7 @@ GOLDEN = {
         "typescript-unused",
     ): {
         "gateseal.lock": (
-            "858a3e5bd1b5c5e57633010c6c5d57c6e1720b77266301db7b3da33f0cbb396c"
+            "eb77bab17ea57afe00efd4c5e08bd35120ec53222d851a80690df2e5544626a5"
         ),
         CONFIG: "b6e9536f0b68aad704cf8595795cab17bedd7ee78b0ad90ccbd71550c44410e0",
         ".gateseal/tsc.package-lock.json": (
@@ -183,9 +183,9 @@ GOLDEN = {
     },
     ("hygiene", "typescript-vitest", "typescript-crap", "typescript-mutation"): {
         "gateseal.lock": (
-            "a7f76335bee6f02c16db14f31b3bc65b6511d22c139af702847cccdaf69ea5ca"
+            "571b0f0aca4dac74754e74f779b56b8e89c7bff64aa25b6fd6e416690cdd061d"
         ),
-        CONFIG: ("09c66bc8cca76aa60ce1d2598413686d1b64a4e22a389eed196f07edabe83be6"),
+        CONFIG: ("3b29b19a6fbf4e1846a12c23fb20ae8c9581e86165f94b8e6a5a14edf269d2ae"),
         ".gateseal/crap-typescript.toml": (
             "b2718f8d5e1d285c75931f77eca1bb051e189ce1ded6c22e3b10fa72a000c311"
         ),
@@ -204,9 +204,9 @@ GOLDEN = {
     },
     ("hygiene", "typescript-jest", "typescript-crap"): {
         "gateseal.lock": (
-            "a2bb98c5d7c31be04de2145f2cb0b30363daff89372baf9363825583cebf25b4"
+            "f812394ba6e469b112a3838b95a817285e0eeb04b5a72dc58d052fe11f53a57a"
         ),
-        CONFIG: ("57f345dd78edbf8c391683896ca8974d1116054792a00ecacdf96fe434fc0e4c"),
+        CONFIG: ("3f910e2a472fe58277b0cac78cf930a4a9dd294d9a662fdaf251280725e9559c"),
         ".gateseal/crap-typescript.toml": (
             "b2718f8d5e1d285c75931f77eca1bb051e189ce1ded6c22e3b10fa72a000c311"
         ),
@@ -219,7 +219,7 @@ GOLDEN = {
     },
     ("hygiene", "typescript", "typescript-typed-lint"): {
         "gateseal.lock": (
-            "babb1f9fce6b8a574e5c60c4ccb52fa4a4707379a33653f3312faab8fbc856b9"
+            "a06bbbf1e007114a880326bce5412e599d6e17cc22e6f2b2e18358ef94d60405"
         ),
         CONFIG: "8753553e9380db267619de84e9e8e4e601ee82c1fb47c1532af2b819b0054cf5",
         **TYPESCRIPT,
