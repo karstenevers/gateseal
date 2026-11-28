@@ -2,16 +2,6 @@
 
 Create a Git repository for the reviewed checks that other repositories can adopt. Use the gateseal release that those repositories use. The `policy add` and `policy lock` commands need network access to upstream releases.
 
-```mermaid
-flowchart LR
-    accTitle: The life of a team policy
-    accDescr: Start the policy once. Then review a new version, test a candidate, and release it with a tag. Repeat for each new version.
-    start[Start a policy] --> review[Review a tool version]
-    review --> try[Test a candidate]
-    try --> release[Release with a tag]
-    release --> review
-```
-
 ## Start a policy
 
 Create a repository and copy the bundled policy into a new directory:

@@ -197,11 +197,10 @@ A repository that adopts the release needs a `pyproject.toml` and a `uv.lock` at
 env UV_PROJECT_ENVIRONMENT=.gateseal/environments/mypy uv run --locked --exact --all-packages --with mypy==2.4.1 -- mypy --strict --python-executable .gateseal/environments/mypy/bin/python .
 ```
 
-- mypy gets its own environment, `.gateseal/environments/mypy`. uv installs exactly what the repository's `uv.lock` pins into it, removes every other package, and adds the pinned mypy over it. Your `.venv` stays as it is.
-- `--python-executable` makes mypy read the packages of that environment. Without it, mypy reads the packages of the Python that starts it. That Python finds mypy's own dependencies before the project's, so a package that both install would have the wrong version.
-- The hook stops when `uv.lock` is missing or out of date.
-- If the checked code imports from an extra or a dependency group that uv does not install by default, list it in `[source]`, such as `extras = ["cli"]` or `groups = ["typing"]`.
-- With `scope = "project"`, the hook runs at every commit. mypy gets no file names and checks the whole project. So it also finds an error in a file that the commit does not change, and an error that a deleted file causes.
+- mypy gets its own environment, `.gateseal/environments/mypy`, with exactly the packages that the repository's `uv.lock` pins. Your `.venv` stays as it is.
+- `--python-executable` makes mypy read the packages of that environment. Without it, mypy can read a wrong version of a package that mypy and the project both install.
+- uv installs the default dependency groups. If the checked code imports from an extra or another group, list it in `[source]`, such as `extras = ["cli"]`.
+- With `scope = "project"`, the hook runs at every commit, and mypy checks the whole project.
 
 ## Format Markdown with Prettier from npm
 
@@ -269,12 +268,11 @@ Every tool from npm runs on the Node that `node` pins at the top of `policy/poli
 node = "24.22.3"
 ```
 
-Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command records the SHA-256 of each Node archive from nodejs.org. It also runs npm on that Node to lock Prettier 3.10.1: npm's lockfile records Prettier and each package that it needs, with its integrity hash.
+Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command records the SHA-256 of each Node archive, and npm's lockfile of Prettier with the integrity hash of each package.
 
-A repository that adopts the release selects the tool with `--capability docs`. Each commit then formats the staged Markdown files:
+A repository that adopts the release selects the tool with `--capability docs`. Each commit then formats the staged Markdown files. The arguments keep the repository's own files from changing the result:
 
-- mise installs the pinned Node at the first commit and checks its archive. npm installs Prettier into its own cache, outside the repository.
-- `--no-editorconfig` and `--ignore-path` keep the repository's `.editorconfig`, `.prettierignore` and `.gitignore` from changing the result. The ignore path is the fixed file `files.ignore`, which gateseal writes as `.gateseal/prettier-markdown-ignore.txt`. It lists no file, and it exists on every platform.
+- `--no-editorconfig` and `--ignore-path` turn off `.editorconfig`, `.prettierignore` and `.gitignore`. The ignore path is the fixed file `files.ignore`, which lists no file.
 - `--no-error-on-unmatched-pattern` lets a commit pass when Prettier skips every staged file, such as one in `node_modules`.
 - `--` ends the options, so Prettier formats a file named like an option as a file.
 
@@ -282,7 +280,7 @@ The hook skips every file that gateseal generates. See [the `npm-package` kind](
 
 ## Check a second tsconfig with strict tsc flags
 
-A `node-project` tool runs from npm on the pinned Node, like an `npm-package` tool. It also reads the packages of the repository's Node project. gateseal installs them from the project's lockfile before the tool runs. The bundled `typescript-types` capability runs `tsc` this way on the project's `tsconfig.json`. This example adds a second check for a project whose application has its own `tsconfig.app.json`. The built-in name `tsc` is taken, so the team tool needs another name.
+A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's Node project. gateseal installs them from the project's lockfile before the tool runs. The bundled `typescript-types` capability runs `tsc` this way. This example adds a second check for a project whose application has its own `tsconfig.app.json`. The built-in name `tsc` is taken, so the team tool needs another name.
 
 Save this definition as `policy/tools/tsc-app.toml`:
 
@@ -313,7 +311,7 @@ pin = "7.0.2"
 reviewed = ["7.0.2"]
 ```
 
-The tool runs on the Node that `node` pins, as [the Prettier example](#format-markdown-with-prettier-from-npm) shows. Run `gateseal policy lock policy` and `gateseal policy check policy`. The lock command runs npm on that Node to lock TypeScript 7.0.2: npm's lockfile records TypeScript and each package that it needs, with its integrity hash.
+The tool runs on the Node that `node` pins, as [the Prettier example](#format-markdown-with-prettier-from-npm) shows. Run `gateseal policy lock policy` and `gateseal policy check policy`.
 
 A repository that adopts the release selects the tool with `--capability app-types`. It needs `package.json` and one lockfile at its root, `package-lock.json` or `pnpm-lock.yaml`. Each push then runs two hooks:
 
@@ -324,7 +322,6 @@ The definition sets how the check runs:
 
 - With `stages = ["push", "ci"]`, the check runs at `git push` and in the CI gate, not at a commit.
 - With `scope = "project"`, `tsc` gets no file names. `tsconfig.app.json` chooses the files.
-- A flag in `args` wins over the same option in the project's `tsconfig.json`. So `--strict` holds when `tsconfig.app.json` sets `"strict": false`, and the policy owns the strict options.
-- The project's own `typescript` package does not run in place of the pinned one.
+- A flag in `args` wins over the same option in the project's tsconfig file. So the policy owns `--strict`.
 
 See [the `node-project` kind](tool-definitions.md#tools-that-read-the-node-project) for what the kind guarantees.

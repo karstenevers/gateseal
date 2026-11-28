@@ -33,7 +33,7 @@ flowchart LR
 
 The policy offers capabilities and choices. The Manifest selects one release of the policy by its Git tag and commit, and picks from the offer. `gateseal configure` reads both and writes the Lock and the generated files. You write the Manifest. gateseal writes the Lock.
 
-These excerpts are cut down to the lines that link the three files. See [Policy format](policy-format.md#example) and [Manifest and Lock](policy-contract.md#example) for the full examples. A word in a comment names one fact that the files share. The same word in two files means the lines belong together. For example, `skip` is the policy allowing a skip and the Manifest using it. The list below the files explains each word.
+These excerpts show only the lines that link the three files. See [Policy format](policy-format.md#example) and [Manifest and Lock](policy-contract.md#example) for the full examples. A word in a comment names one fact that the files share.
 
 `policy.toml`, in the team's policy repository, tagged `team-2026.11`:
 
@@ -85,12 +85,7 @@ target_version = "py312"                      # default: replaced by this value
 }
 ```
 
-- `release`: the policy names its release. The Lock records that label.
-- `skip`: the policy lists which hooks are optional. The Manifest may skip only those. `check-yaml` then no longer appears in the Lock's `hook_ids`.
-- `pin`: the policy pins the tool version. The Lock records that version with the exact upstream revision.
-- `default`: the policy sets a default for a choice. The Manifest can change it. The Lock records the final value.
-- `tag`: the Manifest names the Git tag that points to the commit. gateseal checks this when you adopt the policy. The tag name does not have to equal the release label.
-- `commit`: the commit pins the exact policy files. The Lock records the same commit and a digest of their content.
+The Manifest may skip only the hooks that the policy lists as optional. The tag name does not have to equal the release label. gateseal checks that the tag points to the commit when you adopt the policy.
 
 ## What the checks trust
 
@@ -109,14 +104,14 @@ flowchart TD
     node -- "has mise install Node at first use, checks the archive;<br/>installs the locked packages once, starts" --> npmtool["Tools from npm,<br/>such as ESLint and Prettier"]
 ```
 
-The first commit hook compares staged generated files with the staged Lock. When it fails, pre-commit runs no other hook. CI checks the policy and generated files before running checks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them on a machine or in CI. The CI job and `gateseal fetch` make these downloads before the first hook runs.
+The first commit hook compares staged generated files with the staged Lock. When it fails, pre-commit runs no other hook. CI checks the Lock and the generated files against the pinned policy before it runs the hooks. Hook repositories use full Git commit IDs, so a moved tag cannot change the selected commit. mise checks release archives against their SHA-256 when it downloads them.
 
 The Lock pins each tool's direct inputs. It does not freeze every transitive dependency:
 
 - **Release binaries,** such as Betterleaks, must match the SHA-256 that the Lock records. A policy can also check the installed executable at each commit, as the bundled Betterleaks does. `gateseal run` and the CI gate do not check a cached executable again.
 - **Tools from npm,** such as ESLint, install the packages that `policy.lock` records with their integrity hashes. They run on a Node archive whose SHA-256 the Lock records.
 - **Python hooks,** such as Ruff, Pyright, coverage.py, pytestmut, deptry, and uv's lockfile check and audit, install a PyPI package at a pinned version, without a locked wheel hash.
-- **Tools that read the project,** such as Pyright, deptry, `tsc` and knip, read the packages that the repository's own lockfile pins. gateseal stops when `uv.lock` replaces a tool with a package of the same name and version from the project's own source. The Node install runs no install scripts. It obeys the npm and pnpm settings of the project and the user, such as the registry and `omit=dev`. A setting can leave out a package or stop the push, but it cannot make the push pass with other packages than the lockfile pins. knip also runs the configuration files of the tools that it knows, such as `vitest.config.ts`.
+- **Tools that read the project,** such as Pyright, deptry, `tsc` and knip, read the packages that the repository's own lockfile pins. gateseal stops when `uv.lock` replaces a tool with a package of the same name and version from the project's own source. The Node install runs no install scripts. An npm or pnpm setting can stop the push, but it cannot make the push pass with other packages than the lockfile pins. knip also runs the configuration files of the tools that it knows, such as `vitest.config.ts`.
 
 Tools run with the permissions of the user who starts them. You must trust Git, pre-commit, mise, uv, the host, and the policy's authors.
 

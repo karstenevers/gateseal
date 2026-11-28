@@ -7,15 +7,13 @@ here starts a tool: test_typescript_tests drives them through real pushes.
 
 import json
 import re
-import tomllib
 
 import pytest
 from conftest import PIN
-from doc_examples import example
 from gateseal.diagnostics import GatesealError
 from gateseal.lock import compile_outputs
 from gateseal.manifest import BundledSource, parse_manifest, render, resolve
-from gateseal.policy import bundled_root, load_bundled_policy
+from gateseal.policy import load_bundled_policy
 
 CONFIG = ".pre-commit-config.yaml"
 REPORT = ".gateseal/reports/coverage-final.json"
@@ -98,11 +96,3 @@ def test_the_mutation_check_owns_the_configuration_that_stryker_reads():
     assert '".gateseal/reports/mutation.json"' in config
     assert "allowEmpty" not in config
     assert [name for name in hooks if not name.startswith("gateseal-")] == ["stryker"]
-
-
-def test_the_policy_tables_that_the_docs_show_are_the_bundled_policy_s():
-    shown = tomllib.loads(example("typescript.md", "policy tables: typescript-tests"))
-    bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
-    assert len(shown["capabilities"]) == 4
-    for name, capability in shown["capabilities"].items():
-        assert bundled["capabilities"][name] == capability

@@ -16,13 +16,30 @@ from pathlib import Path
 
 import pytest
 from conftest import BUNDLED_TOOLS, on_machine
-from doc_examples import example
 from installation import process, success
 
 pytestmark = pytest.mark.integration
 
 CAPABILITIES = ("python-tests", "python-crap", "python-mutation")
-PYPROJECT = example("python-tests.md", "python-tests-pyproject")
+PYPROJECT = """\
+[project]
+name = "shop"
+version = "0"
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = ["pytest==9.2.0"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src", "tests"]
+
+[tool.pytestmut]
+paths = ["src/shop"]
+"""
 PRICING = """\
 def total(cents: list[int]) -> int:
     return sum(cents)

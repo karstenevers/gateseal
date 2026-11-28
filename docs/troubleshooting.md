@@ -16,15 +16,28 @@ Run `pre-commit install` from the clone root. If setup installed pre-commit, `ga
 
 ## A push runs no checks or stops for Git LFS
 
-Run `pre-commit install` from the clone root. It installs the push hook if the repository has checks at a push. If setup installed pre-commit, run `gateseal setup --refresh` instead. It also adds the hook that starts Git LFS at each push. If a push reports that no push hook starts Git LFS, see [Git LFS](work-in-a-configured-repository.md#git-lfs).
+Run `pre-commit install` from the clone root. It installs the push hook if the repository has checks at a push. If setup installed pre-commit, run `gateseal setup --refresh` instead. It also adds the hook that starts Git LFS at each push.
+
+If a push reports that no push hook starts Git LFS, Git LFS was set up after a plain `pre-commit install`. Run `gateseal setup --refresh`. Without gateseal, run these commands from the clone's root, unless the message names another repair:
+
+```sh
+git lfs update --force
+pre-commit install
+```
+
+Until you repair the clone, a push from a branch without checks at a push uploads no LFS object, and nothing stops it.
 
 In a repository with SHA-256 object names, pre-commit 4.7.0 stops the deletion of a remote branch. Add `--no-verify` to that `git push`.
 
 ## Git uses a different hooks directory
 
-A `core.hooksPath` setting makes Git use that directory instead of the clone's hooks. Remove the setting and run `pre-commit install` in each clone. Alternatively, install the launcher in that directory. Preserve any existing `pre-commit` there as `pre-commit.legacy` first. To create a launcher, run `pre-commit init-templatedir -t pre-commit` with a temporary directory. Copy its `hooks/pre-commit` into the configured directory.
+A `core.hooksPath` setting makes Git use that directory instead of the clone's hooks. Remove the setting and run `pre-commit install` in each clone.
 
-If the repository has checks at a push, install the push hook the same way. Preserve any existing `pre-push` there as `pre-push.legacy` first. It is often the push hook of Git LFS. Run `pre-commit init-templatedir -t pre-commit -t pre-push` instead, and copy `hooks/pre-push` too.
+To keep the setting, install the launchers in that directory:
+
+1. Run `pre-commit init-templatedir -t pre-commit -t pre-push` with a temporary directory.
+2. In the configured directory, rename any existing `pre-commit` to `pre-commit.legacy`. Copy `hooks/pre-commit` from the temporary directory into it.
+3. If the repository has checks at a push, do the same for `pre-push`. An existing `pre-push` is often the push hook of Git LFS.
 
 ## A command reports needs_setup
 
@@ -48,7 +61,7 @@ The first commit downloads the hook environments and the selected binaries. Chec
 
 ## A type checker does not read the project's packages
 
-A tool that runs in the uv project reads its own environment, `.gateseal/environments/<name>`, not `.venv`. uv installs into it each package's dependencies and the default dependency groups. If the checked code imports from an extra or another group, ask the policy author to list it in the tool's definition. A policy that copies the bundled Pyright rules for a tool with another name sets `venv` to that name.
+A tool that runs in the uv project reads its own environment, `.gateseal/environments/<name>`, not `.venv`. uv installs the default dependency groups into it. If the checked code imports from an extra or another group, ask the policy author to list it in the [tool's definition](tool-definitions.md#tools-in-the-uv-project).
 
 ## A command reports shadowed_tool
 
@@ -58,17 +71,17 @@ A tool that runs in the uv project reads its own environment, `.gateseal/environ
 
 The `tests with coverage` hook runs pytest in the repository's uv project. Put pytest in a dependency group that uv installs by default, such as `dev`, or in a group that the tool's definition lists.
 
-The hook, and a team's tool that imports the project's packages itself, also need a uv cache whose path holds no space. With a space, uv starts the program outside the project, so it does not find pytest or the project's packages. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
+The hook also needs a uv cache whose path holds no space. Run `uv cache dir`. If the path holds a space, set `UV_CACHE_DIR` to a path without one. Then retry.
 
 ## A push stops at the Node project's packages
 
-The hook `gateseal-node-packages` installs the packages that the lockfile pins before the checks that read the Node project run, such as `tsc`. If `package-lock.json` or `pnpm-lock.yaml` does not match `package.json`, run `npm install` or `pnpm install`. Commit the lockfile. Then push again. The checks after the install run only when it passes. If the project lacks `package.json` or a lockfile, the hook names the file to add.
+The hook `gateseal-node-packages` installs the packages that the lockfile pins, before checks such as `tsc`. If the lockfile does not match `package.json`, run `npm install` or `pnpm install`. Commit the lockfile. Then push again. If the project lacks `package.json` or a lockfile, the hook names the file to add.
 
-If `tsc` reports missing types after the install, check whether an install script or a code generator makes them. No install script runs. Commit the generated files. If it reports `error TS5101` or `error TS5102`, `tsconfig.json` sets an option that TypeScript 7 removed, such as `baseUrl`. See [Which TypeScript runs](typescript.md#which-typescript-runs).
+If `tsc` reports missing types after the install, check whether an install script or a code generator makes them. No install script runs. Commit the generated files. If it reports `error TS5101` or `error TS5102`, `tsconfig.json` sets an option that TypeScript 7 removed, such as `baseUrl`. Replace the option. With TypeScript 6, `"ignoreDeprecations": "6.0"` in `compilerOptions` also allows it.
 
 ## A setting of npm or pnpm stops a push
 
-The hook `gateseal-node-packages` obeys the npm and pnpm settings of the project and the user, as `npm install` or `pnpm install` in a terminal does. These settings are in `.npmrc`, `pnpm-workspace.yaml`, and the environment. A setting can stop the push, but it cannot make the push pass with other packages than the lockfile pins. Run `npm config list` or `pnpm config list` in the repository to see the settings.
+The hook `gateseal-node-packages` obeys the npm and pnpm settings in `.npmrc`, `pnpm-workspace.yaml`, and the environment. Run `npm config list` or `pnpm config list` in the repository to see them.
 
 - `tsc` reports `error TS2307: Cannot find module`: a setting leaves out a package that `tsc` needs, such as `omit=dev` or `production=true`. Remove the setting, or move the package into `dependencies`.
 - pnpm reports `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`: `node_modules` holds an install with other settings, such as one from `pnpm install --prod`. pnpm asks before it removes `node_modules`, and a push has no terminal for the question. Run `pnpm install` in a terminal and answer yes.

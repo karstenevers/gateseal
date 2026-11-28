@@ -1,9 +1,8 @@
 """The node-project examples that the docs publish are policies that tests lock.
 
-docs/add-a-tool.md's tsc-app definition and table, and docs/typescript.md's
-typescript-types table and its version exception, are the files these tests
-write into a team policy. docs/typescript.md's typescript-typed-lint table is
-the bundled policy's. A fake upstream answers where gateseal policy lock
+docs/add-a-tool.md's tsc-app definition and table are files that these tests
+write into a team policy, beside a typescript-types table and a version
+exception for it. A fake upstream answers where gateseal policy lock
 would ask nodejs.org and npm.
 """
 
@@ -12,7 +11,7 @@ import tomllib
 
 from doc_examples import example
 from gateseal import authoring
-from gateseal.policy import bundled_root, load_policy_tree
+from gateseal.policy import load_policy_tree
 from node_policy import VERSION, lockfile
 from node_project_policy import (
     HEADER,
@@ -24,9 +23,17 @@ from test_team_tools import consumer, team
 
 APP_DEFINITION = example("add-a-tool.md", "policy file: tools/tsc-app.toml")
 APP_TABLE = example("add-a-tool.md", "policy tables: tsc-app")
-TYPES_TABLE = example("typescript.md", "policy tables: typescript-types")
-TYPED_LINT_TABLE = example("typescript.md", "policy tables: typescript-typed-lint")
-EXCEPTION = example("typescript.md", "manifest tables: tsc exception")
+TYPES_TABLE = """\
+[capabilities.typescript-types.tools.tsc]
+pin = "6.0.3"
+reviewed = ["6.0.3", "7.0.2", "5.9.3"]
+"""
+EXCEPTION = """\
+[exceptions.tsc]
+version = "7.0.2"
+reason = "Check types with the faster native compiler."
+review_by = 2027-03-01
+"""
 
 
 def policy_root(tmp_path, table, files=None):
@@ -94,25 +101,9 @@ def test_the_tsc_exception_selects_a_version_that_the_table_reviews(
     tmp_path,
     registry,  # noqa: F811
 ):
-    shown = tomllib.loads(TYPES_TABLE)["capabilities"]["typescript-types"]
     root = policy_root(tmp_path, TYPES_TABLE)
     authoring.lock(root)
     policy = load_policy_tree(root)
     _, compiled = consumer(policy, ("typescript-types",), f"\n{EXCEPTION}")
     wanted = tomllib.loads(EXCEPTION)["exceptions"]["tsc"]["version"]
-    assert wanted != shown["tools"]["tsc"]["pin"]
     assert compiled["components"]["tsc"]["version"] == wanted
-
-
-def test_the_typescript_types_example_is_part_of_the_bundled_policy():
-    shown = tomllib.loads(TYPES_TABLE)
-    bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
-    capability = bundled["capabilities"]["typescript-types"]
-    assert shown["capabilities"]["typescript-types"] == capability
-
-
-def test_the_typescript_typed_lint_example_is_part_of_the_bundled_policy():
-    shown = tomllib.loads(TYPED_LINT_TABLE)["capabilities"]
-    bundled = tomllib.loads((bundled_root() / "policy.toml").read_text())
-    capability = bundled["capabilities"]["typescript-typed-lint"]
-    assert shown == {"typescript-typed-lint": capability}

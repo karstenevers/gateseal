@@ -16,14 +16,7 @@ The first commit needs network access to download the hook environments, selecte
 
 ## Commit changes
 
-Stage your changes. Then commit them:
-
-```sh
-git add example.txt
-git commit -m 'Update example'
-```
-
-The first hook refuses staged generated files that differ from `gateseal.lock`, the Lock. The other hooks check the staged files. A hook that checks the whole project, such as Pyright, runs at every commit. Stage `.pre-commit-config.yaml` in full, because pre-commit stops if it has unstaged changes.
+Stage your changes and commit them as usual. The first hook refuses staged generated files that differ from `gateseal.lock`, the Lock. The other hooks check the staged files. A hook that checks the whole project, such as Pyright, runs at every commit. Stage `.pre-commit-config.yaml` in full, because pre-commit stops if it has unstaged changes.
 
 To check all tracked files, run:
 
@@ -51,44 +44,20 @@ To run the checks of a push without a push, run:
 pre-commit run --hook-stage pre-push --all-files
 ```
 
-A push then checks the files that it changes. A check of the whole project, such as `tsc`, runs at every push. A failed check stops the push before the remote changes. The CI gate runs the same checks, so a clone without the push hook is still checked there. A check can read the pushed range from `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF`. Both are empty when pre-commit checks all files, such as at the first push of a repository.
+A push then checks the files that it changes. A check of the whole project, such as `tsc`, runs at every push. A failed check stops the push before the remote changes. The CI gate runs the same checks, so a clone without the push hook is still checked there.
 
 pre-commit sets two limits at a push, which the CI gate does not have:
 
 - It checks each file as the clone holds it, not as the pushed commit holds it. Check out the branch that you push, and commit your changes first.
 - When one push updates more than one branch, it checks only one of them.
 
-If the repository later drops its checks at a push, remove the push hook, because it keeps Git LFS from installing its own. `gateseal setup --refresh` removes the push hook that it wrote, once no worktree of the clone has checks at a push. `status` names such a hook. After `pre-commit install`, run `pre-commit uninstall --hook-type pre-push`.
+If the repository later drops its checks at a push, remove the push hook, because it keeps Git LFS from installing its own. Run `gateseal setup --refresh`, or `pre-commit uninstall --hook-type pre-push` after a plain `pre-commit install`.
 
 ### Git LFS
 
-Git LFS uploads files from its own push hook, and the push hook of pre-commit takes its place. Uploads continue in two cases:
+Git LFS uploads files from its own push hook, and the push hook of pre-commit takes its place. To keep the uploads, set up Git LFS before `pre-commit install`, or run `gateseal setup --refresh`. Git LFS then uploads before the checks at a push run.
 
-- Git LFS was set up before `pre-commit install`. pre-commit keeps the hook of Git LFS as `pre-push.legacy` and runs it first.
-- You ran `gateseal setup --refresh`. With the push hook, it adds a hook to the clone's Git configuration. That hook starts Git LFS at each push, on every branch and in every worktree. The hook does nothing where Git LFS is not set up, or where the clone holds no Git LFS object. Where the clone holds Git LFS objects but `git-lfs` is missing, the hook stops the push. In a clone with the push hook, `git lfs install` reports `Hook already exists: pre-push`. Uploads still work, but Git LFS skips its other hooks, which only files that Git LFS locks need. To add them, run `git lfs update --manual` and add each hook that it prints, except `pre-push`.
-
-In both cases, Git LFS uploads before the checks at a push run. A push that a check stops can leave its LFS objects on the remote, but the remote branch does not change.
-
-If the repository later drops its checks at a push, `gateseal setup --refresh` removes the push hook and `hook.gateseal-lfs-upload`, the hook that it added to the Git configuration. It keeps `hook.gateseal-lfs-upload` while another push hook keeps Git LFS from writing its own. When it removes both in a clone that holds Git LFS objects, it runs `git lfs update`. Git LFS writes its own push hook, so the next push uploads.
-
-After a plain `pre-commit install`, Git LFS set up later cannot write its hook. A push then stops with this message:
-
-```text
-gateseal: This repository tracks files with Git LFS, but no push hook of this clone starts Git LFS, so a push uploads no LFS object.
-```
-
-To repair the clone, run `gateseal setup --refresh`. Without gateseal, run these commands from the clone's root. Then push again:
-
-```sh
-git lfs update --force
-pre-commit install
-```
-
-Those commands replace a push hook that pre-commit kept as `pre-push.legacy`. In a clone with that file, the message names another repair: add the line `git lfs pre-push "$@"` to the file, and make the file executable.
-
-The check also stops a push when a commit that the remote lacks holds a Git LFS pointer, even if the clone tracks no file with Git LFS now. It accepts any push hook of Git's configuration that runs `git lfs pre-push`.
-
-The check runs only on a branch whose configuration has checks at a push. Until you repair the clone, a push from another branch or worktree uploads no LFS object, and nothing stops it.
+If a push says that no push hook starts Git LFS, see [Troubleshoot gateseal](troubleshooting.md#a-push-runs-no-checks-or-stops-for-git-lfs).
 
 ## Add your own hooks
 

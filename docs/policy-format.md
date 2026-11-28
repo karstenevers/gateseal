@@ -63,15 +63,13 @@ pin = "1.10.1"
 reviewed = ["1.10.1", "1.9.0", "1.8.0"]
 ```
 
-A repository selects this policy in its Manifest. [Manifest and Lock](policy-contract.md#example) shows the matching Manifest.
-
-[How gateseal works](architecture.md#how-the-policy-manifest-and-lock-connect) shows how the policy, the Manifest and the Lock connect, with excerpts of all three.
+A repository selects this policy in its Manifest. [Manifest and Lock](policy-contract.md#example) shows the matching Manifest. [How gateseal works](architecture.md#how-the-policy-manifest-and-lock-connect) shows how the two files and the Lock connect.
 
 ## Policy fields
 
 `policy.toml` uses schema `5`. It needs a printable `release` label of at most 128 characters and `minimum_compiler` in `major.minor.patch` form. It needs at least one capability and one tool per capability. Tools and capabilities run in file order.
 
-Optional `time_budget_seconds` sets the CI gate's [time budget](ci-gate.md#time-budget) in whole seconds, such as `300` for five minutes. A slower gate warns but never fails.
+Optional `time_budget_seconds` sets the CI gate's [time budget](ci-gate.md#time-budget) in whole seconds.
 
 `node` pins the Node version, in `major.minor.patch` form such as `"24.22.3"`, that every tool from npm runs on. It is required when a tool runs on Node and refused otherwise, both with `invalid_field`. A gateseal release without `node` stops on it with `invalid_field`. So set `minimum_compiler` to the first release that has `node` and the [`npm-package` kind](tool-definitions.md#tools-from-npm). An older gateseal then stops with `incompatible_compiler` and names the release to use.
 
@@ -87,7 +85,7 @@ Optional `time_budget_seconds` sets the CI gate's [time budget](ci-gate.md#time-
 | `optional` | Distinct hooks the repository may skip. |
 | `choices.<choice>` | Exposed choice and its default. |
 
-Capability and tool names match `[a-z][a-z0-9-]*`, and choice names match `[a-z][a-z0-9_]*`. gateseal checks the schema and minimum compiler before other fields. A mismatch gives `unsupported_schema` or `incompatible_compiler`. The compiler supplies definitions for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `eslint-typed`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript`, and `stryker`. Other definitions belong in `tools/<name>.toml`; see [Tool definitions](tool-definitions.md). A missing definition gives `unknown_tool`. A reserved name, such as `node`, gives `reserved_tool_name`. Duplicate hooks, names, outputs, or tool assignments give `duplicate_identifier`.
+Capability and tool names match `[a-z][a-z0-9-]*`, and choice names match `[a-z][a-z0-9_]*`. gateseal checks the schema and minimum compiler before other fields. A mismatch gives `unsupported_schema` or `incompatible_compiler`. gateseal has [built-in definitions](tool-definitions.md) for the tools of the bundled policy. Other definitions belong in `tools/<name>.toml`; see [Tool definitions](tool-definitions.md). A missing definition gives `unknown_tool`. A reserved name, such as `node`, gives `reserved_tool_name`. Duplicate hooks, names, outputs, or tool assignments give `duplicate_identifier`.
 
 ### Alternatives
 
@@ -124,7 +122,7 @@ The `skip` default is empty. A repository can skip only a hook named in `optiona
 
 A policy can expose a tool's declared choice, an alternative, `skip`, or `exclude`. `exclude` skips paths for the entire capability. A capability with a history scan or a tool with the `project` scope cannot expose `exclude`. A rule file cannot set a key that the policy exposes as a choice.
 
-Rule files use UTF-8 TOML and LF line endings. They must be regular, non-executable files under distinct relative paths. Path segments use lowercase letters, digits, dots, underscores, and hyphens. A segment cannot be `.` or `..`. A Betterleaks or Gitleaks rule file can have an `extend` table with only `useDefault` and `disabledRules`. It then starts from the rules built into the tool and turns off the rules that `disabledRules` names. Any other `extend` is invalid, because it could load another file. A Pyright rule file cannot set `extends` in `[tool.pyright]`, for the same reason. A rule file of a tool that runs on Node cannot set `plugins` at the top level or in the `options` of an entry of `overrides`, because Prettier would load each plugin from the repository. Each gives `invalid_field`. An ESLint rule file holds only the keys of the [ESLint format](tool-definitions.md#eslint-configuration-format).
+Rule files use UTF-8 TOML and LF line endings. They must be regular, non-executable files under distinct relative paths. Path segments use lowercase letters, digits, dots, underscores, and hyphens. A segment cannot be `.` or `..`. A Betterleaks or Gitleaks rule file can have an `extend` table with only `useDefault` and `disabledRules`. It then starts from the rules built into the tool and turns off the rules that `disabledRules` names. Any other `extend` is invalid, because it could load another file. A Pyright rule file cannot set `extends` in `[tool.pyright]`, for the same reason. A rule file of a tool that runs on Node cannot set `plugins`, also not in the `options` of an override. Prettier would load each plugin from the repository. Each gives `invalid_field`. Pin Prettier 3 or later, because Prettier 2 has more options that load code from the repository. An ESLint rule file holds only the keys of the [ESLint format](tool-definitions.md#eslint-configuration-format).
 
 Each release is flat. The keys `extends`, `extend`, `inherit`, `include`, and `base` give `policy_inheritance`. A pin must be reviewed and meet the other selected tools' requirements. Incompatible pins give `incompatible_policy`.
 
@@ -132,20 +130,7 @@ Each release is flat. The keys `extends`, `extend`, `inherit`, `include`, and `b
 
 `policy.lock` is generated JSON. It records the upstream Git commit, the archive URL and SHA-256, or the PyPI package for each reviewed version. For an npm tool, it records npm's lockfile of the tool's package and `packages`: every package that npm installs, with its integrity hash. For an ESLint rule file with [presets](tool-definitions.md#presets), it also records `presets`: the rules of each preset, by package and preset name. `gateseal policy check` validates the file offline. `gateseal policy lock` and `gateseal policy add` check upstream data and download new archives before writing. An executable marked `check_at_commit` also gets an executable SHA-256.
 
-A policy with `node` also gets a top-level `node` record. It holds the version and an archive for `linux-x64` and for `macos-arm64`. Each archive has its URL on nodejs.org and its SHA-256 from the release's `SHASUMS256.txt`. `gateseal policy lock` downloads each archive that the record lacks and checks it:
-
-```jsonc
-"node": {
-  "platforms": {
-    "linux-x64": {
-      "sha256": "061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2",
-      "url": "https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-x64.tar.gz"
-    },
-    "macos-arm64": { "sha256": "…", "url": "…" }
-  },
-  "version": "24.22.3"
-}
-```
+A policy with `node` also gets a `node` record: the version, and the URL and SHA-256 of the archive for each platform.
 
 | Code | Meaning |
 | --- | --- |
@@ -157,7 +142,7 @@ A policy with `node` also gets a top-level `node` record. It holds the version a
 | `policy_changed` | A policy file changed during the operation. Review it. Retry. |
 | `invalid_invocation`, `unknown_component`, `version_unreviewed`, `requires_conflict`, `policy_edit_unsupported` | Check the component, reviewed version, requirements, or TOML layout in the diagnostic. |
 
-After you change `node`, a tool's `packages`, or the `presets` of an ESLint rule file, loading the policy gives `policy_lock_stale` until you run `gateseal policy lock`. For Node, `upstream_asset_missing` means that the release lacks `SHASUMS256.txt` or an archive. `upstream_checksum_missing` means that `SHASUMS256.txt` lists no archive for a platform. `upstream_changed` means that it lists another SHA-256 than the record. For an npm tool, `upstream_release_missing` gives npm's report of a package or version that the registry lacks, and `upstream_executable_missing` means that the tool's package links no program of `executable.name`. For a preset, `tool_failed` means that Node could not read the presets from the installed packages.
+After you change `node`, a tool's `packages`, or the `presets` of an ESLint rule file, loading the policy gives `policy_lock_stale` until you run `gateseal policy lock`.
 
 See [Author a team policy](author-a-policy.md#review-a-tool-version) for review and recovery steps.
 

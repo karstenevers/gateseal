@@ -56,9 +56,7 @@ nav:
       - Troubleshoot: troubleshooting.md
   - Checks:
       - Adjust a setup: adjust-a-setup.md
-      - Check Python tests: python-tests.md
-      - Check Python dependencies: python-dependencies.md
-      - Check TypeScript: typescript.md
+      - Built-in tools: built-in-tools.md
       - Upgrade and roll back: upgrade.md
   - CI:
       - The CI gate: ci-gate.md

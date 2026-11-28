@@ -20,15 +20,29 @@ from pathlib import Path
 
 import pytest
 from conftest import on_machine
-from doc_examples import example
 from installation import process, success
 
 pytestmark = pytest.mark.integration
 
 VITEST = ("typescript-vitest", "typescript-crap", "typescript-mutation")
 JEST = ("typescript-jest", "typescript-crap", "typescript-mutation")
-PACKAGE = example("typescript.md", "typescript-tests-package", "json")
-VITEST_CONFIG = example("typescript.md", "typescript-tests-vitest-config", "ts")
+PACKAGE = """\
+{
+  "name": "shop",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "vitest": "5.1.1"
+  }
+}
+"""
+VITEST_CONFIG = """\
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: { coverage: { include: ["src/**"] } },
+});
+"""
 PNPM_FIELDS = {"packageManager": "pnpm@10.28.0"}
 JEST_PACKAGE = {
     "name": "shop",
