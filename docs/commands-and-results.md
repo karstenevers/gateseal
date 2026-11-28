@@ -14,7 +14,7 @@ The command exits 3 with code `needs_setup`. Its `next_steps` contains `gateseal
 
 | Command | Purpose |
 | --- | --- |
-| `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. See [Git LFS](work-in-a-configured-repository.md#git-lfs) for how the push launcher starts Git LFS. |
+| `setup` | Install pre-commit and the launcher. `--refresh` adds the commit launcher to an existing clone, and the push launcher if a selected hook runs at a push. See [Git LFS](work-in-a-configured-repository.md#git-lfs). |
 | `configure` | Generate the Lock (`gateseal.lock`) and other files from the Manifest (`gateseal.toml`). |
 | `check` | Validate the selected policy and generated files. |
 | `status` | Report readiness without network access, and warn about settings that skip the hooks. This is the default command. |

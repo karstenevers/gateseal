@@ -13,58 +13,106 @@
 </p>
 
 
-gateseal keeps one reviewed set of commit checks in every repository, on developer machines and in CI.
+gateseal sets up the same checks for every repository, on developer machines and in CI, as easily as adding a dependency. You name the checks, and a lock file pins every tool version.
 
-## Who it is for
+- **Platform teams** review a policy release once.
+- **Repositories** adopt it. Each commit and CI run checks that nothing drifted from it.
+- **Developers and coding agents** commit as usual.
 
-- **Platform teams** review a policy release once and roll it out to many repositories.
-- **Repository maintainers** adopt a release and see when the repository drifts from it.
-- **Developers and coding agents** commit as usual. pre-commit runs the pinned checks.
+## Quick start
 
-## Why use it
-
-- **One source of truth.** A versioned policy records tool versions, rules, binary checksums, and CI settings.
-- **Drift detection.** Each commit and CI run compares the generated files with the Lock.
-- **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock. A type checker such as Pyright or `tsc` reads the packages that the repository's lockfile pins.
-- **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries and Node must match recorded checksums. A tool from npm installs a locked package tree with integrity hashes and runs no install script, [unlike pre-commit's Node hooks](docs/why-gateseal.md#pre-commits-node-hooks).
-- **Fast CI out of the box.** Pull requests check only changed files, and a manual or weekly run checks everything. Pyright checks the whole project each time, and the test checks run only when a Python file changed. A new push cancels the older run, and an optional time budget warns when the gate gets slow. [How it works](docs/ci-gate.md#what-the-gate-checks).
-- **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and the next step.
-
-## When not to use it
-
-For one or two repos, a pre-commit config and a CI job that runs `pre-commit run --all-files` cover most needs. Use gateseal when you also want drift checks, pinned binaries, or one standard across many repos. [Why gateseal](docs/why-gateseal.md) compares it with pre-commit.ci, Dependabot, and Renovate.
-
-A team standard needs a policy repository plus a Manifest and a Lock in each repository. The bundled policy needs no policy repository.
-
-## Get started
-
-Install Git 2.54.0 or later, pre-commit 4.7.0 or later, [mise](https://mise.jdx.dev/) 2026.10.19 or later, and [uv](https://docs.astral.sh/uv/). From a Git repository, run:
+With uv, Git 2.54+ and pre-commit 4.7+ installed, run this from the root of a Git repository:
 
 ```sh
-uv tool install gateseal
-gateseal configure --capability hygiene --capability secrets --ci github
-pre-commit install
+uv tool install gateseal                             # install gateseal
+gateseal configure --capability hygiene --ci github  # write the Manifest, the Lock and a CI workflow
+pre-commit install                                   # check each commit
 ```
 
-This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for ESLint and Prettier. [Built-in tools](docs/built-in-tools.md) lists every check.
+Review the generated files and commit them together. To add checks later, list more capabilities in `gateseal.toml`, the Manifest, and run `gateseal configure` again:
 
-Review the generated files and commit them together. `gateseal.toml`, the Manifest, selects the policy and checks. `gateseal.lock`, the Lock, records that selection and the generated files. See [Install gateseal](docs/install.md) for requirements and [Configure a repository](docs/configure-a-repository.md) for each step.
+```toml
+# gateseal.toml, the Manifest
+schema = 1
+capabilities = ["hygiene", "secrets", "python"]
 
-Teammates need Git and pre-commit, but not gateseal. They also need mise for release binaries such as Betterleaks and for tools from npm such as ESLint, and uv for tools that run in the uv project, such as Pyright. See [Work in a configured repository](docs/work-in-a-configured-repository.md).
+[policy]
+source = "bundled"
+release = "2026.11-team-tools"
+
+[ci]
+provider = "github"
+default_branch = "main"
+```
+
+Some checks need more tools, such as mise for Betterleaks. [Configure a repository](docs/configure-a-repository.md) shows each step.
+
+## Why gateseal
+
+- **One reviewed source.** A versioned policy records tool versions, rules, checksums and CI settings.
+- **Local equals CI.** Commits, pushes and CI runs use the same pinned versions. Each commit and CI run fails when a generated file drifts from the Lock.
+- **Safe installs.** A moved tag cannot change what runs. Hook repositories are pinned by commit ID, and release binaries and Node must match recorded checksums. A tool from npm installs locked packages with integrity hashes and runs no install script.
+- **Fast CI.** Most checks see only the changed files of a pull request, and a new push cancels the older run.
+- **Agent-friendly.** Commands never prompt. `--json` results say what failed and the next step.
+
+For one or two repositories, a pre-commit config and a CI job can be enough. [Why gateseal](docs/why-gateseal.md) compares it with pre-commit, pre-commit.ci, Dependabot and Renovate.
 
 ## What it supports
 
-- **Bundled checks:** file hygiene, Ruff and Pyright for Python, Python tests with coverage, CRAP scores and mutation tests at each push, Python dependency checks with `uv lock --check`, deptry and a vulnerability audit in CI, ESLint, Prettier, tsc and knip for TypeScript with a vulnerability audit in CI, TypeScript tests with coverage, CRAP scores and mutation tests at each push, and Betterleaks for secrets. A team policy can [add other tools](docs/add-a-tool.md).
-- **CI:** GitHub Actions and Azure Pipelines (Azure DevOps).
-- **Platforms:** macOS on arm64 and Linux on x86-64.
-- **Planned:** upgrade pull requests for new tool releases, and Windows.
+### Built-in checks
 
-## Documentation
+You turn on checks in groups, by capability name. A capability you do not select adds nothing. Any repository can select file hygiene with pre-commit-hooks and secret scans with Betterleaks.
 
-- [Try gateseal](docs/demo.md) in a scratch repository.
-- [Adjust checks](docs/adjust-a-setup.md), enable CI on [GitHub](docs/github-ci.md) or [Azure Pipelines](docs/azure-pipelines.md), or [upgrade](docs/upgrade.md).
-- [Adopt a team policy](docs/adopt-a-team-policy.md) or [author one](docs/author-a-policy.md).
-- [Troubleshoot](docs/troubleshooting.md), look up [commands](docs/commands-and-results.md), or read [how gateseal works](docs/architecture.md).
-- [Contribute](CONTRIBUTING.md) or report a vulnerability as [SECURITY.md](SECURITY.md) describes.
+| Check | Python | TypeScript |
+| --- | --- | --- |
+| Lint and format | Ruff | ESLint, Prettier |
+| Types | Pyright | `tsc`, type-aware ESLint rules |
+| Dependencies | `uv lock --check`, deptry | knip |
+| Tests with coverage | pytest with coverage.py | Vitest or Jest |
+| CRAP score of each function in a changed file | From the coverage.py report | From the Vitest or Jest report |
+| Mutation tests of the changed lines | pytestmut | StrykerJS |
+| Known vulnerabilities, in CI | `uv audit` | OSV-Scanner, for npm |
 
-[MIT license](LICENSE)
+Some checks run at each commit and others at each push. Tests run only when a push changes a source file. The CI gate runs the same checks under the same conditions. A team policy sets the CRAP limit. [Built-in tools](docs/built-in-tools.md) gives the capability name, timing and needs of each check.
+
+### Your own tools
+
+A team policy can [add other tools](docs/add-a-tool.md) of five kinds:
+
+| Kind | What gateseal runs | Example |
+| --- | --- | --- |
+| Hook repository | A pre-commit hook, pinned by commit ID | [Black](docs/add-a-tool.md#offer-black-as-a-formatter) |
+| Release binary | A downloaded program, checked by SHA-256 | [Gitleaks](docs/add-a-tool.md#add-gitleaks) |
+| uv project | A Python tool that imports the project | [mypy](docs/add-a-tool.md#add-mypy-a-tool-that-imports-the-project) |
+| npm package | A tool from npm, on a pinned Node | [Prettier for Markdown](docs/add-a-tool.md#format-markdown-with-prettier-from-npm) |
+| Node project | A tool from npm that reads the project's packages | [`tsc` with strict flags](docs/add-a-tool.md#check-a-second-tsconfig-with-strict-tsc-flags) |
+
+A repository can also run its own script as a check. See [Adjust a setup](docs/adjust-a-setup.md).
+
+### CI and platforms
+
+| | Supported | Planned |
+| --- | --- | --- |
+| CI | GitHub Actions, Azure Pipelines | |
+| Platforms | macOS on arm64, Linux on x86-64 | Windows |
+| Package managers | uv; npm and pnpm | |
+| Tool updates | `gateseal upgrade` to a reviewed version | Pull requests for new tool releases |
+
+## What you can do with it
+
+| Goal | How | Guide |
+| --- | --- | --- |
+| Install gateseal | `uv tool install gateseal` | [Install gateseal](docs/install.md) |
+| See a check work first | A scratch repository | [Try gateseal](docs/demo.md) |
+| Change the checks | `capabilities` in `gateseal.toml`, then `gateseal configure` | [Configure a repository](docs/configure-a-repository.md) |
+| Commit in a repository that uses gateseal | `pre-commit install`, no gateseal needed | [Work in a configured repository](docs/work-in-a-configured-repository.md) |
+| Run slow checks at a push | A check at push, such as `python-tests`, then `pre-commit install` in each clone | [Checks at a push](docs/work-in-a-configured-repository.md#checks-at-a-push) |
+| Block a merge that fails a check | `--ci github` or `--ci azure`, then make the check required | [GitHub Actions](docs/github-ci.md), [Azure Pipelines](docs/azure-pipelines.md) |
+| Move to a new tool or policy release | `gateseal upgrade` with a policy tag or a tool version | [Upgrade and roll back](docs/upgrade.md) |
+| Use one standard in many repositories | `--policy <URL> --policy-tag <tag>` | [Adopt a team policy](docs/adopt-a-team-policy.md) |
+| Publish a team standard | `gateseal policy init <dir>`, commit, then tag a release | [Author a team policy](docs/author-a-policy.md) |
+| Let a coding agent read the results | `--json` on any command | [Commands and results](docs/commands-and-results.md) |
+| Fix a check that stops or does not run | Look up the symptom | [Troubleshoot](docs/troubleshooting.md) |
+| Learn the design | The Manifest, the Lock and the policy | [How gateseal works](docs/architecture.md) |
+
+[Contribute](CONTRIBUTING.md) · [Report a vulnerability](SECURITY.md) · [MIT license](LICENSE)
