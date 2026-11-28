@@ -104,7 +104,7 @@ shipping = 20
 
 The function passes while its score stays at or under its entry. The hook fails when the score rises over the entry. It also fails when the score falls within the limit, or when the function is gone. Then lower or remove the entry.
 
-A change may lower or remove an entry, but not add or raise one. At a push and in a ranged gate, the hook compares the file with its version at the range's base. A file that the start lacks counts as adopted, so commit the first baseline on its own. A change to `.crap-baseline.toml` alone starts no check, so review each one.
+A change may lower or remove an entry, but not add or raise one. In a ranged gate, the hook compares the file with its version at the range's base. At a push, it compares with the commits that the remote already has, as `git fetch` last saw them. So entries that a rebase or a merge of `origin/main` brings in are not new. In a ranged gate, a file that the range's start lacks counts as adopted. At a push, it counts as adopted when neither the remote's old tip of the branch nor the remote's commits that the push builds on have it. So commit the first baseline on its own. A change to `.crap-baseline.toml` alone starts no check, so review each one.
 
 ## Run the tests once in CI
 

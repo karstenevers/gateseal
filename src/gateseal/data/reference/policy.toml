@@ -34,8 +34,8 @@ reviewed = ["7.17.3", "7.17.2"]
 # the limit.
 [capabilities.python-crap.tools.crap]
 configuration = "rules/crap.toml"
-pin = "0.1.0"
-reviewed = ["0.1.0"]
+pin = "0.1.3"
+reviewed = ["0.1.3", "0.1.0"]
 
 [capabilities.python-crap.choices]
 exclude = []
@@ -148,8 +148,8 @@ reviewed = ["30.5.2"]
 # The rules set the limit.
 [capabilities.typescript-crap.tools.crap-typescript]
 configuration = "rules/crap-typescript.toml"
-pin = "0.1.0"
-reviewed = ["0.1.0"]
+pin = "0.1.3"
+reviewed = ["0.1.3", "0.1.0"]
 
 [capabilities.typescript-crap.choices]
 exclude = []
