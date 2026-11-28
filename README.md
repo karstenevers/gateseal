@@ -26,7 +26,7 @@ gateseal keeps one reviewed set of commit checks in every repository, on develop
 - **One source of truth.** A versioned policy records tool versions, rules, binary checksums, and CI settings.
 - **Drift detection.** Each commit and CI run compares the generated files with the Lock.
 - **Local equals CI.** Commits and CI runs use the same tool versions, recorded in the Lock. A type checker such as Pyright or `tsc` reads the packages that the repository's lockfile pins.
-- **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries and Node must match recorded checksums. A tool from npm installs a locked package tree with integrity hashes and runs no install script, [unlike pre-commit's Node hooks](docs/typescript.md#gateseal-and-pre-commits-node-hooks).
+- **Supply-chain security.** A moved tag can't change what runs. Hook repositories are pinned by commit ID, and release binaries and Node must match recorded checksums. A tool from npm installs a locked package tree with integrity hashes and runs no install script, [unlike pre-commit's Node hooks](docs/why-gateseal.md#pre-commits-node-hooks).
 - **Fast CI out of the box.** Pull requests check only changed files, and a manual or weekly run checks everything. Pyright checks the whole project each time, and the test checks run only when a Python file changed. A new push cancels the older run, and an optional time budget warns when the gate gets slow. [How it works](docs/ci-gate.md#what-the-gate-checks).
 - **Agent-friendly.** Commands give guidance without prompts. `--json` results say what failed and why, and the next step.
 
@@ -46,7 +46,7 @@ gateseal configure --capability hygiene --capability secrets --ci github
 pre-commit install
 ```
 
-This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for [ESLint and Prettier](docs/typescript.md).
+This turns on file hygiene checks, Betterleaks for secrets, and a GitHub Actions workflow. In a Python repository, add `--capability python` for Ruff. In a TypeScript repository, add `--capability typescript` for ESLint and Prettier. [Built-in tools](docs/built-in-tools.md) lists every check.
 
 Review the generated files and commit them together. `gateseal.toml`, the Manifest, selects the policy and checks. `gateseal.lock`, the Lock, records that selection and the generated files. See [Install gateseal](docs/install.md) for requirements and [Configure a repository](docs/configure-a-repository.md) for each step.
 

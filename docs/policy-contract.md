@@ -60,7 +60,7 @@ The Manifest is UTF-8 TOML with schema `1`. It needs `capabilities` and `policy`
 
 ### Capabilities
 
-Select at least one distinct capability from the policy. The bundled policy offers `hygiene`, `python`, `python-types`, `python-tests`, `python-crap`, `python-mutation`, `python-lock`, `python-audit`, `python-dependencies`, `secrets`, [`typescript`](typescript.md), [`typescript-types`](typescript.md#type-checks-at-push), [`typescript-typed-lint`](typescript.md#typed-lint-at-push), [`typescript-unused`](typescript.md#unused-code-with-knip), [`typescript-audit`](typescript.md#the-audit), and the [TypeScript test checks](typescript.md#test-checks-at-push) `typescript-vitest`, `typescript-jest`, `typescript-crap` and `typescript-mutation`. Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
+Select at least one distinct capability from the policy. [Built-in tools](built-in-tools.md) lists the capabilities of the bundled policy. Checks run in policy order. gateseal does not infer capabilities from files. An invalid selection gives `unsupported_capability`. For a new repository, `configure` needs at least one `--capability`. In an existing repository, supplied options must match the Manifest. A conflict gives `configure_assertion_failed`.
 
 ### Policy
 
@@ -77,9 +77,7 @@ An invalid `repository`, `commit`, or `tag` gives `invalid_policy_source`. URLs 
 
 ### Choices
 
-`[choices.<capability>]` sets values that the policy exposes. Omitted values use policy defaults. The bundled `hygiene.exclude` and `typescript.exclude` choices list repository-relative paths to skip for the checks of that capability. Path segments use letters, digits, dots, underscores, and hyphens. The bundled `python.target_version` defaults to `py311` and sets Ruff's target independently of `requires-python`.
-
-The definition accepts `py37` through `py315`; the selected Ruff release must support the target. `py313` needs Ruff 0.4.5 or later, `py314` needs 0.11.8 or later, and `py315` needs 0.14.11 or later. An unsupported value gives `invalid_choice`.
+`[choices.<capability>]` sets values that the policy exposes. Omitted values use policy defaults. The bundled `hygiene.exclude` and `typescript.exclude` choices list repository-relative paths to skip for the checks of that capability. Path segments use letters, digits, dots, underscores, and hyphens. The bundled `python.target_version` defaults to `py311` and sets Ruff's target independently of `requires-python`. It accepts `py37` through `py315`, if the selected Ruff release supports the target. An unsupported value gives `invalid_choice`.
 
 ### Skip optional hooks
 
@@ -141,7 +139,7 @@ files = "^schema/"
 scope = "project"
 ```
 
-Without `files`, a project hook runs at every commit, also when the commit only deletes files. With `files`, it runs when a checked file matches: a staged file at a commit, a changed file in a CI gate run on a range, or any tracked file in `gateseal run` and in a CI run that [checks all files](ci-gate.md#what-the-gate-checks). A commit that only deletes matching files does not start it. A hook that changes a tracked file fails, so a freshness check needs only the generator in its script. A new file that Git does not track yet does not fail the hook.
+Without `files`, a project hook runs at every commit. With `files`, it runs when a checked file matches, as [Adjust a setup](adjust-a-setup.md#add-a-repository-hook) lists. A hook that changes a tracked file fails, so a freshness check needs only the generator in its script.
 
 ### Version exceptions
 
@@ -166,7 +164,7 @@ An invalid value gives `invalid_field` and names the key. An unsupported provide
 
 ## Lock
 
-The Lock is generated JSON with schema `2`. Review its `gateseal` repository, version and commit, and its `policy` release and digest. Review its `components`, `native_artifacts`, `choices`, `exceptions`, and `outputs`. Each output records its path and SHA-256. Release binary records include archive URLs and checksums by platform. A binary with commit-time verification also records the executable's SHA-256. A selection with a tool from npm records the policy's Node once, as `native_artifacts.node`, in the same form. The tool's record in `components` names its npm package, its version and its other `packages`.
+The Lock is generated JSON with schema `2`. Review its `gateseal` repository, version and commit, and its `policy` release and digest. Review its `components`, `native_artifacts`, `choices`, `exceptions`, and `outputs`. Each output records its path and SHA-256. A release binary and the policy's Node record their archive URLs and checksums by platform.
 
 The generated files include `.pre-commit-config.yaml`, selected files under `.gateseal/`, and the CI file when enabled. Do not hand-edit them. Configure refuses a conflicting or edited generated file with `ownership_conflict`. It writes the Lock last, so an interrupted operation can be retried. See [Troubleshoot gateseal](troubleshooting.md).
 

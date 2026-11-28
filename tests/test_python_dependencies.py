@@ -14,7 +14,6 @@ from importlib.resources import files
 
 import pytest
 from conftest import on_machine
-from doc_examples import example
 from gateseal.validation import canonical
 from gateseal.worktree import locate_worktree
 from installation import clone, process, success
@@ -33,12 +32,20 @@ NEW_HOOKS = {"uv-lock", "uv-audit", "deptry"}
 STATUSES = ("Passed", "Failed", "Skipped")
 
 
-PYPROJECT = example("python-dependencies.md", "python-dependencies-pyproject")
+PYPROJECT = """\
+[project]
+name = "labels"
+version = "0"
+requires-python = ">=3.12"
+dependencies = ["idna==3.10"]
+
+[tool.deptry]
+known_first_party = ["labels"]
+"""
 
 
 def project(idna="3.10", extra=""):
-    """Return the files of the docs' src-layout project, which imports idna."""
-    assert '"idna==3.10"' in PYPROJECT
+    """Return the files of a src-layout uv project that imports idna."""
     return {
         "pyproject.toml": PYPROJECT.replace("3.10", idna) + extra,
         "src/labels/__init__.py": (

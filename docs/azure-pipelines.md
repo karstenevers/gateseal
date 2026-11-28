@@ -35,7 +35,7 @@ Azure Pipelines does not run a new YAML file by itself. Create the pipeline one 
 4. Open the menu of the **Run** button and select **Save**.
 5. Rename the pipeline to `gateseal`.
 
-The pipeline now runs for each push to `default_branch` and when you start it manually. Each push build checks every tracked file. To also check every file each week, set `schedule = true`.
+The pipeline now runs for each push to `default_branch` and when you start it manually. Each push build checks [every tracked file](ci-gate.md#what-the-gate-checks).
 
 ## Require the gate for pull requests
 
@@ -49,30 +49,16 @@ In Azure Repos, a branch policy starts the build of a pull request. Add it one t
 
 To check pull requests to another branch, such as a release branch, add the same policy to that branch.
 
-With this expiration, each pull request is checked against the newest target branch before it completes. In a busy repository, an expiration of some hours saves builds.
-
-Azure DevOps starts no build for a draft pull request. The build starts when you publish it. After a new push to an open pull request, Azure DevOps cancels the older build, and the policy uses the result of the new one.
+With this expiration, each pull request is checked against the newest target branch before it completes. Azure DevOps starts no build for a draft pull request.
 
 ## Adjust the pipeline
 
-Add keys to `[ci]`, then run `gateseal configure` and commit the changed files. For example:
+Add keys to `[ci]`, such as `branches`, `schedule` or `timeout_minutes`. Then run `gateseal configure` and commit the changed files. [Manifest and Lock](policy-contract.md#ci) explains each key. Two notes for Azure Pipelines:
 
-```toml
-[ci]
-provider = "azure"
-default_branch = "main"
-branches = ["release/*", "develop"]
-schedule = true
-timeout_minutes = 60
-pool = "linux-agents"
-```
+- Pull request checks come from the build validation policy, not from `branches`.
+- An agent of the `pool` must run Linux on x64 and meet the [machine requirements](ci-gate.md#machine-requirements).
 
-- `branches` adds branches whose pushes the gate checks. `release/*` covers every branch below `release/`. Pull request checks come from the build validation policy, not from this key.
-- `schedule = true` adds a run every Monday at 04:37 UTC that checks every file of `default_branch`.
-- `timeout_minutes` stops the job after that many minutes. The default is 30. Keep it above the policy's [time budget](ci-gate.md#time-budget), or the budget warning never shows.
-- `pool` runs the job in an agent pool of your own agents. The job asks for an agent with `Agent.OS -equals Linux` and `Agent.OSArchitecture -equals X64`. The agent must meet the [machine requirements](ci-gate.md#machine-requirements).
-
-These keys need gateseal 0.3.0 or later. Move the repository to it with `gateseal upgrade` first. See [Manifest and Lock](policy-contract.md#ci) for every key.
+These keys need gateseal 0.3.0 or later. Move the repository to it with `gateseal upgrade` first.
 
 ## Run the gate in your own pipeline
 
@@ -114,8 +100,6 @@ The bundled policy needs no token. For a Git policy in Azure Repos, write its UR
 https://dev.azure.com/ORGANIZATION/PROJECT/_git/REPOSITORY
 ```
 
-The pipeline then names the policy repository as a repository resource that its job uses. Azure Pipelines lets the job's own token read a second repository only with that. The pipeline gives the token to Git for the policy repository only.
-
 The first run of the pipeline waits, with the message that the pipeline needs permission to access a resource. Open the run, select **View**, then **Permit**. Later runs do not wait.
 
 The job's token must have read access to the policy repository. It has that access in the project of the pipeline. For a policy in another project of the organization, give access to the build identity of the pipeline's project. Its name is `PROJECT Build Service (ORGANIZATION)`, with the name of the pipeline's project. Do these steps in the project of the policy:
@@ -135,4 +119,3 @@ The agent also needs unauthenticated read access to gateseal's repository and to
 
 - Without `pool`, the job runs on the Microsoft-hosted `ubuntu-24.04` image. No key selects another hosted image.
 - A Git policy in Azure Repos must be in the organization of the pipeline. Azure Pipelines looks for the repository resource in its own organization. For a policy in another organization, a run does not start, and Azure Pipelines reports that the project or the repository does not exist.
-- A push build checks all tracked files and scans every commit, because Azure Pipelines does not name the commit that a push replaced. See [what the gate checks](ci-gate.md#what-the-gate-checks).

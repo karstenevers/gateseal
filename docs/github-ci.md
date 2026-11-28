@@ -33,24 +33,12 @@ A pull request run and a push run check only the changed files. Only a manual ru
 
 ## Adjust the workflow
 
-Add keys to `[ci]`, then run `gateseal configure` and commit the changed files. For example:
+Add keys to `[ci]`, such as `branches`, `schedule` or `timeout_minutes`. Then run `gateseal configure` and commit the changed files. [Manifest and Lock](policy-contract.md#ci) explains each key. Two notes for GitHub:
 
-```toml
-[ci]
-provider = "github"
-default_branch = "main"
-branches = ["release/*", "develop"]
-schedule = true
-timeout_minutes = 60
-runs_on = ["self-hosted", "linux", "x64"]
-```
+- GitHub starts scheduled runs on the repository's default branch only, so keep `default_branch` the same as that branch.
+- A runner that `runs_on` selects must meet the [machine requirements](ci-gate.md#machine-requirements).
 
-- `branches` adds branches whose pushes the gate checks. `release/*` covers every branch below `release/`.
-- `schedule = true` adds a run every Monday at 04:37 UTC that checks every file. GitHub starts scheduled runs on the repository's default branch only, so keep `default_branch` the same as that branch.
-- `timeout_minutes` stops the job after that many minutes. The default is 30. Keep it above the policy's [time budget](ci-gate.md#time-budget), or the budget warning never shows.
-- `runs_on` selects the runner by its labels, such as your own runners or a larger runner. The runner must meet the [machine requirements](ci-gate.md#machine-requirements).
-
-These keys need gateseal 0.3.0 or later. Move the repository to it with `gateseal upgrade` first. See [Manifest and Lock](policy-contract.md#ci) for every key.
+These keys need gateseal 0.3.0 or later. Move the repository to it with `gateseal upgrade` first.
 
 ## Run the gate in your own workflow
 

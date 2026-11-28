@@ -1,48 +1,44 @@
 # Tool definitions
 
-A policy can describe a tool in `tools/<name>.toml`. The definition gives its source and hooks. Its filename sets the tool name, which must match `[a-z][a-z0-9-]*`. List that name under a capability in `policy.toml`.
+A policy can describe a tool in `tools/<name>.toml`. The definition gives the tool's source and hooks. Its filename sets the tool name, which must match `[a-z][a-z0-9-]*`. List that name under a capability in `policy.toml`. See [Add a tool](add-a-tool.md) for complete definitions.
 
-For example, this source fragment describes the Black hook repository:
-
-```toml
-[source]
-repository = "https://github.com/psf/black-pre-commit-mirror"
-tag = "{version}"
-```
-
-See [Add a tool](add-a-tool.md) for complete definitions. Built-in definitions exist for `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `eslint-typed`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript`, and `stryker`. A team definition cannot reuse those names or the reserved names `pre-commit`, `python`, and `node`.
+A team definition cannot reuse the name of a built-in definition, or the reserved names `pre-commit`, `python` and `node`. The built-in definitions are `pre-commit-hooks`, `ruff`, `pyright`, `coverage`, `crap`, `pytestmut`, `uv-lock`, `uv-audit`, `deptry`, `betterleaks`, `osv-scanner`, `prettier`, `eslint`, `eslint-typed`, `tsc`, `knip`, `vitest`, `jest`, `crap-typescript` and `stryker`.
 
 ## Shared fields
 
 | Field | Value |
 | --- | --- |
-| `kind` | `pre-commit-repository`, `release-binary`, `uv-project`, `npm-package` or `node-project`. |
-| `stages` | `["commit", "run", "ci"]`, `["push", "ci"]`, or `["ci"]`. |
-| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook gets no filenames and checks the whole project. It runs at every commit, or at every push in the push stage, unless it lists `types_or`. |
+| `kind` | `pre-commit-repository`, `release-binary`, `uv-project`, `npm-package` or `node-project`. See [Kinds](#kinds). |
+| `stages` | `["commit", "run", "ci"]` runs the hooks at commit, in `gateseal run` and in the CI gate. `["push", "ci"]` runs them at `git push` and in the CI gate. `["ci"]` runs them in the CI gate alone. |
+| `scope` | `files` or `project`. With `files`, pre-commit passes matching filenames. With `project`, the hook gets no filenames and checks the whole project. |
 | `configuration.format` | Optional `toml` or `eslint`. The generated file is `.gateseal/<name>.toml` or, for `eslint`, `.gateseal/<name>.json`. |
 | `files.<key>` | Optional fixed file with lowercase `extension` and text `content` using LF line endings. |
-| `hooks.<id>` | At least one hook. |
+| `hooks.<id>` | At least one hook. See [Hooks](#hooks). |
 | `history.args` | Optional arguments of the tool's executable for a CI history scan, for a `release-binary`, `uv-project` or `npm-package` tool. Include `{range}` exactly once. |
-| `choices.<name>` | Optional choice in the tool configuration. It needs a `toml` configuration. |
-| `network` | Optional `true` for a tool that asks a service on the network. A `release-binary` tool then also gets `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, their lower-case names, `SSL_CERT_FILE` and `SSL_CERT_DIR`. Defaults to `false`. |
+| `choices.<name>` | Optional [choice](#choices) in the tool configuration. It needs a `toml` configuration. |
+| `network` | Optional `true` for a tool that asks a service on the network. A `release-binary` tool then also gets the proxy and certificate variables. Defaults to `false`. |
 
-An unsupported kind or value gives `unsupported_tool_definition`. Unknown fields are invalid.
+An unsupported kind or value gives `unsupported_tool_definition`. So does a kind, stage or format that an older gateseal release lacks. Set the policy's `minimum_compiler` to the first release that has it. Unknown fields are invalid.
 
-## Stages
+Use the push stage for a tool that is too slow for each commit. Each clone then needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push).
 
-| `stages` | The hooks run |
-| --- | --- |
-| `["commit", "run", "ci"]` | At commit, in `gateseal run`, and in the CI gate. |
-| `["push", "ci"]` | At `git push` and in the CI gate. |
-| `["ci"]` | In the CI gate alone. |
-
-Use the push stage for a tool that is too slow for each commit. Each clone then needs the push hook. See [Checks at a push](work-in-a-configured-repository.md#checks-at-a-push). A gateseal release without the push stage gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has the stage.
+A tool with the `project` scope reads the working tree, so a capability with such a tool cannot expose `exclude`. Its hook runs at every commit or push of its stage, also when the change only deletes files. With `types_or`, the hook runs only when a changed file has one of those types.
 
 ## Hooks
 
-Each hook has a distinct `name`, optional literal `args`, optional `types_or`, optional `exclude`, optional `reads` and `writes`, optional `finding_exit_codes`, and `output`. gateseal's own hooks `gateseal-check`, `gateseal-lfs-check`, `gateseal-node-packages` and `gateseal-npm-tool` keep their IDs and names. A hook with one of them gives `duplicate_identifier`. A hook of a tool with the `project` scope that lists `types_or` runs only when a changed file has one of those types. `exclude` is a Python regular expression, as pre-commit reads one, without a flag for the whole expression, such as `(?i)`. The hook never gets a file whose path from the repository root matches it, such as `'(^|/)tests?/'` for test folders. Use `concise` for `file:line:column: rule message` findings. Use `plain` for pass, fail, or modified results without structured findings. Use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a [report](#reports). Other braces are invalid. Arguments are passed without a shell.
+| Field | Value |
+| --- | --- |
+| `name` | Required. The name that pre-commit shows. Hook IDs and names are distinct across the policy's tools. |
+| `output` | Required. `concise` for `file:line:column: rule message` findings. `plain` for pass, fail, or modified results without structured findings. |
+| `args` | Optional literal arguments, passed without a shell. |
+| `types_or` | Optional file types, as pre-commit names them. |
+| `exclude` | Optional Python regular expression without a flag for the whole expression, such as `(?i)`. The hook never gets a file whose path matches it, such as `'(^|/)tests?/'`. |
+| `reads`, `writes` | Optional [reports](#reports) that the hook reads or writes. |
+| `finding_exit_codes` | Optional distinct exit codes from 1 to 255 with which the tool reports a finding, such as `[1]`. |
 
-By default, every failure of a hook is a failed check, which exits 1. Some tools also fail when they cannot check, such as when they cannot reach a service. List the exit codes with which the tool reports a finding in `finding_exit_codes`, such as `[1]`. When the hook fails with another exit code, the hook is `stopped`, and `gateseal run` and the CI gate report `tool_failed` and exit 4. The list holds one or more distinct integers from 1 to 255. For example, the bundled `uv-audit` hook, shortened:
+In `args`, use `{configuration}` or `{<files key>}` as a whole argument to pass a generated file, and `{<report name>}` to pass a report. Other braces are invalid.
+
+By default, every failure of a hook is a failed check, which exits 1. Some tools also fail when they cannot check, such as when they cannot reach a service. With `finding_exit_codes`, a failure with another exit code makes the hook `stopped`. `gateseal run` and the CI gate then report `tool_failed` and exit 4. For example, the bundled `uv-audit` hook, shortened:
 
 ```toml
 [hooks.uv-audit]
@@ -52,7 +48,7 @@ output = "plain"
 finding_exit_codes = [1]
 ```
 
-Two tools can take different hooks from the same hook repository, as `uv-lock` and `uv-audit` do. Hook IDs and names stay distinct across the policy's tools.
+gateseal's own hooks `gateseal-check`, `gateseal-lfs-check`, `gateseal-node-packages` and `gateseal-npm-tool` keep their IDs and names. A hook with one of them gives `duplicate_identifier`.
 
 ## Reports
 
@@ -75,23 +71,31 @@ reads = ["coverage.data"]
 writes = ["coverage.json"]
 ```
 
-- A report name matches `[a-z][a-z0-9-]*\.[a-z0-9]+`, such as `coverage.json`. Its file is `.gateseal/reports/<name>`.
-- Use `{<report name>}` as a whole argument to pass that path. A hook can name only a report that it reads or writes. It lists each name once, and it cannot read a report that it writes.
-- An earlier hook must write each report that a hook reads, in a tool whose `stages` include every stage of the reading hook's tool. Hooks run in the order of the policy's capabilities, then tools, then hooks. Otherwise the policy stops with `missing_report`. `gateseal configure` stops with the same code when a Manifest selects the reading hook without the writing one.
-- A repository with a hook that writes a report gets the generated `.gateseal/reports/.gitignore`, so Git ignores every report.
-- `gateseal gate` deletes the reports of an earlier run before it starts the hooks. If a hook ran without a report that it reads, the gate exits 2 with `missing_report`. When the writing hook failed, the gate fails as a failed check instead. A commit or push through pre-commit alone does neither. So a tool that adds to a report of an earlier run, such as coverage.py with parallel data files, needs a hook that deletes it first.
+- A report name matches `[a-z][a-z0-9-]*\.[a-z0-9]+`, such as `coverage.json`. Its file is `.gateseal/reports/<name>`, which Git ignores.
+- An earlier hook must write each report that a hook reads, in a tool whose `stages` include every stage of the reading hook's tool. Hooks run in the order of the policy's capabilities, then tools, then hooks. Otherwise the policy stops with `missing_report`. So does `gateseal configure`, when a Manifest selects the reading hook without the writing one.
 - Give a reading hook the `types_or` of the hook that writes its report. Otherwise it can run when the writing hook does not.
-- `gateseal check` and `status` name each report and the hook that writes it.
+- `gateseal gate` deletes the reports of an earlier run before it starts the hooks. A commit or push through pre-commit alone does not. So a tool that adds to an earlier report, such as coverage.py with parallel data files, needs a hook that deletes it first.
+- If a hook ran in the gate without a report that it reads, the gate exits 2 with `missing_report`. When the writing hook failed, the gate fails as a failed check instead.
 
-## Sources and executables
+## Kinds
 
-A `pre-commit-repository` source has an HTTPS `repository` and a `tag` pattern containing `{version}`. The URL has no credentials, query, or trailing slash. The generated `policy.lock` records the upstream commit behind each reviewed tag. A Python hook uses pre-commit's Python.
+### Hook repositories
+
+A `pre-commit-repository` source has an HTTPS `repository` and a `tag` pattern that contains `{version}`. The URL has no credentials, query, or trailing slash. The generated `policy.lock` records the upstream commit behind each reviewed tag. A Python hook uses pre-commit's Python. Two tools can take different hooks from the same hook repository, as `uv-lock` and `uv-audit` do.
+
+### Release binaries
 
 A `release-binary` source also has `archive`, `checksums`, and `platforms`. The archive pattern contains `{platform}` and may contain `{version}`. The checksum filename may contain `{version}`. Map at least one of `linux-x64` and `macos-arm64` to its upstream platform name. Set `executable.name` to the bare program name.
 
-The optional `executable.check_at_commit` defaults to `false`. When true, the policy lock records the program's SHA-256 and the commit hook checks an installed copy. The check does not run in `gateseal run` or the CI gate. mise verifies an archive's recorded SHA-256 when it downloads the archive.
+mise checks the archive's recorded SHA-256 when it downloads the archive. With `executable.check_at_commit = true`, the policy lock also records the program's SHA-256, and the commit hook checks the installed copy. `gateseal run` and the CI gate do not make this check.
 
-A `uv-project` source has a `package`: the tool's name on PyPI, with any extras of the tool in brackets, such as `pyright[nodejs]`. Set `executable.name` to the program that the package installs. The source can also list the project's `extras` and dependency `groups` that the tool needs. `default_groups = false` leaves out the project's default groups:
+A release binary gets only the environment variables that mise keeps, such as `HOME` and `PATH`. A hook of any other kind gets the caller's environment. gateseal does not review what a tool does with its arguments. For example, a scanner may read a repository's ignore file.
+
+### Tools in the uv project
+
+A `uv-project` tool runs in the repository's own uv project, so it can import the project's packages. Its source has a `package`: the tool's name on PyPI, with any extras of the tool in brackets, such as `pyright[nodejs]`. Set `executable.name` to the program that the package installs. `check_at_commit` is invalid for this kind.
+
+The source can also list the project's `extras` and dependency `groups` that the tool needs. `default_groups = false` leaves out the project's default groups:
 
 ```toml
 [source]
@@ -100,102 +104,41 @@ extras = ["cli"]
 groups = ["typing"]
 ```
 
-The hook runs one command in the repository's uv project:
+- **Environment.** Each tool has its own environment, `.gateseal/environments/<name>`, which Git ignores. At each run, uv installs exactly what the repository's `uv.lock` pins, with the default dependency groups. The hook does not read or change `.venv`.
+- **Project.** The repository needs `pyproject.toml` and a regular `uv.lock` file at its root. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. The hook stops when `uv.lock` is out of date. gateseal does not detect a uv workspace in a folder above the repository, whose `uv.lock` uv would use.
+- **A package with the tool's name.** `uv.lock` can install a package with the tool's name and pinned version from the project's own source. uv would then run that package in the tool's place. So the commit check, and every command that reads the Lock, stop with `shadowed_tool`.
+- **An analyzer.** The tool's Python finds the tool's own dependencies before the project's packages. So make an analyzer read the tool's environment by name, as the [mypy example](add-a-tool.md#add-mypy-a-tool-that-imports-the-project) does with `--python-executable`.
 
-```sh
-env UV_PROJECT_ENVIRONMENT=.gateseal/environments/mypy uv run --locked --exact --all-packages --extra cli --group typing --with mypy==2.4.1 -- mypy
-```
+### Tools from npm
 
-- Each tool has its own environment, `.gateseal/environments/<name>`, which Git ignores. At each run, uv installs exactly what the repository's `uv.lock` pins and removes every other package. So a commit and the CI gate read the same packages. The hook does not read or change `.venv`. A package that you install there yourself, such as from an extra, does not reach the tool.
-- uv installs each package's dependencies and the project's default dependency groups, which is `dev` unless `tool.uv.default-groups` names others. It adds each extra and group that the source lists. In a uv workspace, it installs the packages of every member. uv stops the hook when the project defines no extra or group of a listed name.
-- The hook stops when `uv.lock` is missing or out of date. The tool runs on the project's Python. The first run installs the packages, which needs the network.
-- The policy pins the tool by version, without a wheel hash. `gateseal policy lock` checks that PyPI has each reviewed release. The project's uv settings choose the index.
-- `uv.lock` can install a package with the tool's name and pinned version from the project's own source, such as a path, a Git repository or the packaged project itself. uv would then run that package in the tool's place. So the commit check, and every command that reads the Lock, stop with `shadowed_tool`. They stop for such a package anywhere in `uv.lock`, also in an extra or group that the tool does not install.
-- That Python finds the tool's own dependencies before the project's packages. So make an analyzer read the tool's environment by name. The bundled Pyright rules set `venvPath` and `venv`, and the [mypy example](add-a-tool.md#add-mypy-a-tool-that-imports-the-project) passes `--python-executable`.
-- `check_at_commit` is invalid for this kind.
-- A tool that imports the project's packages itself needs a uv cache whose path holds no space. With a space, uv starts the program outside the project. This was seen with uv 0.13.6 and 0.13.9 on Linux, and is [uv issue 23299](https://github.com/astral-sh/uv/issues/23299). The bundled deptry definition avoids it: its program is `python`, which runs deptry from its launcher file.
-
-The repository needs `pyproject.toml` and `uv.lock` at its root, with `uv.lock` as a regular file and not a link. `pyproject.toml` must not set `tool.uv.managed` to `false`. Otherwise `gateseal configure` and `gateseal check` stop with `missing_project`. The commit check stops a commit that does not hold `uv.lock` as a regular TOML file. It does not check `pyproject.toml`: without it, uv starts the tool outside a project. The repository must also be the root of its uv project. If a folder above it holds a uv workspace that lists the repository as a member, uv uses that workspace's `uv.lock`, and gateseal does not detect it.
-
-A hook with the `project` scope and no `types_or` runs at every commit and gate run, also when the change only deletes files. In the push stage, it runs at every push and gate run. With `types_or`, it runs only when a changed file has one of those types. A change that only deletes such files does not start it, because pre-commit matches no hook against a deleted file. A capability with such a tool cannot expose `exclude`, because the tool reads every path. The tool reads the working tree. At a commit, pre-commit hides the unstaged changes of tracked files, and untracked files stay. So a file that Git does not track can change the result of a commit. At a push, pre-commit hides nothing, so the tool reads the checked-out files, also when the push names another branch. The CI gate checks a new clone.
-
-Release binaries run through `mise --no-config exec --deny-env`, which passes on only the variables that mise keeps, such as `HOME` and `PATH`, and with `network`, the proxy and certificate variables. A hook of any other kind receives the caller's environment. uv then reads the caller's `UV_` settings, and a setting such as `UV_NO_PROJECT` changes what the hook does. A `uv-project` hook sets `UV_PROJECT_ENVIRONMENT` itself. The program reads pre-commit's variables, such as `PRE_COMMIT_FROM_REF` and `PRE_COMMIT_TO_REF` in a CI gate run on a range. Review a tool's arguments and behavior separately. For example, a scanner may read a repository's ignore file.
-
-## Tools from npm
-
-An `npm-package` source has a `package`: the tool's name on the npm registry, without a version. Examples are `prettier` and `@biomejs/biome`. Set `executable.name` to the program that the package installs. The program must be a JavaScript file, because the hook starts the pinned Node with it. `check_at_commit` is invalid for this kind.
+An `npm-package` source has a `package`: the tool's name on the npm registry, without a version, such as `prettier` or `@biomejs/biome`. Set `executable.name` to the program that the package installs. The program must be a JavaScript file, because the hook starts the pinned Node with it. `check_at_commit` is invalid for this kind.
 
 The policy pins the Node version in `node`, and can pin more packages in the tool's `packages`. See [Policy format](policy-format.md#policy-fields). `gateseal policy lock` runs npm on that Node to lock them, so it needs mise and the npm registry.
 
-Each hook is gateseal's own hook `gateseal-npm-tool`, which pre-commit builds from gateseal's repository at the commit that the Lock pins. The hook keeps its own ID as `alias` and its own name. Its arguments are the tool's name, the executable's name and the hook's `args`. This is the built-in `tsc` hook in `.pre-commit-config.yaml`, without its stages and patterns:
-
-```json
-{
-  "id": "gateseal-npm-tool",
-  "alias": "tsc",
-  "name": "tsc",
-  "args": ["tsc", "tsc", "--noEmit", "--project", "tsconfig.json"]
-}
-```
-
-`SKIP=tsc` and `pre-commit run tsc --hook-stage pre-push` name the hook by its alias, and gateseal's results name it `tsc`. When the hook fails, pre-commit prints `hook id: gateseal-npm-tool` below the hook's name.
-
-The hook reads the rest from `gateseal.lock`: the URL and the SHA-256 of the Node archive for each platform, the tool's package, and the SHA-256 of the tool's lockfile, `.gateseal/<tool>.package-lock.json`. It asks mise for that Node. It installs the lockfile once into a folder of your cache folder. Then it starts the program on the pinned Node. The hook exits 127 when it finds no pinned Node or cannot start it, cannot install the packages, or finds another lockfile than the Lock records. So list no 127 in `finding_exit_codes`.
+Each hook is gateseal's own hook `gateseal-npm-tool`, with the tool's hook ID as its `alias`. So `SKIP=tsc` and `pre-commit run tsc --hook-stage pre-push` name the hook by its own ID. When the hook fails, pre-commit prints `hook id: gateseal-npm-tool` below the hook's name. The hook exits 127 when it cannot install or start the tool, so list no 127 in `finding_exit_codes`.
 
 The kind guarantees these things, whatever a definition says:
 
-- The hook runs the pinned Node, whatever Node is on `PATH` or in the repository's `node_modules`. If mise's auto-install is off and the pinned Node is missing, the hook stops. Two repositories with different pins each run their own Node on one machine.
-- npm installs exactly the tree that `policy.lock` records: the listed versions and every package that they depend on, each checked against its integrity hash. A changed hash or a missing package stops the hook, also in an optional package that names the machine's platform, such as the compiler binary of TypeScript 7, which npm alone would leave out.
-- npm reads none of your npm settings but these: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as `//registry.example/:_authToken`. It takes all of them from your `.npmrc`, and the first five also from `npm_config_` variables.
-- Each machine type, each Node version and each lockfile has its own install. A repository with another Node pin never runs your packages on its Node.
-- The program is the one of the tool's own package, never a program of the same name from another package.
-- No install script of a package runs.
-- The hook never gets a file that gateseal writes. Its `exclude` pattern covers `.gateseal/`, `.pre-commit-config.yaml`, `gateseal.toml`, `gateseal.lock` and the file of each CI provider. A capability's `exclude` choice adds its paths. A tool with the `project` scope gets no file names and reads the working tree itself, so its own arguments must keep it away from these files.
+- **Node.** The hook runs the pinned Node, whatever Node is on `PATH`. mise installs it at the first use and checks its SHA-256 against the Lock.
+- **Packages.** npm installs exactly the packages that `policy.lock` records, each checked against its integrity hash. A changed hash or a missing package stops the hook.
+- **Install scripts.** No install script of a package runs.
+- **npm settings.** npm reads only these settings of your `.npmrc`: `proxy`, `https-proxy`, `noproxy`, `cafile`, `registry` and a registry's own settings, such as its token.
+- **Generated files.** The hook never gets a file that gateseal writes. A tool with the `project` scope reads the working tree itself, so its own arguments must keep it away from these files.
 
-The first use of a hook downloads Node and the packages, which needs network access. So does the first use after a change of a pin. Later uses call no npm and ask the registry nothing. gateseal does not remove an old install. To free the space, delete `gateseal/npm` in your cache folder. The next use of each hook installs again. A hook trusts an install that it finds in the cache folder, as pre-commit trusts its own folder there. So keep the cache folder outside each repository whose files you do not trust. See [the limits](typescript.md#limits).
+The installs are in `gateseal/npm` in your cache folder. To free the space, delete that folder. A hook trusts an install that it finds there, so keep the cache folder outside each repository whose files you do not trust.
 
-A gateseal release without the `npm-package` kind or the `eslint` format below gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has them.
+### Tools that read the Node project
 
-## Tools that read the Node project
+A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc`, `eslint-typed`, `knip`, `vitest`, `jest` and `stryker` are of this kind. The policy's version of the tool runs, not a version that the project's lockfile pins. Jest is the exception: its launcher starts the Jest that the project installs.
 
-A `node-project` tool is an `npm-package` tool that also reads the packages of the repository's own Node project. A type checker such as `tsc` needs them to resolve imports. The built-in `tsc`, `eslint-typed`, `knip`, `vitest`, `jest` and `stryker` are of this kind. Their `[source]` and their `packages` table are those of an `npm-package` tool. So are their records in the Policy Lock and the Lock. Each hook starts the tool from gateseal's own install on the pinned Node, as an `npm-package` hook does. So the policy's version of the tool runs, not a version that the project's lockfile pins. Jest is the exception: its launcher starts the Jest that the project installs.
+gateseal's own hook `gateseal-node-packages` runs before the tool's hooks, in each stage that runs such a tool. It installs what the project's lockfile pins into `node_modules`. When the install fails, pre-commit runs no later hook of that stage. It runs no install script. An npm or pnpm setting can make the install fail, but none can make it pass with other packages than the lockfile pins.
 
-The repository needs `package.json` and exactly one of `package-lock.json` and `pnpm-lock.yaml` at its root. gateseal's own hook `gateseal-node-packages` runs before the tool's hooks, in each stage that runs such a tool. It installs what the lockfile pins into `node_modules`:
-
-- **npm.** `npm ci --dry-run` checks that the lockfile matches the versions in `package.json`. `npm ls --package-lock-only` checks that it matches the source of each dependency, such as a tarball. Then `npm install --no-save` installs only what changed. The hook runs the npm of the pinned Node's install, with that install's folder first on `PATH`. Without that install, the hook stops with status 1.
-- **pnpm.** `pnpm install --frozen-lockfile` does both. gateseal installs pnpm 10.28.0 once on the pinned Node, checked against its integrity hash, and starts it from that install, as it starts an `npm-package` tool. If `packageManager` in `package.json` names another pnpm version, pnpm changes to it.
-
-The hook obeys the settings of the project and the user, in `.npmrc`, `pnpm-workspace.yaml` and the environment, as `npm install` or `pnpm install` in a terminal does. It makes this promise:
-
-> A project or user setting can make the hook fail. No setting can make the hook pass with packages that differ from the packages that the lockfile pins.
-
-A setting can leave out packages, such as `omit=dev`. If `tsc` needs such a package, `tsc` stops the push. See [A setting of npm or pnpm stops a push](troubleshooting.md#a-setting-of-npm-or-pnpm-stops-a-push). The hook runs these commands:
-
-```sh
-npm ci --dry-run --no-usage --ignore-scripts
-npm ls --package-lock-only --include=dev --include=optional --include=peer \
-  --no-usage
-npm install --no-save --package-lock --no-package-lock-only --no-dry-run \
-  --no-usage --ignore-scripts --no-audit
-pnpm install --frozen-lockfile --lockfile --ignore-scripts --ignore-pnpmfile \
-  --no-use-store-server --no-lockfile-only --lockfile-dir=. \
-  --config.git-branch-lockfile=false --config.merge-git-branch-lockfiles=false \
-  --config.ignore-package-manifest=false --config.fix-lockfile=false \
-  --config.dedupe=false --config.update=false --modules-dir=node_modules \
-  --config.enable-modules-dir=true --config.symlink=true \
-  --config.filter=null --config.filter-prod=null
-```
-
-An option on the command line wins over a setting. The options turn off only the settings that would make the hook pass with other packages: a setting that makes npm or pnpm ignore the lockfile, read or merge another lockfile, skip the check of `package.json` or of the sources of one kind of dependency, resolve the packages anew, print its usage in place of a check, install no project, or leave `node_modules` as it is or link no package at its top. `--no-use-store-server` also keeps pnpm from starting a store server, because pnpm starts the server without `--ignore-pnpmfile`. `pnpm install` has no option for some settings, so `--config.<setting>` sets them, and `null` restores the default. npm also gets `npm_config_git=git`, `npm_config_node_options=null`, `npm_config_location=project` and `npm_config_global=false` in its environment. For a git dependency with a script, npm runs npm again in a clone of the dependency, and only the environment reaches that npm. So git comes from `PATH`, Node gets no options, the install stays in the project, and no `.npmrc` of a package names a program to run or installs into the global prefix. No install script runs, also none of the project, and no pnpmfile runs. A lockfile that does not match `package.json` stops the hook. Its `Next:` line names the install to run and the lockfile to commit. When the install fails, pre-commit runs no later hook of that stage, because a tool gives a wrong result without the packages.
+The repository needs `package.json` and exactly one of `package-lock.json` and `pnpm-lock.yaml` at its root. Otherwise `gateseal configure` and `gateseal check` stop:
 
 | Code | Meaning |
 | --- | --- |
-| `missing_project` | The repository root has no `package.json`, or neither lockfile. Only npm and pnpm projects are supported. |
-| `ambiguous_project` | The repository root has both lockfiles, so the package manager is not clear. Or it has `npm-shrinkwrap.json` beside `package-lock.json`, and npm reads `npm-shrinkwrap.json` in place of the lockfile. |
-
-`gateseal configure` and `gateseal check` give these codes. A push through pre-commit alone has no such check. The install hook then stops and names what the project lacks. Yarn, workspaces and project references are not supported. See [Type checks at push](typescript.md#type-checks-at-push) for the other limits.
-
-A gateseal release without the `node-project` kind gives `unsupported_tool_definition` for such a policy. Set the policy's `minimum_compiler` to the first release that has it.
+| `missing_project` | The repository root has no `package.json`, or neither lockfile. |
+| `ambiguous_project` | The repository root has both lockfiles. Or it has `npm-shrinkwrap.json` beside `package-lock.json`, and npm reads the shrinkwrap in place of the lockfile. |
 
 ## ESLint configuration format
 
@@ -205,36 +148,37 @@ A definition with `configuration.format = "eslint"` takes ESLint's data from a T
 | --- | --- |
 | `files` | Required. One or more patterns of the files that ESLint checks, from the repository root, such as `"**/*.ts"`. |
 | `parser` | Optional. An npm package that the tool's `packages` pin, such as `@typescript-eslint/parser`. |
-| `plugins` | Optional table. Maps each rule prefix, such as `@typescript-eslint`, `react` or `@next/next`, to an npm package that the tool's `packages` pin. |
-| `presets` | Optional. A list of presets whose rules apply first, in order, such as `["eslint/recommended", "@typescript-eslint/strict"]`. See [Presets](#presets). |
+| `plugins` | Optional table. Maps each rule prefix, such as `@typescript-eslint` or `react`, to an npm package that the tool's `packages` pin. |
+| `presets` | Optional. A list of [presets](#presets) whose rules apply first, in order. |
 | `rules` | Optional table. Maps each rule to `off`, `warn` or `error`, or to an array of the severity and then the rule's options. A rule named `<prefix>/<rule>` needs its prefix in `plugins`. A rule here wins over a preset. |
 
-Any other key gives `invalid_field`, such as `extends`, `languageOptions` or `settings`. So no key loads another file or gives type information. To start from a preset, name it in `presets`. A value that JSON cannot hold, such as a TOML date or an infinite number, gives `invalid_field` too. A definition of this format takes no choices.
+Any other key gives `invalid_field`, such as `extends`, `languageOptions` or `settings`. So no key loads another file. A definition of this format takes no choices.
+
+The generated JSON file is data, not an ESLint configuration. A loader file gives it to ESLint with `--config`, so ESLint runs no configuration file of the repository. The hook also passes an empty file with `--suppressions-location`, so ESLint does not read the repository's `eslint-suppressions.json`. A team definition of this format needs both, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml). It needs ESLint 9.24.0 or later.
 
 ### Presets
 
-A preset is `eslint/recommended`, ESLint's recommended rules, or `<prefix>/<name>`, a config of the plugin that `plugins` declares for the prefix. For `@typescript-eslint/strict`, gateseal reads `configs["flat/strict"]` of `@typescript-eslint/eslint-plugin`, or `configs["strict"]` when the plugin has no flat config of that name.
+A preset is `eslint/recommended`, ESLint's recommended rules, or `<prefix>/<name>`, a config of the plugin that `plugins` declares for the prefix. An example is `@typescript-eslint/strict`.
 
-`gateseal policy lock` reads each preset once. npm installs the locked packages on the policy's Node, and gateseal reads the preset's rules from them. `policy.lock` records the rules beside npm's lockfile. A commit gets the rules as data and runs no code of a preset. A rerun reads only a preset that `policy.lock` lacks. After a plugin upgrade, `gateseal policy lock` reads each preset again, and the diff of `policy.lock` shows each rule that changed.
+`gateseal policy lock` reads each preset once and records its rules in `policy.lock`. So a commit gets the rules as data and runs no code of a preset. After a plugin upgrade, the diff of `policy.lock` shows each rule that changed.
 
-- A preset gives only its rules, and the files that they apply to. Its other settings, such as parser options, do not apply. `gateseal policy lock` says so in its output.
-- A preset that turns on a rule that needs type information gives `invalid_field` for an `npm-package` tool. The message names the rule. A `node-project` tool reads the project's types, so its presets can turn on such rules. See [Rules that need type information](#rules-that-need-type-information).
-- A preset that the package does not have gives `invalid_field`. The message lists the package's presets.
-- A preset that turns on a rule of a plugin that `plugins` does not declare gives `invalid_field`.
-- A preset of a plugin that `packages` do not pin gives `invalid_field`. So does a preset of a tool that does not run on Node.
+A preset gives only its rules, and the files that they apply to. Its other settings, such as parser options, do not apply. Each of these presets gives `invalid_field`:
 
-The JSON file is data, not an ESLint configuration. Its `layers` hold the rules of each preset, each for the policy's `files`, then the policy's `rules`. The built-in `eslint` definition adds a loader as the fixed file `files.loader`, written as `.gateseal/eslint-loader.mjs`. Its hook passes the loader with `--config {loader}`, so ESLint runs no configuration file of the repository. The definition also adds an empty list of suppressions as the fixed file `files.suppressions`, written as `.gateseal/eslint-suppressions.json`, and its hook passes `--suppressions-location {suppressions}`. So ESLint does not read the repository's own `eslint-suppressions.json`, which would accept each finding that it lists. This option needs ESLint 9.24.0 or later. The loader reads the JSON file beside it. It loads the parser and the plugins from the root of the hook's install, where each pinned package is, never from a copy that ESLint itself depends on and never from the repository's `node_modules`. It finds each package as `require` does, so a package that offers its entry only to `import` fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`. A team definition of this format needs the same loader under the key `loader`, so copy [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint.tool.toml).
+- A preset that the package does not have. The message lists the package's presets.
+- A preset of a plugin that `packages` do not pin.
+- A preset that turns on a rule of a plugin that `plugins` does not declare.
+- For an `npm-package` tool, a preset that turns on a rule that needs type information. The message names the rule.
 
 ### Rules that need type information
 
-The built-in `eslint-typed` definition runs ESLint as a `node-project` tool, at a push and in the CI gate. Its rule file holds the same keys. Its presets and rules can need type information, such as `@typescript-eslint/no-floating-promises`. Its loader, `.gateseal/eslint-typed-loader.mjs`, also does these things:
+The built-in `eslint-typed` definition runs ESLint as a `node-project` tool, at a push and in the CI gate. Its rule file holds the same keys, and its presets and rules can need type information.
 
-- It reads `tsconfig.json` at the repository root with the TypeScript that the tool's `packages` pin, and gives it to the parser as `parserOptions.project`.
-- ESLint checks only the files that `tsconfig.json` includes and that `files` names. A file outside `tsconfig.json`, such as a build script, is no parsing error.
-- ESLint skips each `.js`, `.mjs` and `.cjs` file that `files` does not name.
-- It stops with TypeScript's message when it cannot read `tsconfig.json`, such as `error TS5083: Cannot read file 'tsconfig.json'.` It also stops when `tsconfig.json` includes no file, because ESLint does not follow project references.
+- Its loader reads `tsconfig.json` at the repository root with the TypeScript that the tool's `packages` pin.
+- ESLint checks only the files that `tsconfig.json` includes and that `files` names.
+- The loader stops with TypeScript's message when it cannot read `tsconfig.json`, or when `tsconfig.json` includes no file.
+- The hook gets no file names, and applies no fixes.
 
-The hook gets no file names and runs ESLint on `.` at each push. It applies no fixes. Neither ESLint loader reports an unused disable comment. Each runs only its own rules, so a comment for a rule of the other tool looks unused, and the commit hook's `--fix` would delete it. A team definition of a typed ESLint copies [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint-typed.tool.toml), loader included. With the loader of `eslint`, the parser gets no types, and ESLint stops with `You have used a rule which requires type information`.
+A team definition of a typed ESLint copies [the built-in definition](https://github.com/karstenevers/gateseal/blob/main/src/gateseal/data/tools/eslint-typed.tool.toml), loader included. With the loader of `eslint`, ESLint stops with `You have used a rule which requires type information`.
 
 ## Choices
 
